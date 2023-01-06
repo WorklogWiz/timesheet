@@ -37,7 +37,7 @@ pub struct Worklog {
     pub issueId: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, PartialOrd, PartialEq,Eq, Hash, Clone)]
 #[allow(non_snake_case)]
 pub struct Author {
     pub accountId: String,
@@ -172,7 +172,7 @@ pub async fn get_all_projects(http_client: &Client) -> Vec<JiraProject> {
 }
 
 // TODO: Consider Trait with associated type as this logic is identical to get_worklogs_for()
-pub async fn get_issues(http_client: &Client, project_key: &str) -> Vec<JiraIssue> {
+pub async fn get_issues_for_project(http_client: &Client, project_key: &str) -> Vec<JiraIssue> {
     let mut resource = compose_resource_and_params(project_key, 0, 1024);
 
     let mut issues = Vec::<JiraIssue>::new();
@@ -195,16 +195,16 @@ pub async fn get_issues(http_client: &Client, project_key: &str) -> Vec<JiraIssu
     issues
 }
 // TODO: Consider Trait with associated type as this logic is repeated twice
-pub async fn get_worklogs_for(http_client: &Client, key: &str) -> Vec<Worklog> {
-    let mut resource_name = compose_worklogs_url(key, 0, 1024);
+pub async fn get_worklogs_for(http_client: &Client, issue_key: &str) -> Vec<Worklog> {
+    let mut resource_name = compose_worklogs_url(issue_key, 0, 1024);
     let mut worklogs: Vec<Worklog> = Vec::<Worklog>::new();
     loop {
-        println!("Retrieving worklogs for {}", key);
+        println!("Retrieving worklogs for {}", issue_key);
         let mut worklog_page = get_jira_resource::<WorklogsPage>(http_client, &resource_name).await;
         let is_last_page = worklog_page.worklogs.len() < worklog_page.max_results as usize;
         if !is_last_page {
             resource_name = compose_worklogs_url(
-                key,
+                issue_key,
                 worklog_page.startAt + worklog_page.worklogs.len() as i32,
                 worklog_page.max_results,
             );
@@ -249,7 +249,7 @@ async fn get_jira_resource<T: DeserializeOwned>(
     get_jira_data_from_url::<T>(http_client, &url).await
 }
 
-async fn get_jira_data_from_url<T: DeserializeOwned>(http_client: &Client, url: &String) -> T {
+pub async fn get_jira_data_from_url<T: DeserializeOwned>(http_client: &Client, url: &str) -> T {
     let url_decoded = urlencoding::decode(&url).unwrap();
 
     println!("http get {}\n\t{}", url, url_decoded);
@@ -262,7 +262,10 @@ async fn get_jira_data_from_url<T: DeserializeOwned>(http_client: &Client, url: 
         reqwest::StatusCode::OK => {
             // Transforms JSON in body to type safe struct
             match response.json::<T>().await {
-                Ok(wl) => wl, // Everything OK, return the Worklogs struct
+                Ok(wl) => {
+                    println!("{}", start.elapsed().as_millis());
+                    wl
+                }, // Everything OK, return the Worklogs struct
                 Err(err) => panic!("EROR Obtaining response in JSON format: {:?}", err),
             }
         }
@@ -287,6 +290,29 @@ fn project_search_resource<'a>(start_at: i32) -> String {
     format!("/project/search?maxResults=50&startAt={}", start_at)
 }
 
+pub async fn get_issues_for_projects(http_client: &Client, projects: Vec<JiraProject>) -> Vec<JiraProject> {
+    let mut futures_stream = futures::stream::iter(projects)
+        .map(|mut project| {
+            let client = http_client.clone();
+            tokio::spawn(async move {
+                let issues = get_issues_for_project(&client, &project.key).await;
+                let _old = std::mem::replace(&mut project.issues, issues);
+                project
+            })
+        }).buffer_unordered(10);
+
+    let mut result = Vec::<JiraProject>::new();
+    while let Some(r) = futures_stream.next().await {
+        match r {
+            Ok(jp) => {
+                println!("OK {}", jp.key);
+                result.push(jp);
+            },
+            Err(e) => eprintln!("Error: {:?}", e)
+        }
+    }
+    result
+}
 
 pub async fn get_issues_and_worklogs(http_client: &Client, projects: Vec<JiraProject>) -> Vec<JiraProject> {
     let mut bodies  = futures::stream::iter(projects)
@@ -294,10 +320,10 @@ pub async fn get_issues_and_worklogs(http_client: &Client, projects: Vec<JiraPro
             let client = http_client.clone();
             println!("Creating future for {}", &project.key);
             tokio::spawn(async move {
-                let issues = get_issues(&client, &project.key).await;
+                let issues = get_issues_for_project(&client, &project.key).await;
                 let _old = std::mem::replace(&mut project.issues, issues);
-                println!("get_issues() and mem::replace done");
                 for  issue in &mut project.issues {
+                    println!("Retrieving worklogs for issue {}", &issue.key);
                     let mut worklogs = get_worklogs_for(&client, &issue.key).await;
                     println!("Issue {} has {} worklog entries", issue.key, worklogs.len());
                     issue.worklogs.append(&mut worklogs);

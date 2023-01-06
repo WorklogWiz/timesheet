@@ -2,6 +2,11 @@
 -- show timezone;
 create schema  if not exists jira;
 
+create table jira.issue (
+    id varchar(16) primary key ,
+    key varchar(16)
+);
+
 create table jira.author
 (
     id            serial primary key,
@@ -22,5 +27,5 @@ create table jira.worklog
     started          timestamp with time zone,
     timeSpent        varchar(16),
     timeSpentSeconds integer,
-    issueId          varchar(32) constraint unique_issue_id UNIQUE
+    issueId          varchar(32) references jira.issue(id) on delete cascade
 );

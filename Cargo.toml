@@ -34,3 +34,5 @@ env_logger = "0.10"
 clap = { version = "3.2", features = ["derive"] }
 
 postgres = {version = "0.19", features = ["with-chrono-0_4"]}
+
+tokio-postgres = { version="0.7", features = ["with-chrono-0_4"]}

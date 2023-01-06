@@ -2,7 +2,7 @@ use futures::StreamExt;
 use tokio;
 
 use jira;
-use jira::{get_issues, get_worklogs_for, http_client, JiraProject};
+use jira::{get_issues_for_project, get_worklogs_for, http_client, JiraProject};
 
 #[tokio::main]
 async fn main() {

@@ -1,8 +1,8 @@
-
 extern crate core;
 
+use std::collections::HashSet;
 use jira;
-use jira::WorklogsPage;
+use jira::{Author, WorklogsPage};
 use jira::Worklog;
 
 use chrono::{Datelike, DateTime, NaiveDate, Timelike, Utc};
@@ -14,12 +14,12 @@ use serde_json::Value;
 fn test_deserialze() {
     let contents = fs::read_to_string("tests/time-40_worklog_results.json").expect("Expected to load json file");
     let json: serde_json::Value = serde_json::from_str(&contents).expect("Json is not correctly formatted.");
-    assert_eq!(json["maxResults"],5000,"Invalid results found in start of Json");
+    assert_eq!(json["maxResults"], 5000, "Invalid results found in start of Json");
     let worklogs = &json["worklogs"];
 
     match &worklogs {
         Value::Array(entries) => assert!(entries.len() > 10, "Worklogs does not contain more than 10 entries"),
-        _  => panic!("json object 'worklogs' is incorrect type"),
+        _ => panic!("json object 'worklogs' is incorrect type"),
     }
 }
 
@@ -38,22 +38,50 @@ fn test_parse_worklog() {
             break;
         }
     }
-    println!("{}", log.worklogs[0].author.displayName );
+    println!("{}", log.worklogs[0].author.displayName);
+}
 
+#[test]
+fn test_find_steinar_time_40() {
+    let contents = fs::read_to_string("tests/time-40_worklog_results.json").expect("Expected to load json file");
+    let mut log: WorklogsPage = serde_json::from_str(&contents).expect("Json is not correctly formatted.");
+
+    let contents = fs::read_to_string("tests/time-40_worklog_part2.json").expect("Expected to load json file");
+    let mut log2: WorklogsPage = serde_json::from_str(&contents).expect("Json is not correctly formatted.");
+
+    println!("There are {} entries in first part.", log.worklogs.len());
+    assert_eq!(log.worklogs.len(), 5000, "Not enough entries in worklogs");
+    assert_eq!(log2.worklogs.len(), 5000);
+    log.worklogs.append(&mut log2.worklogs);
+
+    assert_eq!(log.worklogs.len(), 10000);
+
+    let steinar: Vec<Worklog> = log.worklogs.into_iter().filter(|wl| wl.author.displayName == "Steinar Overbeck Cook").collect();
+
+    let mut total : i64 = 0;
+
+    for w in steinar {
+        println!("{} - {} - {} - {}", w.author.displayName ,w.created.date_naive().to_string(), w.timeSpentSeconds, w.timeSpent);
+        if (w.created.date_naive().month() == 2 && w.created.date_naive().year() == 2022){
+            total += w.timeSpentSeconds as i64;
+        }
+
+    }
+    println!("Totalt {}", total/3600);
 }
 
 #[test]
 fn test_parse_date() {
-    let _dt = match DateTime::parse_from_str("2022-02-04T16:22:28.554+0100", "%Y-%m-%dT%H:%M:%S%.f%z"){
+    let _dt = match DateTime::parse_from_str("2022-02-04T16:22:28.554+0100", "%Y-%m-%dT%H:%M:%S%.f%z") {
         Ok(dt) => {
             println!("Parsed: {:?}", dt);
-            assert_eq!(dt.date_naive() ,NaiveDate::from_ymd_opt(2022,2,4).unwrap());
+            assert_eq!(dt.date_naive(), NaiveDate::from_ymd_opt(2022, 2, 4).unwrap());
             assert_eq!(dt.year(), 2022);
             assert_eq!(dt.month(), 02);
             assert_eq!(dt.day(), 4);
             assert_eq!(dt.hour(), 16);
             assert_eq!(dt.minute(), 22);
-        },
+        }
         Err(err) => panic!("Parsing error {}", err)
     };
 }
@@ -100,5 +128,18 @@ fn test_date_time() {
 "#;
 
     let result = serde_json::from_str::<Worklog>(&s).unwrap();
+}
 
+#[test]
+fn test_hash_set() {
+    let contents = fs::read_to_string("tests/time-40_worklog_results.json").expect("Expected to load json file");
+
+    let result = serde_json::from_str::<WorklogsPage>(&contents).unwrap();
+    let mut a = HashSet::new();
+    for wl in result.worklogs {
+        println!("Adding {}", &wl.author.displayName);
+        a.insert(wl.author.clone());
+    }
+
+    println!("I have {} unique authors", a.len());
 }

@@ -1,6 +1,6 @@
 use tokio::task::JoinError;
 use jira;
-use jira::{get_worklogs_for, http_client, JiraProjectsPage, JiraProject, JiraIssue, get_issues};
+use jira::{get_worklogs_for, http_client, JiraProjectsPage, JiraProject, JiraIssue, get_issues_for_project};
 use jira::WorklogsPage;
 
 #[tokio::main]
@@ -16,7 +16,7 @@ async fn main() {
         println!("{} {} {} {}", i, project.id, project.key, project.name);
     }
 
-    let results : Vec<JiraIssue> = get_issues(&http_client, "TIME").await;
+    let results : Vec<JiraIssue> = get_issues_for_project(&http_client, "TIME").await;
     for issue in results {
         println!("{}",issue.key);
     }

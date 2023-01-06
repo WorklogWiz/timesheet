@@ -1,16 +1,41 @@
 use postgres;
 use postgres::{Client, Error, Row};
-use crate::{Author, Worklog, WorklogsPage};
+use tokio_postgres::NoTls;
+use crate::{Author, JiraIssue, Worklog, WorklogsPage};
 
+pub async fn dbms_async_init() -> tokio_postgres::Client {
+    let (client, connection) = tokio_postgres::connect(connect_str(), NoTls).await.unwrap();
+    tokio::spawn(async move {
+        if let Err(e) = connection.await {
+            eprintln!("connection error: {}", e);
+        }
+    });
+    client
+}
 
-fn dbms_init() -> Client {
-    match postgres::Client::connect("host=postgres.testenv.autostoresystem.com user=postgres password=uU7DP6WatYtUhEeNpKfq", postgres::NoTls) {
+pub fn dbms_init() -> Client {
+    match postgres::Client::connect(connect_str(), postgres::NoTls) {
         Ok(client) => client,
         Err(err) => panic!("Unable to connect to database: {:?}", err)
     }
 }
 
-pub fn insert_author(dbms: &mut Client, author: &Author) -> i32 {
+pub fn connect_str() -> &'static str {
+    "host=postgres.testenv.autostoresystem.com user=postgres password=uU7DP6WatYtUhEeNpKfq"
+}
+
+pub async fn insert_issue(dbms: &mut tokio_postgres::Client, issue: &JiraIssue) {
+    let stmt = r#"insert into jira.issue (id, key) values($1,$2)
+        on conflict
+        do nothing
+        "#;
+    match dbms.execute(stmt, &[&issue.id, &issue.key]).await {
+        Ok(_) => {}
+        Err(e) => panic!("Unable to insert new issue {:?}, \nError: {:?}", &issue, e),
+    }
+}
+
+pub async fn insert_author(dbms: &mut tokio_postgres::Client, author: &Author) -> i32 {
     let stmt = r#"insert into jira.author (account_id, email_address, display_name)
         values ($1,$2,$3)
         on conflict (account_id)
@@ -20,13 +45,13 @@ pub fn insert_author(dbms: &mut Client, author: &Author) -> i32 {
         returning id
         "#;
 
-    match dbms.query_one(stmt, &[&author.accountId, &author.emailAddress,&author.displayName]) {
+    match dbms.query_one(stmt, &[&author.accountId, &author.emailAddress,&author.displayName]).await {
         Ok(row) =>  row.get(0),
         Err(dbms_err) => panic!("Unable to insert new jira.author, reason: {:?}", dbms_err)
     }
 }
 
-pub fn insert_worklog(dbms: &mut Client, account_id: &str, worklog: &Worklog)  {
+pub async fn insert_worklog(dbms: &mut tokio_postgres::Client, account_id: &str, worklog: &Worklog)  {
     let stmt = r#"insert into jira.worklog (id, account_id, created,
             updated, started, timespent, timespentseconds, issueid)
         values ($1,$2,$3, $4, $5, $6, $7, $8)
@@ -36,8 +61,8 @@ pub fn insert_worklog(dbms: &mut Client, account_id: &str, worklog: &Worklog)  {
     "#;
     match dbms.execute(stmt, &[&worklog.id, &account_id, &worklog.created,
         &worklog.updated, &worklog.started, &worklog.timeSpent, &worklog.timeSpentSeconds,
-        &worklog.issueId]) {
-        Ok(row) => (),
+        &worklog.issueId]).await {
+        Ok(_) => (),
         Err(err) => panic!("Unable to upsert new worklog entry: {:?}", err)
     }
 }
@@ -45,7 +70,7 @@ pub fn insert_worklog(dbms: &mut Client, account_id: &str, worklog: &Worklog)  {
 #[test]
 fn test_insert_author() {
 
-    let mut client = dbms_init();
+    let mut client = async {dbms_async_init().await};
     let author = Author {
         accountId: "a1".to_string(),
         emailAddress: Some("steinar@blabla.com".to_string()),
@@ -67,9 +92,16 @@ fn test_insert_worklog() {
     let result = serde_json::from_str::<WorklogsPage>(&json).unwrap();
     let w = &result.worklogs[0];
     let a = &w.author;
-    let author_id = insert_author(&mut client, &a);
+    let _author_id = insert_author(&mut client, &a);
 
     insert_worklog(&mut client, &a.accountId, &w);
 
     // client.execute("delete from jira.worklog where id=$1", &[&w.id]);
+}
+
+#[test]
+fn test_insert_issue() {
+    let mut client = dbms_init();
+    let issue = JiraIssue { id: "42".to_string(), self_url: "".to_string(), key: "XX-42".to_string(), worklogs: vec![] };
+    insert_issue(&mut client, &issue);
 }
