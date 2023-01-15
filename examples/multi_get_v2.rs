@@ -2,7 +2,7 @@ use futures::StreamExt;
 use tokio;
 
 use jira;
-use jira::{get_issues_for_project, get_worklogs_for, http_client, JiraProject};
+use jira::{get_issues_for_single_project, get_worklogs_for, http_client, JiraProject};
 
 #[tokio::main]
 async fn main() {
@@ -29,11 +29,11 @@ async fn main() {
         .map(|mut project| {
             let client = http_client.clone();
             tokio::spawn(async move {
-                let issues = get_issues_for_project(&client, &project.key).await;
+                let issues = get_issues_for_single_project(&client, &project.key).await;
                 let _old = std::mem::replace(&mut project.issues, issues);
                 for issue in &mut project.issues {
                     println!("Retrieving worklogs for {}", &issue.key);
-                    let mut worklogs = get_worklogs_for(&client, &issue.key).await;
+                    let mut worklogs = get_worklogs_for(&client, issue.key.to_owned(), ).await;
                     println!("Issue {} has {} worklog entries", issue.key, worklogs.len());
                     issue.worklogs.append(&mut worklogs);
                 }

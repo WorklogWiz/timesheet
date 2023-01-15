@@ -2,18 +2,20 @@ extern crate core;
 
 use std::collections::HashSet;
 use jira;
-use jira::{Author, WorklogsPage};
+use jira::{dbms, JiraIssuesPage, WorklogsPage};
 use jira::Worklog;
 
 use chrono::{Datelike, DateTime, NaiveDate, Timelike, Utc};
 
 use std::fs;
 use serde_json::Value;
+use tokio::time::Instant;
+use jira::dbms::dbms_async_init;
 
 #[test]
 fn test_deserialze() {
     let contents = fs::read_to_string("tests/time-40_worklog_results.json").expect("Expected to load json file");
-    let json: serde_json::Value = serde_json::from_str(&contents).expect("Json is not correctly formatted.");
+    let json: Value = serde_json::from_str(&contents).expect("Json is not correctly formatted.");
     assert_eq!(json["maxResults"], 5000, "Invalid results found in start of Json");
     let worklogs = &json["worklogs"];
 
@@ -62,7 +64,7 @@ fn test_find_steinar_time_40() {
 
     for w in steinar {
         println!("{} - {} - {} - {}", w.author.displayName ,w.created.date_naive().to_string(), w.timeSpentSeconds, w.timeSpent);
-        if (w.created.date_naive().month() == 2 && w.created.date_naive().year() == 2022){
+        if w.created.date_naive().month() == 2 && w.created.date_naive().year() == 2022 {
             total += w.timeSpentSeconds as i64;
         }
 
@@ -127,7 +129,7 @@ fn test_date_time() {
     }
 "#;
 
-    let result = serde_json::from_str::<Worklog>(&s).unwrap();
+    let _result = serde_json::from_str::<Worklog>(&s).unwrap();
 }
 
 #[test]
@@ -142,4 +144,39 @@ fn test_hash_set() {
     }
 
     println!("I have {} unique authors", a.len());
+}
+
+#[tokio::test]
+async fn test_insert_multiple_worklogs() {
+    let mut dbms = dbms_async_init().await;
+    let contents = fs::read_to_string("tests/time-40_worklog_results.json").expect("Expected to load json file");
+    let start = Instant::now();
+    let worklogs_page = serde_json::from_str::<WorklogsPage>(&contents).unwrap();
+    let elapsed = start.elapsed().as_millis();
+    println!("Parsing time-40_worklog_results.json took {}ms", elapsed);
+
+    dbms::batch_insert_worklogs(&mut dbms, &worklogs_page.worklogs[1..4]).await;
+}
+
+#[test]
+fn test_chunk_worklogs() {
+    let contents = fs::read_to_string("tests/time-40_worklog_results.json").expect("Expected to load json file");
+    let worklogs = serde_json::from_str::<WorklogsPage>(&contents).unwrap().worklogs;
+
+    let mut cnt = 0;
+    let mut total = 0;
+    for chunck in worklogs.chunks(1000) {
+        cnt += 1;
+        total += 1000;
+        println!("Chunk {} contains {}", cnt, chunck.len());
+    }
+    assert_eq!(worklogs.len(), total);
+}
+
+#[test]
+fn test_load_with_custom_fields() {
+    let contents = fs::read_to_string("tests/issuess_for_project_TiME.json").expect("Expected to load json file");
+    let issues = serde_json::from_str::<JiraIssuesPage>(&contents).unwrap().issues;
+
+    assert_eq!(issues[0].fields.asset.id, "12150");
 }

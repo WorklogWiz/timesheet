@@ -20,7 +20,7 @@ async fn main() {
         "https://autostore.atlassian.net/rest/api/latest/project/search?maxResults=50&startAt=100".to_string(),
         "https://autostore.atlassian.net/rest/api/latest/project/search?maxResults=50&startAt=150".to_string()];
     let start = START_TIME.elapsed().as_millis();
-    let first_page = jira::get_jira_data_from_url::<JiraProjectsPage>(&http_client, compose_url(0, 1024).as_str()).await;
+    let first_page = jira::get_jira_data_from_url::<JiraProjectsPage>(&http_client, compose_url(0, 1024)).await;
     let urls = compose_urls(first_page.startAt + first_page.maxResults,first_page.maxResults, first_page.total.unwrap());
 
 

@@ -2,7 +2,7 @@ use futures::StreamExt;
 use tokio;
 
 use jira;
-use jira::{get_issues_for_project, get_worklogs_for, http_client, JiraProject};
+use jira::{get_issues_for_single_project, get_worklogs_for, http_client, JiraProject};
 
 #[tokio::main]
 async fn main() {
@@ -18,7 +18,7 @@ async fn main() {
             i, project.id, project.key, project.name, project.is_private
         );
     }
-    let worklogs = get_worklogs_for(&http_client, "A3SRS-1").await
+    let worklogs = get_worklogs_for(&http_client, "A3SRS-1".to_string(), ).await
         ;
 
     println!("{:?}", &worklogs);
