@@ -1,21 +1,19 @@
 extern crate core;
 
 
-pub mod dbms;
+use std::time::Instant;
 
-use chrono::{Datelike, DateTime, Months, NaiveDate, NaiveDateTime, NaiveTime, Utc};
+use chrono::{DateTime, Months,  NaiveDateTime, NaiveTime, Utc};
+use futures::StreamExt;
+use log::{debug, info};
+use reqwest::Client;
 use reqwest::header::HeaderMap;
 use reqwest::header::HeaderValue;
-use reqwest::Client;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde::Serialize;
-use std::time::Instant;
-use std::vec::IntoIter;
-use futures::stream::{BufferUnordered, Iter, Map};
-use futures::StreamExt;
-use log::{debug, info};
-use tokio::task::JoinHandle;
+
+pub mod dbms;
 
 pub const JIRA_URL: &str = "https://autostore.atlassian.net/rest/api/latest";
 
@@ -112,8 +110,8 @@ pub struct JiraFields {
 pub struct JiraAsset {
     #[serde(alias = "self")]
     pub url: String,
+    pub id: String,
     pub value: String,
-    pub id: String
 }
 pub fn http_client() -> reqwest::Client {
     create_auth_value();
@@ -197,7 +195,7 @@ pub async fn get_all_projects(http_client: &Client, project_keys: Vec<String>) -
         return projects;
     }
 
-    projects.append(&mut project_page.values);
+    projects.append(&mut project_page.values.into_iter().filter(|p| !p.is_private).collect());
 
     // While there is a URL for the next page ...
     while let Some(url) = &project_page.nextPage {
@@ -210,8 +208,8 @@ pub async fn get_all_projects(http_client: &Client, project_keys: Vec<String>) -
 }
 
 // TODO: Consider Trait with associated type as this logic is identical to get_worklogs_for()
-pub async fn get_issues_for_single_project(http_client: &Client, project_key: &str) -> Vec<JiraIssue> {
-    let mut resource = compose_resource_and_params(project_key, 0, 1024);
+pub async fn get_issues_for_single_project(http_client: &Client, project_key: String) -> Vec<JiraIssue> {
+    let mut resource = compose_resource_and_params(project_key.to_owned(), 0, 1024);
 
     let mut issues = Vec::<JiraIssue>::new();
     loop {
@@ -220,7 +218,7 @@ pub async fn get_issues_for_single_project(http_client: &Client, project_key: &s
         let is_last_page = issue_page.issues.len() < issue_page.max_results as usize;
         if !is_last_page {
             resource = compose_resource_and_params(
-                project_key,
+                project_key.to_owned(),
                 issue_page.start_at + issue_page.issues.len() as i32,
                 issue_page.max_results,
             );
@@ -237,7 +235,7 @@ pub async fn get_worklogs_for(http_client: &Client, issue_key: String, started_a
     let mut resource_name = compose_worklogs_url(issue_key.as_str(), 0, 5000, started_after);
     let mut worklogs: Vec<Worklog> = Vec::<Worklog>::new();
 
-    info!("Retrieving worklogs for {}", issue_key);
+    debug!("Retrieving worklogs for {}", issue_key);
     loop {
         let mut worklog_page = get_jira_resource::<WorklogsPage>(http_client, &resource_name).await;
         let is_last_page = worklog_page.worklogs.len() < worklog_page.max_results as usize;
@@ -258,14 +256,14 @@ pub async fn get_worklogs_for(http_client: &Client, issue_key: String, started_a
 }
 
 
-fn compose_worklogs_url(issue_key: &str, start_at: i32, max_results: i32, startedAfter: NaiveDateTime) -> String {
+fn compose_worklogs_url(issue_key: &str, start_at: i32, max_results: i32, started_after: NaiveDateTime) -> String {
     format!(
         "/issue/{}/worklog?startAt={}&maxResults={}&startedAfter={}",
-        issue_key, start_at, max_results, startedAfter.timestamp_millis()
+        issue_key, start_at, max_results, started_after.timestamp_millis()
     )
 }
 
-fn compose_resource_and_params(project_key: &str, start_at: i32, max_results: i32) -> String {
+fn compose_resource_and_params(project_key: String, start_at: i32, max_results: i32) -> String {
     let jql = format!("project=\"{}\" and resolution=Unresolved", project_key);
     let jql_encoded = urlencoding::encode(&jql);
 
@@ -277,7 +275,7 @@ fn compose_resource_and_params(project_key: &str, start_at: i32, max_results: i3
     resource
 }
 
-pub async fn get_jira_resource<T: DeserializeOwned>(
+pub async fn    get_jira_resource<T: DeserializeOwned>(
     http_client: &Client,
     rest_resource: &str,
 ) -> T {
@@ -287,12 +285,12 @@ pub async fn get_jira_resource<T: DeserializeOwned>(
 }
 
 pub async fn get_jira_data_from_url<T: DeserializeOwned>(http_client: &Client, url: String) -> T {
-    let url_decoded = urlencoding::decode(&url).unwrap();
+    let _url_decoded = urlencoding::decode(&url).unwrap();
 
     let start = Instant::now();
     let response = http_client.get(url.clone()).send().await.unwrap();
     let elapsed = start.elapsed();
-    debug!("{} took {}ms", url_decoded, elapsed.as_millis());
+    debug!("{} took {}ms", url, elapsed.as_millis());
     // Downloads the entire body of the response and convert from JSON to type safe struct
     let typed_result: T = match response.status() {
         reqwest::StatusCode::OK => {
@@ -338,11 +336,11 @@ pub async fn get_issues_for_projects(http_client: &Client, projects: Vec<JiraPro
         .map(|mut project| {
             let client = http_client.clone();
             tokio::spawn(async move {
-                let issues = get_issues_for_single_project(&client, &project.key).await;
+                let issues = get_issues_for_single_project(&client, project.key.to_owned()).await;
                 let _old = std::mem::replace(&mut project.issues, issues);
                 project
             })
-        }).buffer_unordered(10);
+        }).buffer_unordered(FUTURE_BUFFER_SIZE);
 
     let mut result = Vec::<JiraProject>::new();
     while let Some(r) = futures_stream.next().await {
@@ -357,6 +355,8 @@ pub async fn get_issues_for_projects(http_client: &Client, projects: Vec<JiraPro
     result
 }
 
+const FUTURE_BUFFER_SIZE: usize = 20;
+
 // todo: clean up and make simpler!
 pub async fn get_issues_and_worklogs(http_client: &Client, projects: Vec<JiraProject>, issues_filter: Vec<String>, started_after: NaiveDateTime) -> Vec<JiraProject> {
     let mut futures_stream = futures::stream::iter(projects)
@@ -366,7 +366,7 @@ pub async fn get_issues_and_worklogs(http_client: &Client, projects: Vec<JiraPro
 
             let filter = issues_filter.to_vec();    // Clones the vector to allow async move
             tokio::spawn(   async move {
-                let issues = get_issues_for_single_project(&client, &project.key).await;
+                let issues = get_issues_for_single_project(&client, project.key.to_owned()).await;
                 debug!("Extracted {} issues. Applying filter {:?}", issues.len(), filter);
                 let issues: Vec<JiraIssue> = issues.into_iter().filter(|issue| filter.is_empty() || !filter.is_empty() && filter.contains(&issue.key) ).collect();
                 debug!("Filtered {} issues for {}", issues.len(), &project.key);
@@ -381,27 +381,13 @@ pub async fn get_issues_and_worklogs(http_client: &Client, projects: Vec<JiraPro
                 project
             })
         })
-        .buffer_unordered(10);
+        .buffer_unordered(FUTURE_BUFFER_SIZE);
 
     let mut result = Vec::<JiraProject>::new();
     while let Some(r) = futures_stream.next().await {
         match r {
             Ok(jp) => {
-                println!("OK {}", jp.key);
-                result.push(jp);
-            },
-            Err(e) => eprintln!("Error: {:?}", e)
-        }
-    }
-    result
-}
-
-async fn execute_futures(futures_stream: &mut BufferUnordered<Map<Iter<IntoIter<JiraProject>>, fn(JiraProject) -> JoinHandle<JiraProject>>>) -> Vec<JiraProject> {
-    let mut result = Vec::<JiraProject>::new();
-    while let Some(r) = futures_stream.next().await {
-        match r {
-            Ok(jp) => {
-                debug!("OK {}", jp.key);
+                info!("Data retrieved from Jira for project {}", jp.key);
                 result.push(jp);
             },
             Err(e) => eprintln!("Error: {:?}", e)

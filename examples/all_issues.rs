@@ -9,7 +9,7 @@ async fn main() {
     let http_client = http_client();
 
 
-    let results : Vec<JiraIssue> = get_issues_for_single_project(&http_client, "TIME").await;
+    let results : Vec<JiraIssue> = get_issues_for_single_project(&http_client, "TIME".to_string()).await;
     for issue in results {
         println!("{}",issue.key);
     }

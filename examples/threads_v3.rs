@@ -4,7 +4,7 @@ use futures::{Future, stream, Stream, StreamExt};
 use lazy_static::lazy_static;
 use reqwest::Client;
 use tokio::time::Instant;
-use jira::{get_jira_data_from_url, JiraProject, JiraProjectsPage, Worklog};
+use jira::{get_jira_data_from_url, JiraProject, JiraProjectsPage, midnight_a_month_ago_in, Worklog};
 
 lazy_static! {
     static ref START_TIME: Instant = Instant::now();
@@ -26,13 +26,13 @@ async fn main() {
     }
 */
     let start = Instant::now();
-    let _result = jira::get_all_projects(&http_client).await;
+    let _result = jira::get_all_projects(&http_client, vec![]).await;
     let elapsed = start.elapsed().as_millis();
 
     println!("all_jira_projects: {}, get_all_projects: {}", elapsed1, elapsed);
 
     for issue in vec!["TIME-39","RGA-8", "TIME-40"] {
-        let worklogs = jira::get_worklogs_for(&http_client, issue.to_string(), ).await;
+        let worklogs = jira::get_worklogs_for(&http_client, issue.to_string(), midnight_a_month_ago_in()).await;
         let result : Vec<Worklog> = worklogs.into_iter().filter(|w| w.author.displayName == "Steinar Overbeck Cook").collect();
 
         println!("Issue: {issue}, worklogs: {}", result.len());

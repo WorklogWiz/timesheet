@@ -1,7 +1,7 @@
 use postgres;
 use postgres::Client;
 use tokio_postgres::{NoTls};
-use crate::{Author, get_issues_and_worklogs, JiraIssue, JiraProject, Worklog};
+use crate::{Author, get_issues_and_worklogs, JiraAsset, JiraIssue, JiraProject, Worklog};
 use std::fmt::Write;
 use log::{debug, info};
 use tokio_postgres::types::ToSql;
@@ -53,11 +53,23 @@ pub async fn insert_project(dbms: &mut tokio_postgres::Client, project: &JiraPro
 }
 
 pub async fn insert_issue(dbms: &mut tokio_postgres::Client, project_id: &str, issue: &JiraIssue) {
-    let stmt = r#"insert into jira.issue (id, key, project_id) values($1,$2, $3)
+    let stmt = r#"
+    with data(id, key, project_id, asset_name) AS (
+        values
+            ($1, $2, $3, $4)
+    )
+    insert into jira.issue (id, key, project_id, asset_id)
+            select data.id, data.key, data.project_id, jira.asset.id
+            from data left outer join jira.asset on data.asset_name = jira.asset.asset_name
         on conflict
         do nothing
         "#;
-    match dbms.execute(stmt, &[&issue.id, &issue.key, &project_id]).await {
+    let asset_name = match &issue.fields.asset {
+        None => None,
+        Some(a) => Some(a.value.to_string())
+    };
+
+    match dbms.execute(stmt, &[&issue.id, &issue.key, &project_id, &asset_name]).await {
         Ok(_) => {}
         Err(e) => panic!("Unable to insert new issue {:?}, \nError: {:?}", &issue, e),
     }
@@ -205,10 +217,6 @@ pub async fn etl_issues_worklogs_and_persist(http_client: &reqwest::Client, proj
         }
     }
 
-    info!("Collecting the AutoStore project assets from each TIME issue");
-    let project_assets: Vec<String> = extract_assets_from_time_issues(&jira_projects);
-
-    debug!("Found these assets: {:?}", project_assets);
 
     let mut unique_authors = Vec::from_iter(authors);
     unique_authors.sort_by(|a, b| a.accountId.cmp(&b.accountId));
@@ -216,13 +224,18 @@ pub async fn etl_issues_worklogs_and_persist(http_client: &reqwest::Client, proj
     println!("Connecting to DBMS...");
     let mut client = dbms_async_init().await;
 
+    info!("Collecting the AutoStore project assets from each TIME issue");
+    let project_assets: Vec<String> = extract_assets_from_time_issues(&jira_projects);
+
+    debug!("Found these assets: {:?}", project_assets);
+    insert_assets(&mut client, &project_assets[..]).await;
+
     info!("Upserting {} authors", unique_authors.len());
     batch_insert_authors(&mut client, &unique_authors[..]).await;
 
 
     for project in &jira_projects {
         println!("Project: {} {}", project.key, project.name);
-        // Todo: insert projects with various info as well
         insert_project(&mut client, project).await;
 
         for issue in &project.issues {
@@ -243,7 +256,7 @@ fn extract_assets_from_time_issues(projects: &Vec<JiraProject>) -> Vec<String> {
 }
 
 
-pub async fn insert_assets(dbms: tokio_postgres::Client, assets: &[String]) {
+pub async fn insert_assets(dbms: &mut tokio_postgres::Client, assets: &[String]) {
     for asset_chunk in assets.chunks(DBMS_CHUNK_SIZE) {
         let mut sql = r#"insert into jira.asset (asset_name) values "#.to_string();
         let sql_on_conflict = "on conflict (asset_name) do nothing ";
@@ -253,10 +266,12 @@ pub async fn insert_assets(dbms: tokio_postgres::Client, assets: &[String]) {
             if i > 0 {
                 write!(sql, ",").unwrap();
             }
-            write!(sql, "\n{}", format_args!("( ${} ) ",i + 1)).unwrap();
+            write!(sql, "\n{}", format_args!("( ${} ) ", i + 1)).unwrap();
             params.push(asset);
         }
         write!(sql, " {}", sql_on_conflict).unwrap();
+        debug!("Executing {}", sql);
+
         match dbms.execute(&sql, &params[..]).await {
             Ok(_) => {}
             Err(e) => { panic!("Failed to insert authors, SQL: {} \n cause: {:?}", sql, e) }
@@ -266,8 +281,9 @@ pub async fn insert_assets(dbms: tokio_postgres::Client, assets: &[String]) {
 
 #[cfg(test)]
 mod tests {
+    use tokio_postgres::{Error, Row};
     use super::*;
-    use crate::WorklogsPage;
+    use crate::{JiraAsset, JiraFields, WorklogsPage};
 
     #[tokio::test]
     async fn test_insert_author() {
@@ -324,7 +340,50 @@ mod tests {
             "Project_WMS SDK Rework".to_string(),
             "Project_WMS Emulator".to_string(),
         ];
-        let dbms = dbms_async_init().await;
-        insert_assets(dbms, &assets).await;
+        let mut dbms = dbms_async_init().await;
+        insert_assets(&mut dbms, &assets).await;
+    }
+
+    #[tokio::test]
+    async fn test_insert_issues() {
+        let mut dbms = dbms_async_init().await;
+
+        let project_id: String = match dbms.query_one("select jira.project.id from jira.project limit 1", &[]).await {
+            Ok(row) => row.get(0),
+            Err(err) => panic!("Unable to retrieve a prject id from DBMS {:?}", err)
+        };
+        let asset_id: i32 = match dbms.query_one("select id from jira.asset where asset_name='Project_Interface http Modernization'", &[]).await {
+            Ok(row) => row.get(0),
+            Err(err) => panic!("Unable to retrive asset_id, cause: {:?}", err)
+        };
+
+        let issue = JiraIssue {
+            id: "42".to_string(),
+            self_url: "www.rubbish.com".to_string(),
+            key: "SOC-42".to_string(),
+            worklogs: vec![],
+            fields: JiraFields {
+                summary: "SOC-42 is just an example".to_string(),
+                asset: Some(
+                    JiraAsset {
+                        id: asset_id.to_string(),
+                        value: "Project_Interface http Modernization".to_string(), url: "rubbish".to_string()
+                    }
+                ),
+            },
+        };
+
+        insert_issue(&mut dbms, &project_id, &issue).await;
+        let asset_id: Option::<i32> = match dbms.query_one("select asset_id from jira.issue where issue.id=$1", &[&issue.id]).await {
+            Ok(row) => row.get(0),
+            Err(err) => panic!("Unable to retrieve the asset_id from inserted issue. Cause: {:?}", err)
+        };
+        assert!(asset_id.is_some(),"Ouch unable to retrieve the asset back from the database");
+
+        let result = match dbms.execute("delete from jira.issue where id=$1", &[&issue.id]).await {
+            Ok(rows) => rows,
+            Err(err) => panic!("Unable to remove inserted test data {:?}", err),
+        };
+        assert_eq!(result, 1);
     }
 }

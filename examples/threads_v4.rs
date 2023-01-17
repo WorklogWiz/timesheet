@@ -5,7 +5,7 @@ use lazy_static::lazy_static;
 use log::info;
 use reqwest::Client;
 use tokio::time::Instant;
-use jira::{get_jira_data_from_url, JiraProject, JiraProjectsPage, Worklog};
+use jira::{get_issues_for_single_project, get_jira_data_from_url, JiraIssue, JiraProject, JiraProjectsPage, Worklog};
 
 lazy_static! {
     static ref START_TIME: Instant = Instant::now();
@@ -18,11 +18,14 @@ async fn main() {
     let http_client = jira::http_client();
 
     let start = Instant::now();
-    let projects = jira::get_all_projects(&http_client).await;
+    let projects = jira::get_all_projects(&http_client, vec![]).await;
     let elapsed = start.elapsed().as_millis();
 
     info!("Retrieved {} projects via all_jira_projects in {}ms", &projects.len(), elapsed);
 
+    let project_keys = projects.iter().map(|p| p.key.to_owned()).collect();
+
+    let issues = get_all_the_bloody_issues(&http_client, project_keys).await;
 
 
 }
@@ -38,7 +41,6 @@ async fn all_jira_projects(http_client: &Client) -> Vec<JiraProject> {
     }
     result
 }
-
 
 async fn get_first_project_page(http_client: &Client) -> JiraProjectsPage {
     get_jira_data_from_url::<JiraProjectsPage>(&http_client, jira::compose_project_url(0, 1024)).await
@@ -56,6 +58,22 @@ fn get_project_futures_stream(http_client: &Client, urls: Vec<String>) -> impl S
     })
 }
 
+async fn get_all_the_bloody_issues(http_client: &Client, project_keys : Vec<String> ) -> Vec<JiraIssue> {
+
+    let futures_result: Vec<Vec<JiraIssue>> = stream::iter(project_keys).map(|p| {
+
+        get_issues_for_single_project(http_client, p)
+    }).buffer_unordered(10).collect().await;
+
+    futures_result.into_iter().flatten().collect()
+}
+
+fn get_issues_futures_stream(http_client: &Client, projects: Vec<String>) -> impl Stream<Item=impl Future<Output=Vec<JiraIssue>> + '_> + '_ {
+    stream::iter(projects).map(|p| {
+
+        get_issues_for_single_project(http_client, p)
+    })
+}
 
 
 

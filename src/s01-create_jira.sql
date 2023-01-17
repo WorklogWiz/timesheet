@@ -17,16 +17,15 @@ create table jira.project
     id   varchar(16) primary key,
     key  varchar(16),
     name varchar(128),
-    url  varchar(1024),
-    asset_id integer references asset(id),
-    foreign key (asset_id) references jira.asset(id)
+    url  varchar(1024)
 );
 
 
 create table jira.issue
 (
     id         varchar(16) primary key,
-    key        varchar(16),
+    key        varchar(16) not null,
+    asset_id integer references jira.asset(id),
     project_id varchar(16) references jira.project (id)
 );
 
