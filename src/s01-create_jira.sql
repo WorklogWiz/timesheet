@@ -25,6 +25,7 @@ create table jira.issue
 (
     id         varchar(16) primary key,
     key        varchar(16) not null,
+    summary     varchar(1024),
     asset_id integer references jira.asset(id),
     project_id varchar(16) references jira.project (id)
 );

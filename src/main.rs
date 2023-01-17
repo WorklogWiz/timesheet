@@ -1,5 +1,5 @@
 use chrono::{NaiveDateTime};
-use jira::{dbms, get_worklogs_for, http_client, midnight_a_month_ago_in};
+use jira::{dbms, http_client, midnight_a_month_ago_in};
 use log;
 use log::info;
 
@@ -70,7 +70,7 @@ async fn main() {
     }
 }
 
-async fn process_project_issues(http_client: &Client, projects: Option<Vec<String>>, issues: Option<Vec<String>>, started_after: NaiveDateTime, users: Option<Vec<String>>) {
+async fn process_project_issues(http_client: &Client, projects: Option<Vec<String>>, issues: Option<Vec<String>>, started_after: NaiveDateTime, _users: Option<Vec<String>>) {
     let projects = jira::get_projects_filtered(http_client, projects).await;
     etl_issues_worklogs_and_persist(http_client, projects, issues, started_after).await;
 }

@@ -1,7 +1,7 @@
 use postgres;
 use postgres::Client;
 use tokio_postgres::{NoTls};
-use crate::{Author, get_issues_and_worklogs, JiraAsset, JiraIssue, JiraProject, Worklog};
+use crate::{Author, get_issues_and_worklogs, JiraIssue, JiraProject, Worklog};
 use std::fmt::Write;
 use log::{debug, info};
 use tokio_postgres::types::ToSql;
@@ -54,12 +54,12 @@ pub async fn insert_project(dbms: &mut tokio_postgres::Client, project: &JiraPro
 
 pub async fn insert_issue(dbms: &mut tokio_postgres::Client, project_id: &str, issue: &JiraIssue) {
     let stmt = r#"
-    with data(id, key, project_id, asset_name) AS (
+    with data(id, key, project_id, summary, asset_name) AS (
         values
-            ($1, $2, $3, $4)
+            ($1, $2, $3, $4, $5)
     )
-    insert into jira.issue (id, key, project_id, asset_id)
-            select data.id, data.key, data.project_id, jira.asset.id
+    insert into jira.issue (id, key, project_id, summary, asset_id)
+            select data.id, data.key, data.project_id, data.summary, jira.asset.id
             from data left outer join jira.asset on data.asset_name = jira.asset.asset_name
         on conflict
         do nothing
@@ -69,7 +69,7 @@ pub async fn insert_issue(dbms: &mut tokio_postgres::Client, project_id: &str, i
         Some(a) => Some(a.value.to_string())
     };
 
-    match dbms.execute(stmt, &[&issue.id, &issue.key, &project_id, &asset_name]).await {
+    match dbms.execute(stmt, &[&issue.id, &issue.key, &project_id, &issue.fields.summary, &asset_name]).await {
         Ok(_) => {}
         Err(e) => panic!("Unable to insert new issue {:?}, \nError: {:?}", &issue, e),
     }
@@ -281,7 +281,6 @@ pub async fn insert_assets(dbms: &mut tokio_postgres::Client, assets: &[String])
 
 #[cfg(test)]
 mod tests {
-    use tokio_postgres::{Error, Row};
     use super::*;
     use crate::{JiraAsset, JiraFields, WorklogsPage};
 
