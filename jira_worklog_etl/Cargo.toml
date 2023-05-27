@@ -1,0 +1,23 @@
+[package]
+name = "jira_app"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+jira_lib = { path = "../jira_lib" }
+jira_dbms = { path = "../jira_dbms"}
+
+clap = { version = "4.2.2", features = ["derive"] }
+
+chrono = { version = "0.4", features = ["serde"]}
+
+log = "0.4"
+
+env_logger = "0.10"
+reqwest = { version = "0.11", features = ["json"] }
+
+tokio = { version = "1", features = ["full"] }
+
