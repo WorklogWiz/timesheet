@@ -1,14 +1,18 @@
 //! # The Jira worklog command line utility
 //!
-use std::ops::Deref;
-use chrono::{DateTime, Local, ParseError, ParseResult};
-use clap::{Args, Parser, Subcommand};
+use std::{env, fmt};
+use std::fmt::Formatter;
+use std::fs::File;
+use clap::{Args, Parser, Subcommand, ValueEnum};
+use env_logger::Env;
 use jira_lib::TimeTrackingOptions;
-use jira_lib::http_client;
 use reqwest::Client;
-use crate::date_util::{as_date_time, calculate_started_time, TimeSpent};
+use crate::date_util::{str_to_date_time, calculate_started_time, TimeSpent};
+use log::{info};
+use directories;
 
 mod date_util;
+mod config;
 
 #[derive(Parser)]
 #[command(version = "1.0", author = "Steinar Overbeck Cook <steinar.cook@autostoresystem.com>", about = "Command line tool for Jira worklog mgmt")]
@@ -16,13 +20,33 @@ struct Opts {
     #[command(subcommand)]
     subcmd: SubCommand,
 
-    #[clap(short, long)]
-    after: Option<String>,
+    #[arg(global=true, short, long, default_value = "info")]
+    verbosity: Option<LogLevel>,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
+enum LogLevel {
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+impl fmt::Display for LogLevel {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            LogLevel::Debug => write!(f, "debug"),
+            LogLevel::Info => write!(f, "info"),
+            LogLevel::Warn => write!(f, "warn"),
+            LogLevel::Error => write!(f, "error"),
+        }
+    }
 }
 
 #[derive(Subcommand)]
 enum SubCommand {
     /// Add worklog entries
+    #[command(arg_required_else_help = true)]
     Add(Add),
     Del(Del),
     Get(Get),
@@ -44,6 +68,8 @@ struct Add {
     ended: Option<String>,
     #[arg(name = "comment", short, long)]
     comment: Option<String>,
+    #[arg(long)]
+    dry: bool,
 }
 
 #[derive(Args)]
@@ -59,45 +85,68 @@ struct Get {
 async fn main() {
     let opts: Opts = Opts::parse();
 
+    configure_logging(&opts);
+    if let Some(project_dirs) = directories::ProjectDirs::from("com","autostoresystems","jira_worklog"){
+        println!("Config dir {}",project_dirs.config_local_dir().to_string_lossy());
+    }
 
     let http_client = jira_lib::http_client();
+
     let options = time_tracking_options(&http_client).await;
-    println!("Global Jira options: {:?}", &options);
+    info!("Global Jira options: {:?}", &options);
 
     match opts.subcmd {
         SubCommand::Add(add) => {
-            println!("started: {}, ended: {:?}, duration:{} ", add.started.as_deref().unwrap_or("None"), add.ended, add.duration);
+            info!("started: {}, ended: {:?}, duration:{} ", add.started.as_deref().unwrap_or("None"), add.ended, add.duration);
 
             let time_spent_seconds = match TimeSpent::from_str(add.duration.as_str(), options.workingHoursPerDay, options.workingDaysPerWeek) {
                 Ok(time_spent) => time_spent.time_spent_seconds,
                 Err(e) => panic!("Unable to figure out the duration of your worklog entry {}", e),
             };
 
-            let starting_point = match add.started {
-                None => None,
-                Some(dt) => Some(as_date_time(&dt).unwrap())
-            };
+            // If a starting point was given, transform it from string to a full DateTime<Local>
+            let starting_point = add.started.as_ref().map(|dt| str_to_date_time(dt).unwrap());
 
             let calculated_start = calculate_started_time(starting_point, time_spent_seconds).unwrap();
 
             // TODO: find the starting point by subtracting duration from now()
 
-            println!("Issue: {}", add.issue.as_str());
-            println!("Started: {} ", calculated_start.to_rfc3339());
-            println!("Duration: {}s", time_spent_seconds);
-            /*
-                        let result = jira_lib::insert_worklog(&http_client,
-                                                              add.issue.as_str(),
-                                                              calculated_start,
-                                                              time_spent_seconds,
-                                                              add.comment.unwrap_or("".to_string()).as_str()).await;
-            */
+            println!("Using these parameters as input:");
+            println!("\tIssue: {}", add.issue.as_str());
+            println!("\tStarted: {}  ({})", calculated_start.to_rfc3339(), add.started.map_or("computed", |_| "computed from command line"));
+            println!("\tDuration: {}s", time_spent_seconds);
+            println!("\tComment: {}", add.comment.as_deref().unwrap_or("None"));
+
+
+            jira_lib::insert_worklog(&http_client,
+                                     add.issue.as_str(),
+                                     calculated_start,
+                                     time_spent_seconds,
+                                     add.comment.unwrap_or("".to_string()).as_str()).await;
         }
         SubCommand::Get(multiply) => {
             println!("{} * {} = {}", multiply.num1, multiply.num2, multiply.num1 * multiply.num2);
         }
         SubCommand::Del(_) => {}
     }
+}
+
+fn configure_logging(opts: &Opts) {
+    let mut tmp_dir = env::temp_dir();
+    tmp_dir.push("jira_worklog.log");
+
+    let target = Box::new(File::create(tmp_dir).expect("Can't create file"));
+
+    // If nothing else was specified in RUST_LOG, use 'warn'
+    env_logger::Builder::from_env(Env::default()
+        .default_filter_or(opts.verbosity.map_or("warn", |lvl| match lvl {
+            LogLevel::Debug => "debug",
+            LogLevel::Info => "info",
+            LogLevel::Warn => "warn",
+            LogLevel::Error => "error"
+        })))
+        .target(env_logger::Target::Pipe(target))
+        .init();
 }
 
 async fn time_tracking_options(http_client: &Client) -> TimeTrackingOptions {

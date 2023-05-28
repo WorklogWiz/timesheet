@@ -1,4 +1,3 @@
-use postgres;
 use postgres::Client;
 use tokio_postgres::{NoTls};
 use jira_lib::{Author, get_issues_and_worklogs, JiraIssue, JiraProject, Worklog};
@@ -12,7 +11,7 @@ const DBMS_CHUNK_SIZE: usize = 1000;
 
 pub async fn dbms_async_init() -> tokio_postgres::Client {
     let result = tokio_postgres::connect(connect_str(), NoTls).await;
-    let client = match result {
+    match result {
         Ok((client, connection)) => {
             tokio::spawn(async move {
                 if let Err(e) = connection.await {
@@ -24,8 +23,7 @@ pub async fn dbms_async_init() -> tokio_postgres::Client {
         Err(err) => {
             panic!("ERROR: Connection failed: {:?}", err);
         }
-    };
-    client
+    }
 }
 
 pub fn dbms_init() -> Client {
@@ -64,10 +62,7 @@ pub async fn insert_issue(dbms: &mut tokio_postgres::Client, project_id: &str, i
         on conflict
         do nothing
         "#;
-    let asset_name = match &issue.fields.asset {
-        None => None,
-        Some(a) => Some(a.value.to_string())
-    };
+    let asset_name = issue.fields.asset.as_ref().map(|a| a.value.to_string());
 
     match dbms.execute(stmt, &[&issue.id, &issue.key, &project_id, &issue.fields.summary, &asset_name]).await {
         Ok(_) => {}
@@ -195,7 +190,7 @@ fn compose_batch_insert_worklog_sql(worklog_chunck: &[Worklog]) -> (String, Vec<
 pub async fn etl_issues_worklogs_and_persist(http_client: &reqwest::Client, projects: Vec<JiraProject>, issues_filter: Option<Vec<String>>, started_after: NaiveDateTime) {
     if projects.is_empty() {
         println!("No projects found!");
-        return ();
+        return;
     }
 
     for (i, project) in projects.iter().enumerate() {
@@ -204,7 +199,7 @@ pub async fn etl_issues_worklogs_and_persist(http_client: &reqwest::Client, proj
 
     info!("Retrieving the issues and worklogs ....");
     let filter = issues_filter.unwrap_or(vec![]);
-    let jira_projects = get_issues_and_worklogs(&http_client, projects, filter, started_after).await;
+    let jira_projects = get_issues_and_worklogs(http_client, projects, filter, started_after).await;
     info!("Tada: number of projects {}", jira_projects.len());
 
     info!("Collecting all authors from all worklog entries and making a unique list of them...");
@@ -239,7 +234,7 @@ pub async fn etl_issues_worklogs_and_persist(http_client: &reqwest::Client, proj
         insert_project(&mut client, project).await;
 
         for issue in &project.issues {
-            insert_issue(&mut client, &project.id, &issue).await;
+            insert_issue(&mut client, &project.id, issue).await;
             if !issue.worklogs.is_empty() {
                 println!("Processing {} worklogs for {}", issue.worklogs.len(), issue.key);
                 batch_insert_worklogs(&mut client, &issue.worklogs[..]).await;
@@ -248,7 +243,7 @@ pub async fn etl_issues_worklogs_and_persist(http_client: &reqwest::Client, proj
     }
 }
 
-fn extract_assets_from_time_issues(projects: &Vec<JiraProject>) -> Vec<String> {
+fn extract_assets_from_time_issues(projects: &[JiraProject]) -> Vec<String> {
     projects.iter()
         .flat_map(|p| p.issues.iter()
             .filter(|i| i.fields.asset.as_ref().is_some())

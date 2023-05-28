@@ -3,7 +3,7 @@ extern crate core;
 
 use std::time::Instant;
 
-use chrono::{DateTime, Local, Months, NaiveDateTime, NaiveTime, TimeZone, Utc};
+use chrono::{DateTime, Local, Months, NaiveDateTime, NaiveTime, Utc};
 use futures::StreamExt;
 use log::{debug, info};
 use reqwest::{Client};
@@ -12,16 +12,16 @@ use reqwest::header::HeaderValue;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde::Serialize;
-use serde_json::json;
 
 pub const JIRA_URL: &str = "https://autostore.atlassian.net/rest/api/latest";
 
-#[derive(Debug, Serialize,Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
+#[allow(non_snake_case)]
 pub struct TimeTrackingOptions {
-    pub workingHoursPerDay : f32,
-    pub workingDaysPerWeek : f32,
+    pub workingHoursPerDay: f32,
+    pub workingDaysPerWeek: f32,
     pub timeFormat: String,
-    pub defaultUnit : String,
+    pub defaultUnit: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -127,14 +127,13 @@ pub struct JiraAsset {
 pub fn http_client() -> reqwest::Client {
     create_auth_value();
 
-    let client = match reqwest::Client::builder()
+    match reqwest::Client::builder()
         .default_headers(create_default_headers())
         .build()
     {
         Ok(c) => c,
         Err(error) => panic!("Unable to create http client {:?}", error),
-    };
-    client
+    }
 }
 
 fn create_default_headers() -> HeaderMap {
@@ -169,12 +168,12 @@ fn create_auth_value() -> String {
 
 pub async fn get_time_tracking_options(http_client: &Client) -> TimeTrackingOptions {
     let resource = "/configuration/timetracking/options";
-    get_jira_resource::<TimeTrackingOptions>(http_client,resource).await
+    get_jira_resource::<TimeTrackingOptions>(http_client, resource).await
 }
 
 pub async fn get_projects_filtered(http_client: &Client, filter_projects_opt: Option<Vec<String>>) -> Vec<JiraProject> {
     let filter = filter_projects_opt.unwrap_or(vec![]);
-    get_all_projects(&http_client, filter).await
+    get_all_projects(http_client, filter).await
 }
 
 pub fn compose_project_urls(initial: i32, max_result: i32, total: i32) -> Vec<String> {
@@ -202,11 +201,11 @@ pub async fn get_all_projects(http_client: &Client, project_keys: Vec<String>) -
 
     // Retrieves first page of Jira projects
     let mut project_page =
-        get_jira_resource::<JiraProjectsPage>(&http_client, &project_search_resource(start_at, project_keys))
+        get_jira_resource::<JiraProjectsPage>(http_client, &project_search_resource(start_at, project_keys))
             .await;
 
     let mut projects = Vec::<JiraProject>::new();
-    if project_page.values.len() == 0 {
+    if project_page.values.is_empty() {
         // No projects, just return empty vector
         return projects;
     }
@@ -216,7 +215,7 @@ pub async fn get_all_projects(http_client: &Client, project_keys: Vec<String>) -
     // While there is a URL for the next page ...
     while let Some(url) = &project_page.nextPage {
         // Fetch next page of data
-        project_page = get_jira_data_from_url::<JiraProjectsPage>(&http_client, url.clone()).await;
+        project_page = get_jira_data_from_url::<JiraProjectsPage>(http_client, url.clone()).await;
         // Filter out the private projects and append to our list of projects
         projects.append(&mut project_page.values.into_iter().filter(|p| !p.is_private).collect());
     }
@@ -336,7 +335,7 @@ pub async fn get_jira_data_from_url<T: DeserializeOwned>(http_client: &Client, u
     typed_result
 }
 
-fn project_search_resource<'a>(start_at: i32, project_keys: Vec<String>) -> String {
+fn project_search_resource(start_at: i32, project_keys: Vec<String>) -> String {
     // Seems 50 is the max value of maxResults
     let mut resource = format!("/project/search?maxResults=50&startAt={}", start_at);
     if !project_keys.is_empty() {
@@ -416,26 +415,25 @@ pub async fn get_issues_and_worklogs(http_client: &Client, projects: Vec<JiraPro
 pub fn midnight_a_month_ago_in() -> NaiveDateTime {
     let today = chrono::offset::Local::now();
     let a_month_ago = today.checked_sub_months(Months::new(1)).unwrap();
-    let midnight_last_month = NaiveDateTime::new(a_month_ago.date_naive(), NaiveTime::from_hms_opt(0, 0, 0).unwrap());
-    midnight_last_month
+    NaiveDateTime::new(a_month_ago.date_naive(), NaiveTime::from_hms_opt(0, 0, 0).unwrap())
 }
 
 
 #[derive(Debug, Serialize, Deserialize)]
 #[allow(non_snake_case)]
-struct Worklog_insert {
+struct WorklogInsert {
     comment: String,
     started: String,
     timeSpentSeconds: i32,
 }
 
-pub async fn insert_worklog(http_client: &Client, issue_id: &str, started: DateTime<Local>, timeSpentSeconds: i32, comment: &str) {
+pub async fn insert_worklog(http_client: &Client, issue_id: &str, started: DateTime<Local>, time_spent_seconds: i32, comment: &str) {
     // This is how Jira needs it.
     // Note! The formatting in Jira is based on the time zone of the user. Remember to change it
     // if you fly across the ocean :-)
     let start = started.format("%Y-%m-%dT%H:%M:%S.%3f%z");
-    let worklog_entry = Worklog_insert {
-        timeSpentSeconds: timeSpentSeconds,
+    let worklog_entry = WorklogInsert {
+        timeSpentSeconds: time_spent_seconds,
         comment: comment.to_string(),
         started: start.to_string(),
     };
@@ -451,7 +449,7 @@ pub async fn insert_worklog(http_client: &Client, issue_id: &str, started: DateT
         .send().await;
 
     match result {
-        Ok(response) => { println!("Status {} = {} ", response.status(), response.text().await.unwrap()) }
+        Ok(response) => { info!("Status {} = {} ", response.status(), response.text().await.unwrap()) }
         Err(e) => { panic!("Failed to insert {:?}", e) }
     }
 }
