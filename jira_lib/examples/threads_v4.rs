@@ -29,7 +29,6 @@ async fn main() {
 
 }
 
-
 async fn _all_jira_projects(http_client: &Client) -> Vec<JiraProject> {
     let first_page = get_first_project_page(&http_client).await;
     let subsequent_pages = get_subsequent_project_pages(&http_client, &first_page).await;

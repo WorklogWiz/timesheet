@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::io;
 use std::io::Read;
-use std::path::{Path, PathBuf};
+use std::path::{ PathBuf};
 use directories;
 use directories::ProjectDirs;
 use tokio::io::AsyncReadExt;

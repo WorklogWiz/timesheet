@@ -124,6 +124,7 @@ pub struct JiraAsset {
     pub value: String,
 }
 
+
 pub fn http_client() -> reqwest::Client {
     create_auth_value();
 
@@ -192,7 +193,7 @@ fn test_compose_urls() {
 }
 
 pub fn compose_project_url(start_at: i32, max_results: i32) -> String {
-    format!("https://autostore.atlassian.net/rest/api/latest/project/search?maxResults={}&startAt={}", max_results, start_at)
+    format!("{}/project/search?maxResults={}&startAt={}", JIRA_URL, max_results, start_at)
 }
 
 /// Retrieves all Jira projects, filtering out the private ones
