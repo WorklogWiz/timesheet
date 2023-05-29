@@ -309,7 +309,8 @@ async fn main() {
         "https://autostore.atlassian.net/rest/api/latest/search?jql=project%3D%22TRQ%22%20and%20resolution%3DUnresolved&startAt=1400&maxResults=100&fields=summary,customfield_10904",
     ];
 
-    let http_client = jira_lib::http_client();
+    let http_client = jira_lib::create_jira_client().http_client;
+
 
     /*    print!("Retrieving 50 Jira issues...");
         let elapsed = loop_wait(&urls, &http_client).await;

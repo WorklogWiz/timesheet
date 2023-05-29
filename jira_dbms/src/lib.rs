@@ -1,5 +1,5 @@
 use postgres::Client;
-use tokio_postgres::{NoTls};
+use tokio_postgres::{Error, NoTls};
 use jira_lib::{Author, get_issues_and_worklogs, JiraIssue, JiraProject, Worklog};
 use std::fmt::Write;
 use log::{debug, info};
@@ -9,30 +9,30 @@ use chrono::NaiveDateTime;
 
 const DBMS_CHUNK_SIZE: usize = 1000;
 
-pub async fn dbms_async_init() -> tokio_postgres::Client {
-    let result = tokio_postgres::connect(connect_str(), NoTls).await;
+pub async fn dbms_async_init(connect: &str) -> Result<tokio_postgres::Client, Error > {
+
+    debug!("Connecting with {}", connect);
+
+    let result = tokio_postgres::connect(connect, NoTls).await;
     match result {
         Ok((client, connection)) => {
+
             tokio::spawn(async move {
                 if let Err(e) = connection.await {
                     eprintln!("connection error: {}", e);
                 }
             });
-            client
+            Ok(client)
         }
-        Err(err) => {
-            panic!("ERROR: Connection failed: {:?}", err);
-        }
+        Err(err) => Err(err)
     }
 }
 
-pub fn dbms_init() -> Client {
-    match Client::connect(connect_str(), NoTls) {
-        Ok(client) => client,
-        Err(err) => panic!("Unable to connect to database: {:?}", err)
-    }
+pub fn dbms_init(connect: &str) -> Result<Client, Error> {
+     Client::connect(connect, NoTls)
 }
 
+#[deprecated()]
 pub fn connect_str() -> &'static str {
     "host=postgres.testenv.autostoresystem.com user=postgres password=uU7DP6WatYtUhEeNpKfq"
 }
@@ -187,7 +187,7 @@ fn compose_batch_insert_worklog_sql(worklog_chunck: &[Worklog]) -> (String, Vec<
 
 /// Extracts all issues and accompanying worklogs for the supplied list of projects. Worklogs are retrieved for work started after `startedAfter`, which
 /// specified a timestamp in UNIX time, with a granularity of milliseconds
-pub async fn etl_issues_worklogs_and_persist(http_client: &reqwest::Client, projects: Vec<JiraProject>, issues_filter: Option<Vec<String>>, started_after: NaiveDateTime) {
+pub async fn etl_issues_worklogs_and_persist(http_client: &reqwest::Client, dbms_client: &mut tokio_postgres::Client, projects: Vec<JiraProject>, issues_filter: Option<Vec<String>>, started_after: NaiveDateTime) {
     if projects.is_empty() {
         println!("No projects found!");
         return;
@@ -216,28 +216,25 @@ pub async fn etl_issues_worklogs_and_persist(http_client: &reqwest::Client, proj
     let mut unique_authors = Vec::from_iter(authors);
     unique_authors.sort_by(|a, b| a.accountId.cmp(&b.accountId));
 
-    println!("Connecting to DBMS...");
-    let mut client = dbms_async_init().await;
-
     info!("Collecting the AutoStore project assets from each TIME issue");
     let project_assets: Vec<String> = extract_assets_from_time_issues(&jira_projects);
 
     debug!("Found these assets: {:?}", project_assets);
-    insert_assets(&mut client, &project_assets[..]).await;
+    insert_assets(dbms_client, &project_assets[..]).await;
 
     info!("Upserting {} authors", unique_authors.len());
-    batch_insert_authors(&mut client, &unique_authors[..]).await;
+    batch_insert_authors( dbms_client, &unique_authors[..]).await;
 
 
     for project in &jira_projects {
         println!("Project: {} {}", project.key, project.name);
-        insert_project(&mut client, project).await;
+        insert_project( dbms_client, project).await;
 
         for issue in &project.issues {
-            insert_issue(&mut client, &project.id, issue).await;
+            insert_issue( dbms_client, &project.id, issue).await;
             if !issue.worklogs.is_empty() {
                 println!("Processing {} worklogs for {}", issue.worklogs.len(), issue.key);
-                batch_insert_worklogs(&mut client, &issue.worklogs[..]).await;
+                batch_insert_worklogs( dbms_client, &issue.worklogs[..]).await;
             }
         }
     }

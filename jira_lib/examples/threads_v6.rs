@@ -13,7 +13,8 @@ lazy_static! {
 async fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
-    let http_client = jira_lib::http_client();
+    let http_client = jira_lib::create_jira_client().http_client;
+
 
     let start = Instant::now();
     let projects = jira_lib::get_all_projects(&http_client, vec![]).await;

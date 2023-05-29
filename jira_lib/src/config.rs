@@ -4,19 +4,25 @@ use std::io::Read;
 use std::path::{ PathBuf};
 use directories;
 use directories::ProjectDirs;
-use tokio::io::AsyncReadExt;
 use serde::Deserialize;
 
 #[derive(Deserialize, Debug)]
 pub struct ApplicationConfig {
-    jira: Jira,
+    pub jira: Jira,
+    pub dbms: WorklogDBMS,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct WorklogDBMS {
+    // host=.... user=.... password=.... (note space as delimiteder beteween key/values
+    pub connect: String,    // Connect string
 }
 
 #[derive(Deserialize, Debug)]
 pub struct Jira {
-    jira_url: String,
-    user: String,
-    token: String,
+    pub jira_url: String,
+    pub user: String,
+    pub token: String,
 }
 
 pub fn config_file_name() -> PathBuf {
@@ -26,7 +32,10 @@ pub fn config_file_name() -> PathBuf {
 }
 
 pub fn load_configuration() -> Result<ApplicationConfig, io::Error>{
-    let mut file = File::open(config_file_name())?;
+    let mut file = match File::open(config_file_name()) {
+        Ok(f) => f,
+        Err(e) => panic!("Unable to load config file {}", config_file_name().to_string_lossy()),
+    };
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
     let config: ApplicationConfig = toml::from_str(&contents).unwrap();

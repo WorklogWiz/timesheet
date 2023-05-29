@@ -1,17 +1,19 @@
-extern crate core;
-
-
+use std::error::Error;
+use std::fmt;
+use std::fmt::Formatter;
 use std::time::Instant;
 
 use chrono::{DateTime, Local, Months, NaiveDateTime, NaiveTime, Utc};
 use futures::StreamExt;
 use log::{debug, info};
-use reqwest::{Client};
 use reqwest::header::HeaderMap;
 use reqwest::header::HeaderValue;
+use reqwest::Client;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde::Serialize;
+
+pub mod config;
 
 pub const JIRA_URL: &str = "https://autostore.atlassian.net/rest/api/latest";
 
@@ -45,7 +47,7 @@ pub struct Worklog {
     pub started: DateTime<Utc>,
     pub timeSpent: String,
     pub timeSpentSeconds: i32,
-    pub issueId: String,        // Numeric FK to issue
+    pub issueId: String, // Numeric FK to issue
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialOrd, PartialEq, Eq, Hash, Clone)]
@@ -94,7 +96,6 @@ pub struct JiraIssuesPage {
     pub issues: Vec<JiraIssue>,
 }
 
-
 #[derive(Debug, Deserialize, Serialize, Default)]
 pub struct JiraIssue {
     pub id: String,
@@ -124,9 +125,474 @@ pub struct JiraAsset {
     pub value: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+#[allow(non_snake_case)]
+struct WorklogInsert {
+    comment: String,
+    started: String,
+    timeSpentSeconds: i32,
+}
 
+#[derive(Debug, PartialEq)]
+pub enum JiraError {
+    RequiredParameter(String),
+}
+
+impl fmt::Display for JiraError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            JiraError::RequiredParameter(param_name) => {
+                write!(f, "Parameter '{}' must contain a a value", param_name)
+            }
+        }
+    }
+}
+
+impl Error for JiraError {
+    // Ref: https://stackoverflow.com/questions/62869360/should-an-error-with-a-source-include-that-source-in-the-display-output
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            JiraError::RequiredParameter(p) => None,
+        }
+    }
+}
+
+pub struct JiraClient {
+    pub jira_url: String,
+    pub user_name: String,
+    token: String,
+    pub http_client: Client,
+}
+
+impl JiraClient {
+    pub fn new(jira_url: &str, user_name: &str, token: &str) -> Result<JiraClient, JiraError> {
+        if jira_url.is_empty() {
+            return Err(JiraError::RequiredParameter("jira_url".to_string()));
+        }
+        if user_name.is_empty() {
+            return Err(JiraError::RequiredParameter("user_name".to_string()));
+        }
+        if token.is_empty() {
+            return Err(JiraError::RequiredParameter("token".to_string()));
+        }
+
+        Ok(JiraClient {
+            jira_url: jira_url.to_string(),
+            user_name: user_name.to_string(),
+            token: token.to_string(),
+            http_client: Self::create_http_client(user_name, token),
+        })
+    }
+
+    fn create_http_client(user_name: &str, token: &str) -> reqwest::Client {
+        debug!("create_http_client({},{})", user_name, token);
+        match reqwest::Client::builder()
+            .default_headers(Self::create_default_headers(user_name, token))
+            .build()
+        {
+            Ok(c) => c,
+            Err(error) => panic!("Unable to create http client {:?}", error),
+        }
+    }
+    fn create_default_headers(user_name: &str, token: &str) -> HeaderMap {
+        debug!("create_default_headers({},{}", user_name, token);
+
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert(
+            reqwest::header::AUTHORIZATION,
+            HeaderValue::from_bytes(Self::create_auth_value(user_name, token).as_bytes()).unwrap(),
+        );
+        headers.insert(
+            reqwest::header::CONTENT_TYPE,
+            HeaderValue::from_static("application/json"),
+        );
+        headers.insert(
+            reqwest::header::ACCEPT,
+            HeaderValue::from_static("application/json"),
+        );
+        headers
+    }
+
+    fn create_auth_value(user: &str, token: &str) -> String {
+        debug!("create_auth_value({},{})", user, token);
+        let user = user;
+        let token = token;
+        let mut s: String = String::from(user);
+        s.push(':');
+        s.push_str(token);
+        let b64 = base64::encode(s.as_bytes());
+        let authorisation = format!("Basic {}", b64);
+        debug!("Created this BASIC auth string: '{}'", authorisation);
+        authorisation
+    }
+
+    pub async fn get_time_tracking_options(&self) -> TimeTrackingOptions {
+        let resource = "/configuration/timetracking/options";
+        self.get_jira_resource::<TimeTrackingOptions>(resource).await
+    }
+
+    pub async fn get_projects_filtered(
+        self,
+        filter_projects_opt: Option<Vec<String>>,
+    ) -> Vec<JiraProject> {
+        let filter = filter_projects_opt.unwrap_or(vec![]);
+        get_all_projects(&self.http_client, filter).await
+    }
+
+    pub fn compose_project_urls(initial: i32, max_result: i32, total: i32) -> Vec<String> {
+        let mut result = vec![];
+        let mut start = initial;
+        while start < total {
+            result.push(compose_project_url(start, max_result));
+            start += max_result;
+        }
+        result
+    }
+
+
+    pub fn compose_project_url(start_at: i32, max_results: i32) -> String {
+        format!(
+            "{}/project/search?maxResults={}&startAt={}",
+            JIRA_URL, max_results, start_at
+        )
+    }
+
+    // TODO: check if this function is used anywhere
+    /// Retrieves all Jira projects, filtering out the private ones
+    pub async fn get_all_projects(self, project_keys: Vec<String>) -> Vec<JiraProject> {
+        let start_at = 0;
+
+        // Retrieves first page of Jira projects
+        let mut project_page = get_jira_resource::<JiraProjectsPage>(
+            &self.http_client,
+            &project_search_resource(start_at, project_keys),
+        )
+            .await;
+
+        let mut projects = Vec::<JiraProject>::new();
+        if project_page.values.is_empty() {
+            // No projects, just return empty vector
+            return projects;
+        }
+
+        projects.append(
+            &mut project_page
+                .values
+                .into_iter()
+                .filter(|p| !p.is_private)
+                .collect(),
+        );
+
+        // While there is a URL for the next page ...
+        while let Some(url) = &project_page.nextPage {
+            // Fetch next page of data
+            project_page = get_jira_data_from_url::<JiraProjectsPage>(&self.http_client, url.clone()).await;
+            // Filter out the private projects and append to our list of projects
+            projects.append(
+                &mut project_page
+                    .values
+                    .into_iter()
+                    .filter(|p| !p.is_private)
+                    .collect(),
+            );
+        }
+        projects
+    }
+
+    pub async fn get_issues_for_single_project(
+        self,
+        project_key: String,
+    ) -> Vec<JiraIssue> {
+        let mut resource = compose_resource_and_params(project_key.to_owned(), 0, 1024);
+
+        let mut issues = Vec::<JiraIssue>::new();
+        loop {
+            let mut issue_page = get_jira_resource::<JiraIssuesPage>(&self.http_client, &resource).await;
+            // issues.len() will be invalid once we move the contents of the issues into our result
+            let is_last_page = issue_page.issues.len() < issue_page.max_results as usize;
+            if !is_last_page {
+                resource = compose_resource_and_params(
+                    project_key.to_owned(),
+                    issue_page.start_at + issue_page.issues.len() as i32,
+                    issue_page.max_results,
+                );
+            }
+            issues.append(&mut issue_page.issues);
+            if is_last_page {
+                break;
+            }
+        }
+        issues
+    }
+
+    // TODO: Consider Trait with associated type as this logic is repeated twice
+    pub async fn get_worklogs_for(
+        self,
+        issue_key: String,
+        started_after: NaiveDateTime,
+    ) -> Vec<Worklog> {
+        let mut resource_name = compose_worklogs_url(issue_key.as_str(), 0, 5000, started_after);
+        let mut worklogs: Vec<Worklog> = Vec::<Worklog>::new();
+
+        debug!("Retrieving worklogs for {}", issue_key);
+        loop {
+            let mut worklog_page = get_jira_resource::<WorklogsPage>(&self.http_client, &resource_name).await;
+            let is_last_page = worklog_page.worklogs.len() < worklog_page.max_results as usize;
+            if !is_last_page {
+                resource_name = compose_worklogs_url(
+                    issue_key.as_str(),
+                    worklog_page.startAt + worklog_page.worklogs.len() as i32,
+                    worklog_page.max_results,
+                    started_after,
+                );
+            }
+            worklogs.append(&mut worklog_page.worklogs);
+            if is_last_page {
+                break;
+            }
+        }
+        worklogs
+    }
+
+    fn compose_worklogs_url(
+        issue_key: &str,
+        start_at: i32,
+        max_results: i32,
+        started_after: NaiveDateTime,
+    ) -> String {
+        format!(
+            "/issue/{}/worklog?startAt={}&maxResults={}&startedAfter={}",
+            issue_key,
+            start_at,
+            max_results,
+            started_after.timestamp_millis()
+        )
+    }
+
+    fn compose_resource_and_params(project_key: String, start_at: i32, max_results: i32) -> String {
+        let jql = format!("project=\"{}\" and resolution=Unresolved", project_key);
+        let jql_encoded = urlencoding::encode(&jql);
+
+        // Custom field customfield_10904 is the project asset custom field
+        let resource = format!(
+            "/search?jql={}&startAt={}&maxResults={}&fields={}",
+            jql_encoded, start_at, max_results, "summary,customfield_10904"
+        );
+        resource
+    }
+
+    pub async fn get_jira_resource<T: DeserializeOwned>(&self, rest_resource: &str) -> T {
+        let url = format!("{}{}", JIRA_URL, rest_resource);
+
+        self.get_jira_data_from_url::<T>(url).await
+    }
+
+    pub async fn get_jira_data_from_url<T: DeserializeOwned>(&self, url: String) -> T {
+        let _url_decoded = urlencoding::decode(&url).unwrap();
+        debug!("Calling new get_jira_data_from_url");
+
+        let start = Instant::now();
+        let response = self.http_client.get(url.clone()).send().await.unwrap();
+        let elapsed = start.elapsed();
+        debug!("{} took {}ms", url, elapsed.as_millis());
+        // Downloads the entire body of the response and convert from JSON to type safe struct
+        let typed_result: T = match response.status() {
+            reqwest::StatusCode::OK => {
+                // Transforms JSON in body to type safe struct
+                match response.json::<T>().await {
+                    Ok(wl) => {
+                        debug!("Elapsed time for parsing {}", start.elapsed().as_millis());
+                        wl
+                    } // Everything OK, return the Worklogs struct
+                    Err(err) => panic!("EROR Obtaining response in JSON format: {:?}", err),
+                }
+            }
+            reqwest::StatusCode::UNAUTHORIZED => panic!("Not authorized, API key has probably changed"),
+            reqwest::StatusCode::TOO_MANY_REQUESTS => {
+                panic!("429 - Too many requests {:?}", response.headers())
+            }
+
+            other => {
+                let decoded_url = urlencoding::decode(&url).unwrap();
+                panic!(
+                    "Error code {:?} for {}\nencoded url={}",
+                    other, &decoded_url, &url
+                );
+            }
+        };
+        typed_result
+    }
+
+    fn project_search_resource(start_at: i32, project_keys: Vec<String>) -> String {
+        // Seems 50 is the max value of maxResults
+        let mut resource = format!("/project/search?maxResults=50&startAt={}", start_at);
+        if !project_keys.is_empty() {
+            for key in project_keys {
+                resource.push_str("&keys=");
+                resource.push_str(key.as_str());
+            }
+        }
+        resource
+    }
+
+    pub async fn get_issues_for_projects(
+        self,
+        projects: Vec<JiraProject>,
+    ) -> Vec<JiraProject> {
+        let mut futures_stream = futures::stream::iter(projects)
+            .map(|mut project| {
+                let client = self.http_client.clone();
+                tokio::spawn(async move {
+                    let issues = get_issues_for_single_project(&client, project.key.to_owned()).await;
+                    let _old = std::mem::replace(&mut project.issues, issues);
+                    project
+                })
+            })
+            .buffer_unordered(FUTURE_BUFFER_SIZE);
+
+        let mut result = Vec::<JiraProject>::new();
+        while let Some(r) = futures_stream.next().await {
+            match r {
+                Ok(jp) => {
+                    debug!("OK {}", jp.key);
+                    result.push(jp);
+                }
+                Err(e) => eprintln!("Error: {:?}", e),
+            }
+        }
+        result
+    }
+
+    const FUTURE_BUFFER_SIZE: usize = 20;
+
+    // todo: clean up and make simpler!
+    pub async fn get_issues_and_worklogs(
+        self,
+        projects: Vec<JiraProject>,
+        issues_filter: Vec<String>,
+        started_after: NaiveDateTime,
+    ) -> Vec<JiraProject> {
+        let mut futures_stream = futures::stream::iter(projects)
+            .map(|mut project| {
+                let client = self.http_client.clone();
+                debug!(
+                "Creating future for {}, filters={:?}",
+                &project.key, issues_filter
+            );
+
+                let filter = issues_filter.to_vec(); // Clones the vector to allow async move
+                tokio::spawn(async move {
+                    let issues = get_issues_for_single_project(&client, project.key.to_owned()).await;
+                    debug!(
+                    "Extracted {} issues. Applying filter {:?}",
+                    issues.len(),
+                    filter
+                );
+                    let issues: Vec<JiraIssue> = issues
+                        .into_iter()
+                        .filter(|issue| {
+                            filter.is_empty() || !filter.is_empty() && filter.contains(&issue.key)
+                        })
+                        .collect();
+                    debug!("Filtered {} issues for {}", issues.len(), &project.key);
+                    let _old = std::mem::replace(&mut project.issues, issues);
+                    for issue in &mut project.issues {
+                        debug!("Retrieving worklogs for issue {}", &issue.key);
+                        let key = issue.key.to_string();
+                        let mut worklogs = get_worklogs_for(&client, key, started_after).await;
+                        debug!("Issue {} has {} worklog entries", issue.key, worklogs.len());
+                        issue.worklogs.append(&mut worklogs);
+                    }
+                    project
+                })
+            })
+            .buffer_unordered(FUTURE_BUFFER_SIZE);
+
+        let mut result = Vec::<JiraProject>::new();
+        while let Some(r) = futures_stream.next().await {
+            match r {
+                Ok(jp) => {
+                    info!("Data retrieved from Jira for project {}", jp.key);
+                    result.push(jp);
+                }
+                Err(e) => eprintln!("Error: {:?}", e),
+            }
+        }
+        result
+    }
+
+    pub fn midnight_a_month_ago_in() -> NaiveDateTime {
+        let today = chrono::offset::Local::now();
+        let a_month_ago = today.checked_sub_months(Months::new(1)).unwrap();
+        NaiveDateTime::new(
+            a_month_ago.date_naive(),
+            NaiveTime::from_hms_opt(0, 0, 0).unwrap(),
+        )
+    }
+
+
+    pub async fn insert_worklog(
+        &self,
+        issue_id: &str,
+        started: DateTime<Local>,
+        time_spent_seconds: i32,
+        comment: &str,
+    ) {
+        // This is how Jira needs it.
+        // Note! The formatting in Jira is based on the time zone of the user. Remember to change it
+        // if you fly across the ocean :-)
+        let start = started.format("%Y-%m-%dT%H:%M:%S.%3f%z");
+        let worklog_entry = WorklogInsert {
+            timeSpentSeconds: time_spent_seconds,
+            comment: comment.to_string(),
+            started: start.to_string(),
+        };
+        let json = serde_json::to_string(&worklog_entry).unwrap(); // Let Serde do the heavy lifting
+
+        let url = format!("{}/issue/{}/worklog", JIRA_URL, issue_id);
+        debug!("Composed url for worklog insert: {}", url);
+
+        let result = self.http_client
+            .post(url)
+            .body(json)
+            .header("Content-Type", "application/json")
+            .send()
+            .await;
+
+        match result {
+            Ok(response) => {
+                info!(
+                "Status {} = {} ",
+                response.status(),
+                response.text().await.unwrap()
+            )
+            }
+            Err(e) => {
+                panic!("Failed to insert {:?}", e)
+            }
+        }
+    }
+} // end of JiraClient
+
+#[test]
+fn test_compose_urls() {
+    assert_eq!(3, JiraClient::compose_project_urls(50, 50, 181).len());
+}
+
+
+pub fn create_jira_client() -> JiraClient {
+    // Creates HTTP client with all the required credentials
+    let config = config::load_configuration().unwrap();
+    JiraClient::new(&config.jira.jira_url, &config.jira.user, &config.jira.token).unwrap()
+}
+
+
+// ========================================================================================
+// ========== OLD stuff  ==============
+#[deprecated(since = "2023-05-28", note = "please use the new JiraClient")]
 pub fn http_client() -> reqwest::Client {
-    create_auth_value();
+
+    create_auth_value(); // TODO: remove this - must be some old bug
 
     match reqwest::Client::builder()
         .default_headers(create_default_headers())
@@ -163,16 +629,16 @@ fn create_auth_value() -> String {
     s.push_str(token);
     let b64 = base64::encode(s.as_bytes());
     let authorisation = format!("Basic {}", b64);
+    debug!("Basic auth value in old function: {}", authorisation);
 
     authorisation
 }
 
-pub async fn get_time_tracking_options(http_client: &Client) -> TimeTrackingOptions {
-    let resource = "/configuration/timetracking/options";
-    get_jira_resource::<TimeTrackingOptions>(http_client, resource).await
-}
-
-pub async fn get_projects_filtered(http_client: &Client, filter_projects_opt: Option<Vec<String>>) -> Vec<JiraProject> {
+// ================== end of authorization
+pub async fn get_projects_filtered(
+    http_client: &Client,
+    filter_projects_opt: Option<Vec<String>>,
+) -> Vec<JiraProject> {
     let filter = filter_projects_opt.unwrap_or(vec![]);
     get_all_projects(http_client, filter).await
 }
@@ -187,13 +653,12 @@ pub fn compose_project_urls(initial: i32, max_result: i32, total: i32) -> Vec<St
     result
 }
 
-#[test]
-fn test_compose_urls() {
-    assert_eq!(3, compose_project_urls(50, 50, 181).len());
-}
 
 pub fn compose_project_url(start_at: i32, max_results: i32) -> String {
-    format!("{}/project/search?maxResults={}&startAt={}", JIRA_URL, max_results, start_at)
+    format!(
+        "{}/project/search?maxResults={}&startAt={}",
+        JIRA_URL, max_results, start_at
+    )
 }
 
 /// Retrieves all Jira projects, filtering out the private ones
@@ -201,9 +666,11 @@ pub async fn get_all_projects(http_client: &Client, project_keys: Vec<String>) -
     let start_at = 0;
 
     // Retrieves first page of Jira projects
-    let mut project_page =
-        get_jira_resource::<JiraProjectsPage>(http_client, &project_search_resource(start_at, project_keys))
-            .await;
+    let mut project_page = get_jira_resource::<JiraProjectsPage>(
+        http_client,
+        &project_search_resource(start_at, project_keys),
+    )
+        .await;
 
     let mut projects = Vec::<JiraProject>::new();
     if project_page.values.is_empty() {
@@ -211,20 +678,35 @@ pub async fn get_all_projects(http_client: &Client, project_keys: Vec<String>) -
         return projects;
     }
 
-    projects.append(&mut project_page.values.into_iter().filter(|p| !p.is_private).collect());
+    projects.append(
+        &mut project_page
+            .values
+            .into_iter()
+            .filter(|p| !p.is_private)
+            .collect(),
+    );
 
     // While there is a URL for the next page ...
     while let Some(url) = &project_page.nextPage {
         // Fetch next page of data
         project_page = get_jira_data_from_url::<JiraProjectsPage>(http_client, url.clone()).await;
         // Filter out the private projects and append to our list of projects
-        projects.append(&mut project_page.values.into_iter().filter(|p| !p.is_private).collect());
+        projects.append(
+            &mut project_page
+                .values
+                .into_iter()
+                .filter(|p| !p.is_private)
+                .collect(),
+        );
     }
     projects
 }
 
 // TODO: Consider Trait with associated type as this logic is identical to get_worklogs_for()
-pub async fn get_issues_for_single_project(http_client: &Client, project_key: String) -> Vec<JiraIssue> {
+pub async fn get_issues_for_single_project(
+    http_client: &Client,
+    project_key: String,
+) -> Vec<JiraIssue> {
     let mut resource = compose_resource_and_params(project_key.to_owned(), 0, 1024);
 
     let mut issues = Vec::<JiraIssue>::new();
@@ -248,7 +730,11 @@ pub async fn get_issues_for_single_project(http_client: &Client, project_key: St
 }
 
 // TODO: Consider Trait with associated type as this logic is repeated twice
-pub async fn get_worklogs_for(http_client: &Client, issue_key: String, started_after: NaiveDateTime) -> Vec<Worklog> {
+pub async fn get_worklogs_for(
+    http_client: &Client,
+    issue_key: String,
+    started_after: NaiveDateTime,
+) -> Vec<Worklog> {
     let mut resource_name = compose_worklogs_url(issue_key.as_str(), 0, 5000, started_after);
     let mut worklogs: Vec<Worklog> = Vec::<Worklog>::new();
 
@@ -272,11 +758,18 @@ pub async fn get_worklogs_for(http_client: &Client, issue_key: String, started_a
     worklogs
 }
 
-
-fn compose_worklogs_url(issue_key: &str, start_at: i32, max_results: i32, started_after: NaiveDateTime) -> String {
+fn compose_worklogs_url(
+    issue_key: &str,
+    start_at: i32,
+    max_results: i32,
+    started_after: NaiveDateTime,
+) -> String {
     format!(
         "/issue/{}/worklog?startAt={}&maxResults={}&startedAfter={}",
-        issue_key, start_at, max_results, started_after.timestamp_millis()
+        issue_key,
+        start_at,
+        max_results,
+        started_after.timestamp_millis()
     )
 }
 
@@ -348,7 +841,10 @@ fn project_search_resource(start_at: i32, project_keys: Vec<String>) -> String {
     resource
 }
 
-pub async fn get_issues_for_projects(http_client: &Client, projects: Vec<JiraProject>) -> Vec<JiraProject> {
+pub async fn get_issues_for_projects(
+    http_client: &Client,
+    projects: Vec<JiraProject>,
+) -> Vec<JiraProject> {
     let mut futures_stream = futures::stream::iter(projects)
         .map(|mut project| {
             let client = http_client.clone();
@@ -357,7 +853,8 @@ pub async fn get_issues_for_projects(http_client: &Client, projects: Vec<JiraPro
                 let _old = std::mem::replace(&mut project.issues, issues);
                 project
             })
-        }).buffer_unordered(FUTURE_BUFFER_SIZE);
+        })
+        .buffer_unordered(FUTURE_BUFFER_SIZE);
 
     let mut result = Vec::<JiraProject>::new();
     while let Some(r) = futures_stream.next().await {
@@ -366,7 +863,7 @@ pub async fn get_issues_for_projects(http_client: &Client, projects: Vec<JiraPro
                 debug!("OK {}", jp.key);
                 result.push(jp);
             }
-            Err(e) => eprintln!("Error: {:?}", e)
+            Err(e) => eprintln!("Error: {:?}", e),
         }
     }
     result
@@ -375,17 +872,34 @@ pub async fn get_issues_for_projects(http_client: &Client, projects: Vec<JiraPro
 const FUTURE_BUFFER_SIZE: usize = 20;
 
 // todo: clean up and make simpler!
-pub async fn get_issues_and_worklogs(http_client: &Client, projects: Vec<JiraProject>, issues_filter: Vec<String>, started_after: NaiveDateTime) -> Vec<JiraProject> {
+pub async fn get_issues_and_worklogs(
+    http_client: &Client,
+    projects: Vec<JiraProject>,
+    issues_filter: Vec<String>,
+    started_after: NaiveDateTime,
+) -> Vec<JiraProject> {
     let mut futures_stream = futures::stream::iter(projects)
         .map(|mut project| {
             let client = http_client.clone();
-            debug!("Creating future for {}, filters={:?}", &project.key, issues_filter);
+            debug!(
+                "Creating future for {}, filters={:?}",
+                &project.key, issues_filter
+            );
 
-            let filter = issues_filter.to_vec();    // Clones the vector to allow async move
+            let filter = issues_filter.to_vec(); // Clones the vector to allow async move
             tokio::spawn(async move {
                 let issues = get_issues_for_single_project(&client, project.key.to_owned()).await;
-                debug!("Extracted {} issues. Applying filter {:?}", issues.len(), filter);
-                let issues: Vec<JiraIssue> = issues.into_iter().filter(|issue| filter.is_empty() || !filter.is_empty() && filter.contains(&issue.key)).collect();
+                debug!(
+                    "Extracted {} issues. Applying filter {:?}",
+                    issues.len(),
+                    filter
+                );
+                let issues: Vec<JiraIssue> = issues
+                    .into_iter()
+                    .filter(|issue| {
+                        filter.is_empty() || !filter.is_empty() && filter.contains(&issue.key)
+                    })
+                    .collect();
                 debug!("Filtered {} issues for {}", issues.len(), &project.key);
                 let _old = std::mem::replace(&mut project.issues, issues);
                 for issue in &mut project.issues {
@@ -407,7 +921,7 @@ pub async fn get_issues_and_worklogs(http_client: &Client, projects: Vec<JiraPro
                 info!("Data retrieved from Jira for project {}", jp.key);
                 result.push(jp);
             }
-            Err(e) => eprintln!("Error: {:?}", e)
+            Err(e) => eprintln!("Error: {:?}", e),
         }
     }
     result
@@ -416,19 +930,20 @@ pub async fn get_issues_and_worklogs(http_client: &Client, projects: Vec<JiraPro
 pub fn midnight_a_month_ago_in() -> NaiveDateTime {
     let today = chrono::offset::Local::now();
     let a_month_ago = today.checked_sub_months(Months::new(1)).unwrap();
-    NaiveDateTime::new(a_month_ago.date_naive(), NaiveTime::from_hms_opt(0, 0, 0).unwrap())
+    NaiveDateTime::new(
+        a_month_ago.date_naive(),
+        NaiveTime::from_hms_opt(0, 0, 0).unwrap(),
+    )
 }
 
 
-#[derive(Debug, Serialize, Deserialize)]
-#[allow(non_snake_case)]
-struct WorklogInsert {
-    comment: String,
-    started: String,
-    timeSpentSeconds: i32,
-}
-
-pub async fn insert_worklog(http_client: &Client, issue_id: &str, started: DateTime<Local>, time_spent_seconds: i32, comment: &str) {
+pub async fn insert_worklog(
+    http_client: &Client,
+    issue_id: &str,
+    started: DateTime<Local>,
+    time_spent_seconds: i32,
+    comment: &str,
+) {
     // This is how Jira needs it.
     // Note! The formatting in Jira is based on the time zone of the user. Remember to change it
     // if you fly across the ocean :-)
@@ -447,10 +962,25 @@ pub async fn insert_worklog(http_client: &Client, issue_id: &str, started: DateT
         .post(url)
         .body(json)
         .header("Content-Type", "application/json")
-        .send().await;
+        .send()
+        .await;
 
     match result {
-        Ok(response) => { info!("Status {} = {} ", response.status(), response.text().await.unwrap()) }
-        Err(e) => { panic!("Failed to insert {:?}", e) }
+        Ok(response) => {
+            info!(
+                "Status {} = {} ",
+                response.status(),
+                response.text().await.unwrap()
+            )
+        }
+        Err(e) => {
+            panic!("Failed to insert {:?}", e)
+        }
     }
 }
+
+pub async fn get_time_tracking_options(http_client: &Client) -> TimeTrackingOptions {
+    let resource = "/configuration/timetracking/options";
+    get_jira_resource::<TimeTrackingOptions>(http_client, resource).await
+}
+

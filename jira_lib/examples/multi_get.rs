@@ -8,9 +8,9 @@ use jira_lib::WorklogsPage;
 #[tokio::main]
 async fn main() {
     // Creates HTTP client with all the required credentials
-    let http_client = http_client();
+    let jira_client = jira_lib::create_jira_client();
 
-    let projects_future = get_jira_resource::<JiraProjectsPage>(&http_client, "/project/search?maxResults=50&startAt=0");
+    let projects_future = get_jira_resource::<JiraProjectsPage>(&jira_client.http_client, "/project/search?maxResults=50&startAt=0");
     let projects = projects_future.await;
 
 
@@ -23,7 +23,7 @@ async fn main() {
 
     let bodies = futures::stream::iter(entries)
         .map(|issue| {
-            let client = http_client.clone();
+            let client = jira_client.http_client.clone();
             tokio::spawn(
                 async move {
 

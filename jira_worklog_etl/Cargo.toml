@@ -1,5 +1,5 @@
 [package]
-name = "jira_app"
+name = "jira_worklog_etl"
 version = "0.1.0"
 edition = "2021"
 
@@ -20,4 +20,4 @@ env_logger = "0.10"
 reqwest = { version = "0.11", features = ["json"] }
 
 tokio = { version = "1", features = ["full"] }
-
+tokio-postgres = { version="0.7", features = ["with-chrono-0_4"]}

@@ -10,7 +10,7 @@ lazy_static! {
 
 #[tokio::main]
 async fn main() {
-    let  http_client = jira_lib::http_client();
+    let  http_client = jira_lib::create_jira_client().http_client;
 
     let urls = vec![
         "https://autostore.atlassian.net/rest/api/latest/project/search?maxResults=50&startAt=0".to_string(),

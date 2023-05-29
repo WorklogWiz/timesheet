@@ -1,11 +1,14 @@
+use std::io::Error;
+use std::process::exit;
 use chrono::{NaiveDateTime};
-use jira_lib::{ http_client, midnight_a_month_ago_in};
+use jira_lib::{http_client, JiraClient, JiraError, midnight_a_month_ago_in};
 use log::info;
-
+use tokio_postgres;
 use clap::Parser;
 use env_logger::Env;
 use reqwest::Client;
 use jira_dbms::etl_issues_worklogs_and_persist;
+use jira_lib::config::ApplicationConfig;
 
 #[derive(Parser, Default, Debug)]
 #[clap(author, version, about)]
@@ -48,8 +51,25 @@ async fn main() {
 
     info!("Starting up ...");
 
-    // Creates HTTP client with all the required credentials
-    let http_client = http_client();
+    let configuration = match jira_lib::config::load_configuration() {
+        Ok(c) => c,
+        Err(e) => panic!("Unable to load configuration from {}", jira_lib::config::config_file_name().to_string_lossy())
+    };
+
+    let jira_client = match jira_lib::JiraClient::new(&configuration.jira.jira_url, &configuration.jira.user, &configuration.jira.token){
+        Ok(c) => c,
+        Err(e) => panic!("Unable to create Jira http client: {}", e)
+    };
+
+    let mut dbms_client: tokio_postgres::Client  =  match jira_dbms::dbms_async_init(&configuration.dbms.connect).await {
+        Ok(dbms) => dbms,
+        Err(e) => panic!("Unable to connect to the database: {}. \nHave you started VPN?", e)
+    };
+
+    for row in dbms_client.query("select version()",&[]).await.unwrap(){
+        let s: String = row.get(0);
+        println!("DBMS is {}", s);
+    }
 
     let started_after = match args.after.as_deref() {
         Some(after_spec) => {
@@ -63,28 +83,28 @@ async fn main() {
     println!("Retrieving worklogs after {}", started_after);
 
     match args {
-        Cli { projects: None, issues: None,users,..} => process_all_projects(&http_client, users, started_after).await,
-        Cli { projects, issues: None, users, .. } => process_project_worklogs_filtered(&http_client, projects, users, started_after).await,
-        Cli { projects, issues, users, .. } => process_project_issues(&http_client, projects, issues, started_after, users).await,
+        Cli { projects: None, issues: None,users,..} => process_all_projects(&jira_client.http_client, &mut dbms_client, users, started_after).await,
+        Cli { projects, issues: None, users, .. } => process_project_worklogs_filtered(&jira_client.http_client, &mut dbms_client, projects, users, started_after).await,
+        Cli { projects, issues, users, .. } => process_project_issues(&jira_client.http_client, &mut dbms_client, projects, issues, started_after, users).await,
     }
 }
 
-async fn process_project_issues(http_client: &Client, projects: Option<Vec<String>>, issues: Option<Vec<String>>, started_after: NaiveDateTime, _users: Option<Vec<String>>) {
+async fn process_project_issues(http_client: &Client, dbms_client: &mut tokio_postgres::Client, projects: Option<Vec<String>>, issues: Option<Vec<String>>, started_after: NaiveDateTime, _users: Option<Vec<String>>) {
     let projects = jira_lib::get_projects_filtered(http_client, projects).await;
-    etl_issues_worklogs_and_persist(http_client, projects, issues, started_after).await;
+    etl_issues_worklogs_and_persist(http_client, dbms_client,projects, issues, started_after).await;
 }
 
-async fn process_project_worklogs_filtered(http_client: &Client, projects: Option<Vec<String>>, _users: Option<Vec<String>>, started_after: NaiveDateTime) {
+async fn process_project_worklogs_filtered(http_client: &Client,  dbms_client: &mut tokio_postgres::Client, projects: Option<Vec<String>>, _users: Option<Vec<String>>, started_after: NaiveDateTime) {
     let projects = jira_lib::get_projects_filtered(http_client, projects).await;
-    jira_dbms::etl_issues_worklogs_and_persist(http_client, projects, None, started_after).await;
+    jira_dbms::etl_issues_worklogs_and_persist(http_client, dbms_client, projects, None, started_after).await;
 }
 
-async fn process_all_projects(http_client: &Client, _users: Option<Vec<String>>, started_after: NaiveDateTime) {
+async fn process_all_projects(http_client: &Client, dbms_client: &mut tokio_postgres::Client, _users: Option<Vec<String>>, started_after: NaiveDateTime) {
     println!("Extracting all projects, filtering on users {:?}", _users);
 
     let projects = jira_lib::get_all_projects(http_client,vec![]).await;
 
-    jira_dbms::etl_issues_worklogs_and_persist(http_client, projects, None, started_after).await;
+    jira_dbms::etl_issues_worklogs_and_persist(http_client, dbms_client, projects, None, started_after).await;
 }
 
 #[test]

@@ -1,13 +1,13 @@
 
-use jira_lib::{get_issues_for_single_project, http_client, JiraIssue};
+use jira_lib::{ JiraIssue};
 
 #[tokio::main]
 async fn main() {
-    // Creates HTTP client with all the required credentials
-    let http_client = http_client();
+
+    let jira_client = jira_lib::create_jira_client();
 
 
-    let results : Vec<JiraIssue> = get_issues_for_single_project(&http_client, "TIME".to_string()).await;
+    let results : Vec<JiraIssue> = jira_client.get_issues_for_single_project("TIME".to_string()).await;
     for issue in results {
         println!("{}",issue.key);
     }

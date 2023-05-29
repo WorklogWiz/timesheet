@@ -5,14 +5,10 @@ use std::fmt::Formatter;
 use std::fs::File;
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use env_logger::Env;
-use jira_lib::TimeTrackingOptions;
-use reqwest::Client;
-use crate::date_util::{str_to_date_time, calculate_started_time, TimeSpent};
-use log::{info};
-use directories;
-
+use crate::date_util::{calculate_started_time, str_to_date_time, TimeSpent};
+use log::{debug, info};
+use jira_lib::config;
 mod date_util;
-mod config;
 
 #[derive(Parser)]
 #[command(version = "1.0", author = "Steinar Overbeck Cook <steinar.cook@autostoresystem.com>", about = "Command line tool for Jira worklog mgmt")]
@@ -86,20 +82,29 @@ async fn main() {
     let opts: Opts = Opts::parse();
 
     configure_logging(&opts);
-    if let Some(project_dirs) = directories::ProjectDirs::from("com","autostoresystems","jira_worklog"){
-        println!("Config dir {}",project_dirs.config_local_dir().to_string_lossy());
-    }
 
-    let http_client = jira_lib::http_client();
+    let configuration = match config::load_configuration() {
+        Ok(c) => c,
+        Err(e) => { panic!("Unable to load configuration file from: {}, cause: {}", config::config_file_name().to_string_lossy(), e)}
+    };
 
-    let options = time_tracking_options(&http_client).await;
-    info!("Global Jira options: {:?}", &options);
+    debug!("jira_url: '{}'", configuration.jira.jira_url);
+    debug!("user: '{}'", configuration.jira.user);
+    debug!("token: '{}'", configuration.jira.token);
+
+    let jira_client = match jira_lib::JiraClient::new(&configuration.jira.jira_url, &configuration.jira.user, &configuration.jira.token){
+        Ok(client) => client,
+        Err(e) => { panic!("Unable to create a new http-client for Jira: {}", e)}
+    };
+
+    let time_tracking_options = jira_client.get_time_tracking_options().await;
+    info!("Global Jira options: {:?}", &time_tracking_options);
 
     match opts.subcmd {
         SubCommand::Add(add) => {
             info!("started: {}, ended: {:?}, duration:{} ", add.started.as_deref().unwrap_or("None"), add.ended, add.duration);
 
-            let time_spent_seconds = match TimeSpent::from_str(add.duration.as_str(), options.workingHoursPerDay, options.workingDaysPerWeek) {
+            let time_spent_seconds = match TimeSpent::from_str(add.duration.as_str(), time_tracking_options.workingHoursPerDay, time_tracking_options.workingDaysPerWeek) {
                 Ok(time_spent) => time_spent.time_spent_seconds,
                 Err(e) => panic!("Unable to figure out the duration of your worklog entry {}", e),
             };
@@ -118,8 +123,7 @@ async fn main() {
             println!("\tComment: {}", add.comment.as_deref().unwrap_or("None"));
 
 
-            jira_lib::insert_worklog(&http_client,
-                                     add.issue.as_str(),
+            jira_client.insert_worklog(add.issue.as_str(),
                                      calculated_start,
                                      time_spent_seconds,
                                      add.comment.unwrap_or("".to_string()).as_str()).await;
@@ -149,6 +153,4 @@ fn configure_logging(opts: &Opts) {
         .init();
 }
 
-async fn time_tracking_options(http_client: &Client) -> TimeTrackingOptions {
-    jira_lib::get_time_tracking_options(http_client).await
-}
+

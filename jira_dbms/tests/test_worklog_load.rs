@@ -147,7 +147,9 @@ fn test_hash_set() {
 
 #[tokio::test]
 async fn test_insert_multiple_worklogs() {
-    let mut dbms = dbms_async_init().await;
+    let config = jira_lib::config::load_configuration().unwrap();
+
+    let mut dbms = dbms_async_init(&config.dbms.connect).await.unwrap();
     let contents = fs::read_to_string("tests/time-40_worklog_results.json").expect("Expected to load json file");
     let start = Instant::now();
     let worklogs_page = serde_json::from_str::<WorklogsPage>(&contents).unwrap();
