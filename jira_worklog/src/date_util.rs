@@ -1,5 +1,5 @@
 use chrono::offset::TimeZone;
-use chrono::{DateTime, Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, ParseResult};
+use chrono::{Datelike, DateTime, Days, Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, ParseResult, Weekday};
 use lazy_static::lazy_static;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
@@ -94,16 +94,16 @@ impl TimeSpent {
         work_hours_per_day: f32,
         working_days_per_week: f32,
     ) -> Result<TimeSpent, chrono::ParseError> {
-        let (dur, unit) = Self::as_duration(s).unwrap();
+        let (dur, unit) = Self::parse_to_unit_and_duration(s).unwrap();
 
         let seconds = match unit.as_str() {
-            "h" | "H" => (dur  * 3600.0) as i32,
-            "d" | "D" => (dur  * work_hours_per_day * 3600.0) as i32,
+            "h" | "H" => (dur * 3600.0) as i32,
+            "d" | "D" => (dur * work_hours_per_day * 3600.0) as i32,
             "w" | "W" => {
-                (dur  * working_days_per_week * work_hours_per_day * 3600.0) as i32
+                (dur * working_days_per_week * work_hours_per_day * 3600.0) as i32
             }
             _ => {
-                panic!("Don't know how to handle units of '{}'", unit)
+                panic!("Don't know how to handle units of '{}', expected 'h','d', or 'w'", unit)
             }
         };
 
@@ -114,7 +114,8 @@ impl TimeSpent {
         })
     }
 
-    pub fn as_duration(s: &str) -> Result<(f32, String), DateTimeError> {
+    // Parses strings like 1,5h -> (1.5 'h')
+    pub fn parse_to_unit_and_duration(s: &str) -> Result<(f32, String), DateTimeError> {
         lazy_static! {
             static ref TIME_EXPR: Regex = Regex::new(r"^(\d+(?:[\.,]\d{1,2})?)(\w)$").unwrap();
         }
@@ -142,7 +143,17 @@ impl TimeSpent {
 }
 
 #[test]
+fn test_parse_to_unit_and_duration() {
+
+    assert!(TimeSpent::parse_to_unit_and_duration("1,5h").is_ok());
+    assert!(TimeSpent::parse_to_unit_and_duration("Mon:1,5h").is_err());
+
+}
+
+#[test]
 fn test_time_spent() {
+    assert!(TimeSpent::from_str("1", 7.5, 5.0).is_err());
+
     assert_eq!(
         TimeSpent {
             time_spent: "1.5h".to_string(),
@@ -231,4 +242,86 @@ fn test_calculate_starting_point() {
         3600,
     );
     assert!(t.is_err());
+}
+
+pub fn parse_worklog_durations(entries: Vec<String>) -> Vec<(Weekday, f32, String)> {
+    lazy_static! {
+        // Mon:1,5h
+        static ref DURATION_EXPR: Regex = Regex::new(r"^(\w{3}):(\d+(?:[\.,]\d{1,2})?\w)$").unwrap();
+    }
+
+    let mut result: Vec<(Weekday, f32, String)> = Vec::new();
+
+    for s in entries.into_iter() {
+        match DURATION_EXPR.captures(&s) {
+            Some(caps) => {
+                let week_day = String::from(&caps[1]).parse::<Weekday>().unwrap();
+                let (duration, unit) = TimeSpent::parse_to_unit_and_duration(&caps[2]).expect("parsing error!");
+
+                result.push((week_day, duration, unit));
+            }
+            None => panic!("Could not parse {} into weekday, duration and unit", s)
+        }
+    }
+    result
+}
+
+
+pub fn date_of_last_weekday(weekday: Weekday) -> DateTime<Local> {
+    last_weekday_from(Local::now(), weekday)
+}
+
+/// Given a Weekday, like for instance Friday, find the first Friday in the past given the
+/// supplied starting point
+/// Will return today's date if you supply today's weekday
+pub fn last_weekday_from(starting_date : DateTime<Local>, weekday: Weekday) -> DateTime<Local> {
+
+    let mut current_date : DateTime<Local> = starting_date;
+    let one_day = Days::new(1);
+
+    for _n in 0..7 {
+        if current_date.weekday() == weekday {
+            return current_date;
+        }
+        // Skips to previous day
+        current_date = current_date.checked_sub_days(one_day).unwrap();
+    }
+    panic!("Internal error in transforming {} into a date from starting date {}", weekday, starting_date.date_naive() )
+}
+
+#[test]
+fn test_weekday_to_date_backwards() {
+    let d = last_weekday_from(Local.with_ymd_and_hms(2023, 5, 31, 0, 0, 0).unwrap(), Weekday::Wed);
+    assert_eq!(d, Local.with_ymd_and_hms(2023,5,31, 0, 0, 0).unwrap(),"Should have been same day");
+
+    let d = last_weekday_from(Local.with_ymd_and_hms(2023, 5, 31, 0, 0, 0).unwrap(), Weekday::Tue);
+    assert_eq!(d, Local.with_ymd_and_hms(2023,5,30, 0, 0, 0).unwrap(), "Should give day before");
+
+    let d = last_weekday_from(Local.with_ymd_and_hms(2023, 6, 1, 0, 0, 0).unwrap(), Weekday::Fri);
+    assert_eq!(d, Local.with_ymd_and_hms(2023,5,26, 0, 0, 0).unwrap(), "Should give day before");
+
+}
+
+#[test]
+fn test_parse_durations() {
+    assert_eq!(parse_worklog_durations(vec!["Mon:1,5h".to_string()]), vec![(chrono::Weekday::Mon, 1.5f32, "h".to_string())]);
+}
+
+#[test]
+fn test_date_and_timezone_conversion() {
+
+    let utc = Utc::now();
+    println!("{}", utc);
+
+    let converted: DateTime<Local> = DateTime::from(utc);
+    println!("{}", converted);
+
+    let c = utc.with_timezone(&Local);
+    println!("{} {}", c, c.with_timezone(&Local));
+    println!("{}", c.date_naive().format("%Y-%m-%d"));
+
+    let hour = 45000 / 3600;
+    let minutes = (45000 % 3600) / 60;
+    println!("{}:{}", hour, minutes);
+
 }

@@ -1,6 +1,6 @@
 use postgres::Client;
 use tokio_postgres::{Error, NoTls};
-use jira_lib::{Author, get_issues_and_worklogs, JiraIssue, JiraProject, Worklog};
+use jira_lib::{Author, JiraClient, JiraIssue, JiraProject, Worklog};
 use std::fmt::Write;
 use log::{debug, info};
 use tokio_postgres::types::ToSql;
@@ -187,7 +187,7 @@ fn compose_batch_insert_worklog_sql(worklog_chunck: &[Worklog]) -> (String, Vec<
 
 /// Extracts all issues and accompanying worklogs for the supplied list of projects. Worklogs are retrieved for work started after `startedAfter`, which
 /// specified a timestamp in UNIX time, with a granularity of milliseconds
-pub async fn etl_issues_worklogs_and_persist(http_client: &reqwest::Client, dbms_client: &mut tokio_postgres::Client, projects: Vec<JiraProject>, issues_filter: Option<Vec<String>>, started_after: NaiveDateTime) {
+pub async fn etl_issues_worklogs_and_persist(jira_client: &JiraClient, dbms_client: &mut tokio_postgres::Client, projects: Vec<JiraProject>, issues_filter: Option<Vec<String>>, started_after: NaiveDateTime) {
     if projects.is_empty() {
         println!("No projects found!");
         return;
@@ -199,7 +199,7 @@ pub async fn etl_issues_worklogs_and_persist(http_client: &reqwest::Client, dbms
 
     info!("Retrieving the issues and worklogs ....");
     let filter = issues_filter.unwrap_or(vec![]);
-    let jira_projects = get_issues_and_worklogs(http_client, projects, filter, started_after).await;
+    let jira_projects = jira_client.get_issues_and_worklogs(projects, filter, started_after).await;
     info!("Tada: number of projects {}", jira_projects.len());
 
     info!("Collecting all authors from all worklog entries and making a unique list of them...");
@@ -276,9 +276,17 @@ mod tests {
     use super::*;
     use jira_lib::{JiraAsset, JiraFields, WorklogsPage};
 
+    async fn load_config_and_get_dbms_connection() -> tokio_postgres::Client {
+        let config = jira_lib::config::load_configuration().unwrap();
+
+        let mut client = dbms_async_init(&config.dbms.connect).await.unwrap();
+        client
+    }
+
+
     #[tokio::test]
     async fn test_insert_author() {
-        let mut client = dbms_async_init().await;
+        let mut client = load_config_and_get_dbms_connection().await;
         let author = Author {
             accountId: "a1".to_string(),
             emailAddress: Some("steinar@blabla.com".to_string()),
@@ -292,9 +300,11 @@ mod tests {
         client.execute("delete from jira.author where account_id=$1", &[&author.accountId]).await.unwrap();
     }
 
+
     #[tokio::test]
     async fn test_insert_worklog() {
-        let mut client = dbms_async_init().await;
+        let mut client = load_config_and_get_dbms_connection().await;
+
         let json = r#"{"startAt":0,"maxResults":1,"total":8884,"worklogs":[{"self":"https://autostore.atlassian.net/rest/api/2/issue/85002/worklog/129875","author":{"self":"https://autostore.atlassian.net/rest/api/2/user?accountId=557058%3A189520f0-d1fb-4a0d-b555-bc44ec1f4ebc","accountId":"557058:189520f0-d1fb-4a0d-b555-bc44ec1f4ebc","emailAddress":"borge.bekken@autostoresystem.com","avatarUrls":{"48x48":"https://secure.gravatar.com/avatar/0c67157f18660008baae96b0a2e40a61?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FBB-1.png","24x24":"https://secure.gravatar.com/avatar/0c67157f18660008baae96b0a2e40a61?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FBB-1.png","16x16":"https://secure.gravatar.com/avatar/0c67157f18660008baae96b0a2e40a61?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FBB-1.png","32x32":"https://secure.gravatar.com/avatar/0c67157f18660008baae96b0a2e40a61?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FBB-1.png"},"displayName":"Børge Bekken","active":true,"timeZone":"Europe/Oslo","accountType":"atlassian"},"updateAuthor":{"self":"https://autostore.atlassian.net/rest/api/2/user?accountId=557058%3A189520f0-d1fb-4a0d-b555-bc44ec1f4ebc","accountId":"557058:189520f0-d1fb-4a0d-b555-bc44ec1f4ebc","emailAddress":"borge.bekken@autostoresystem.com","avatarUrls":{"48x48":"https://secure.gravatar.com/avatar/0c67157f18660008baae96b0a2e40a61?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FBB-1.png","24x24":"https://secure.gravatar.com/avatar/0c67157f18660008baae96b0a2e40a61?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FBB-1.png","16x16":"https://secure.gravatar.com/avatar/0c67157f18660008baae96b0a2e40a61?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FBB-1.png","32x32":"https://secure.gravatar.com/avatar/0c67157f18660008baae96b0a2e40a61?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FBB-1.png"},"displayName":"Børge Bekken","active":true,"timeZone":"Europe/Oslo","accountType":"atlassian"},"created":"2022-02-04T16:22:28.554+0100","updated":"2022-02-04T16:22:44.384+0100","started":"2022-01-24T09:00:00.000+0100","timeSpent":"1d","timeSpentSeconds":27000,"id":"129875","issueId":"85002"}]}"#;
 
         let result = serde_json::from_str::<WorklogsPage>(&json).unwrap();
@@ -319,6 +329,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_insert_assets() {
+        let mut dbms = load_config_and_get_dbms_connection().await;
+
         let assets = [
             "Project_Pointer Light".to_string(),
             "Project_Design Tools Redesign".to_string(),
@@ -331,13 +343,12 @@ mod tests {
             "Project_WMS SDK Rework".to_string(),
             "Project_WMS Emulator".to_string(),
         ];
-        let mut dbms = dbms_async_init().await;
         insert_assets(&mut dbms, &assets).await;
     }
 
     #[tokio::test]
     async fn test_insert_issues() {
-        let mut dbms = dbms_async_init().await;
+        let mut dbms = load_config_and_get_dbms_connection().await;
 
         let project_id: String = match dbms.query_one("select jira.project.id from jira.project limit 1", &[]).await {
             Ok(row) => row.get(0),

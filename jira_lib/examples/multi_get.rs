@@ -2,7 +2,6 @@
 use futures::{ StreamExt};
 use tokio;
 
-use jira_lib::{get_jira_resource, http_client, JiraProjectsPage};
 use jira_lib::WorklogsPage;
 
 #[tokio::main]
@@ -10,14 +9,6 @@ async fn main() {
     // Creates HTTP client with all the required credentials
     let jira_client = jira_lib::create_jira_client();
 
-    let projects_future = get_jira_resource::<JiraProjectsPage>(&jira_client.http_client, "/project/search?maxResults=50&startAt=0");
-    let projects = projects_future.await;
-
-
-    println!("Projects startAt: {}, maxResults: {} of total: {}", projects.startAt, projects.maxResults, projects.total.unwrap());
-    for (i, project) in projects.values.iter().enumerate() {
-        println!("{} {} {} {}", i, project.id, project.key, project.name);
-    }
 
     let entries = vec!["TIME-12", "TIME-5"];
 

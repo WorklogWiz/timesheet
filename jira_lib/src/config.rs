@@ -34,7 +34,7 @@ pub fn config_file_name() -> PathBuf {
 pub fn load_configuration() -> Result<ApplicationConfig, io::Error>{
     let mut file = match File::open(config_file_name()) {
         Ok(f) => f,
-        Err(e) => panic!("Unable to load config file {}", config_file_name().to_string_lossy()),
+        Err(e) => panic!("Unable to load config file {}, reason: {}",config_file_name().to_string_lossy(),e),
     };
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;

@@ -3,7 +3,7 @@ use futures::{Future, stream, Stream, StreamExt};
 use lazy_static::lazy_static;
 use reqwest::Client;
 use tokio::time::Instant;
-use jira_lib::{get_issues_for_single_project, get_worklogs_for, JiraIssue,  midnight_a_month_ago_in, Worklog};
+use jira_lib::{JiraClient, JiraIssue, midnight_a_month_ago_in, Worklog};
 
 lazy_static! {
     static ref START_TIME: Instant = Instant::now();
@@ -13,11 +13,12 @@ lazy_static! {
 async fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
-    let http_client = jira_lib::create_jira_client().http_client;
+    let jira_client = jira_lib::create_jira_client();
+    let http_client= jira_client.http_client;
 
 
     let start = Instant::now();
-    let projects = jira_lib::get_all_projects(&http_client, vec![]).await;
+    let projects = jira_client.get_all_projects( vec![]).await;
     let _elapsed = start.elapsed().as_millis();
 
     let project_keys = projects.iter().map(|p| p.key.to_string()).collect();
@@ -37,7 +38,7 @@ async fn get_all_the_bloody_issues(http_client: &Client, project_keys : Vec<Stri
 
     let futures_result: Vec<Vec<JiraIssue>> = stream::iter(project_keys).map(|p| {
 
-        get_issues_for_single_project(http_client, p)
+        JiraClient::get_issues_for_single_project(http_client, p)
     }).buffer_unordered(30).collect().await;
 
     futures_result.into_iter().flatten().collect()
@@ -46,7 +47,7 @@ async fn get_all_the_bloody_issues(http_client: &Client, project_keys : Vec<Stri
 async fn get_all_worklogs(http_client: &Client, issue_keys: Vec<String>) -> Vec<Worklog> {
     let result: Vec<Vec<Worklog>> = stream::iter(issue_keys)
         .map(|key| {
-            jira_lib::get_worklogs_for(http_client,key, midnight_a_month_ago_in())
+            JiraClient::get_worklogs_for(http_client,key, midnight_a_month_ago_in())
         }).buffer_unordered(30).collect().await;
 
     result.into_iter().flatten().collect()
