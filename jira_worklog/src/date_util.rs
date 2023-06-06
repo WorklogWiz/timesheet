@@ -204,6 +204,7 @@ pub fn calculate_started_time(
     let now = Local::now();
     let duration = Duration::seconds(duration_seconds as i64);
 
+    // Subtracts duration from current time to find the start time
     let proposed_starting_point =
         starting_point.map_or(now.checked_sub_signed(duration).unwrap(), |v| v);
 
@@ -305,12 +306,18 @@ fn test_weekday_to_date_backwards() {
 #[test]
 fn test_parse_durations() {
     assert_eq!(parse_worklog_durations(vec!["Mon:1,5h".to_string()]), vec![(chrono::Weekday::Mon, 1.5f32, "h".to_string())]);
+    assert_eq!(parse_worklog_durations(vec!["Tue:1,5h".to_string()]), vec![(chrono::Weekday::Tue, 1.5f32, "h".to_string())]);
+    assert_eq!(parse_worklog_durations(vec!["Wed:1,5h".to_string()]), vec![(chrono::Weekday::Wed, 1.5f32, "h".to_string())]);
+    assert_eq!(parse_worklog_durations(vec!["Thu:1.5h".to_string()]), vec![(chrono::Weekday::Thu, 1.5f32, "h".to_string())]);
+    assert_eq!(parse_worklog_durations(vec!["Fri:1,5h".to_string()]), vec![(chrono::Weekday::Fri, 1.5f32, "h".to_string())]);
+    assert_eq!(parse_worklog_durations(vec!["Sat:1,5h".to_string()]), vec![(chrono::Weekday::Sat, 1.5f32, "h".to_string())]);
+    assert_eq!(parse_worklog_durations(vec!["Sun:1,5h".to_string()]), vec![(chrono::Weekday::Sun, 1.5f32, "h".to_string())]);
 }
 
 #[test]
 fn test_date_and_timezone_conversion() {
 
-    let utc = Utc::now();
+    let utc = chrono::Utc::now();
     println!("{}", utc);
 
     let converted: DateTime<Local> = DateTime::from(utc);

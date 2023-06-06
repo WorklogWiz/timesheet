@@ -4,30 +4,88 @@ use crate::date_util::{
     calculate_started_time, date_of_last_weekday, parse_worklog_durations, str_to_date_time,
     TimeSpent,
 };
-use chrono::{Datelike, Local, NaiveDate, TimeZone, Weekday};
+use chrono::{Datelike, Local, Month, NaiveDate, TimeZone, Weekday};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use env_logger::Env;
-use jira_lib::{config, JiraClient, JiraIssue, TimeTrackingOptions, Worklog};
+use jira_lib::{config, JiraClient, JiraIssue, TimeTrackingConfiguration, Worklog};
 use log::{debug, info};
 use std::fmt::Formatter;
 use std::fs::File;
 use std::{env, fmt};
 use std::collections::{BTreeMap, HashMap};
+use std::process::exit;
+use jira_lib::config::config_file_name;
 
 mod date_util;
 
 #[derive(Parser)]
-#[command(
-version = "1.0",
-author = "Steinar Overbeck Cook <steinar.cook@autostoresystem.com>",
-about = "Command line tool for Jira worklog mgmt"
-)]
+/// Jira worklog utility - add, delete and list jira worklog entries
+///
+/// Dates should be specified in the ISO8601 format without a time zone. Local timezone is
+/// always assumed. I.e. `2023-06-01`.
+///
+/// Duration is specified in units of hours, days or weeks, using the abbreviations 'h','d', and 'w'
+/// respectively.
+/// Duration may use either the period or the comma to separate the fractional part of a number.
+///
+/// 7,5h or 7.5h both indicate 7 hours and 30 mins
+/// 7:30 specifies 7 hours and 30 minutes
+///
+///
+#[command(version, author, about)] // Read from Cargo.toml
 struct Opts {
     #[command(subcommand)]
     subcmd: SubCommand,
 
     #[arg(global = true, short, long, default_value = "info")]
     verbosity: Option<LogLevel>,
+}
+
+
+#[derive(Subcommand)]
+enum SubCommand {
+    /// Add worklog entries
+    #[command(arg_required_else_help = true)]
+    Add(Add),
+    /// Delete work log entry
+    Del(Del),
+    /// Get status of work log entries
+    Status(Status),
+}
+
+#[derive(Args)]
+struct Add {
+    /// Duration of work in hours (h) or days (d)
+    /// If more than a single entry separate with spaces and three letter abbreviatio of
+    /// weekday name:
+    ///     --durations Mon:1,5h Tue:1d Wed:3,5h Fri:1d
+    #[arg(short, long, num_args(1..))]
+    durations: Vec<String>,
+    /// Jira issue to register work on
+    #[arg(short, long, required=true)]
+    issue: String,
+    /// work started
+    #[arg(name = "started", short, long, requires = "durations")]
+    started: Option<String>,
+    #[arg(name = "comment", short, long)]
+    comment: Option<String>,
+}
+
+#[derive(Args)]
+struct Del {
+    #[arg(short, long, required=true)]
+    issue_id: String,
+    #[arg(short = 'w', long, required=true)]
+    worklog_id: String,
+}
+
+#[derive(Parser)]
+struct Status {
+    #[arg(short, long, num_args(1..), required=true)]
+    issues: Vec<String>,
+    // Consider a vector here
+    #[arg(short, long)]
+    after: Option<String>,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
@@ -49,51 +107,6 @@ impl fmt::Display for LogLevel {
     }
 }
 
-#[derive(Subcommand)]
-enum SubCommand {
-    /// Add worklog entries
-    #[command(arg_required_else_help = true)]
-    Add(Add),
-    /// Delete work log entry
-    Del(Del),
-    /// Get status of work log entries
-    Status(Status),
-}
-
-#[derive(Args)]
-struct Add {
-    /// Duration of work in hours (h) or days (d)
-    /// If more than a single entry separate with spaces and two letter day abbreviation.
-    /// --duration Mo:1,5h Tu:1d We:3,5h Fr:1d
-    #[arg(short, long, num_args(1..))]
-    duration: Vec<String>,
-    /// Jira issue to register work on
-    #[arg(short, long)]
-    issue: String,
-    /// work started
-    #[arg(name = "started", short, long, requires = "duration")]
-    started: Option<String>,
-    #[arg(name = "comment", short, long)]
-    comment: Option<String>,
-}
-
-#[derive(Args)]
-struct Del {
-    #[arg(short, long)]
-    issue_id: String,
-    #[arg(short = 'w', long)]
-    worklog_id: String,
-}
-
-#[derive(Parser)]
-struct Status {
-    #[arg(short, long, num_args(1..))]
-    issue: Vec<String>,
-    // Consider a vector here
-    #[arg(short, long)]
-    after: Option<String>,
-}
-
 #[tokio::main]
 async fn main() {
     let opts: Opts = Opts::parse();
@@ -102,12 +115,21 @@ async fn main() {
 
     let configuration = match config::load_configuration() {
         Ok(c) => c,
-        Err(e) => {
-            panic!(
-                "Unable to load configuration file from: {}, cause: {}",
-                config::config_file_name().to_string_lossy(),
-                e
-            )
+        Err(_) => {
+            match config::create_sample_configuration() {
+                Ok(_) => {
+                    println!("Seems you have no configuration file. Created sample configuration file:");
+                    println!("\t {}", config_file_name().to_string_lossy());
+                    println!("Please edit with a programmers editor and retry!");
+                    exit(4);
+                }
+                Err(e) => {
+                    eprintln!("Unable to load configuration file and not able to create sample config file");
+                    eprintln!("Config file name: {}", config_file_name().to_string_lossy());
+                    eprintln!("Reason: {}", e);
+                    exit(8);
+                }
+            }
         }
     };
 
@@ -134,15 +156,18 @@ async fn main() {
             add.issue = add.issue.to_uppercase(); // Ensure the issue id is always uppercase
 
             // If there is only a single duration which does starts with a numeric
-            if add.duration.len() == 1 && add.duration[0].chars().next().unwrap() <= '9' {
+            debug!("Length: {} and durations[0]: {}", add.durations.len(), add.durations[0].chars().next().unwrap());
+            if add.durations.len() == 1 && add.durations[0].chars().next().unwrap() <= '9' {
                 println!("Adding single entry");
-                add_single_entry(&jira_client, &time_tracking_options, add.issue, &add.duration[0], add.started, add.comment).await;
-            } else if add.duration.len() > 1 {
-                add_multiple_entries(jira_client, time_tracking_options, add.issue, add.duration, add.comment).await;
+                add_single_entry(&jira_client, &time_tracking_options, add.issue, &add.durations[0], add.started, add.comment).await;
+            } else if add.durations.len() >= 1 && add.durations[0].chars().next().unwrap() >= 'A' {
+                debug!("Handling multiple entries");
+                add_multiple_entries(jira_client, time_tracking_options, add.issue, add.durations, add.comment).await;
             } else {
-                panic!("Internal error");
+                panic!("Internal error, unable to parse the durations. Did not understand: {}", add.durations[0]);
             }
         }
+
         SubCommand::Del(delete) => {
             let current_user = jira_client.get_current_user().await;
             let worklog_entry = jira_client
@@ -168,22 +193,24 @@ async fn main() {
             let mut status_entries: Vec<Worklog> = Vec::new();
             let mut issue_information: HashMap<String, JiraIssue> = HashMap::new();
 
-            for issue in status.issue.iter() {
+            for issue in status.issues.iter() {
                 let mut entries = jira_client.get_worklogs_for_current_user(issue, start_after).await;
                 status_entries.append(&mut entries);
                 let issue_info = jira_client.get_issue_by_id_or_key(issue).await;
-                // Allows us to lookup the issue by numeric id to augment the report
+// Allows us to lookup the issue by numeric id to augment the report
                 issue_information.insert(issue_info.id.to_string(), issue_info);
             };
 
             issue_and_entry_report(&mut status_entries, &mut issue_information);
-            summary_per_day(&mut status_entries);
+            println!("");
+            summary_report(&mut status_entries);
         }
     }
 }
 
-fn summary_per_day(status_entries: &mut [Worklog]) {
+fn summary_report(status_entries: &mut [Worklog]) {
     let mut daily_sum: BTreeMap<NaiveDate, i32> = BTreeMap::new();
+
     for worklog_entry in status_entries.iter() {
         let local_date = worklog_entry.started.with_timezone(&Local).date_naive();
         let _accumulated = match daily_sum.get(&local_date) {
@@ -194,17 +221,83 @@ fn summary_per_day(status_entries: &mut [Worklog]) {
         };
     }
 
-    println!("{:10} {:3} {:8} ", "Date", "Day", "Duration");
-    for (dt, accum) in &daily_sum {
-        let hour = *accum / 3600;
-        let min = *accum % 3600 / 60;
-        let duration = format!("{:02}:{:02}", hour, min);
-        println!("{:10} {:3} {:8}", dt, dt.weekday(), duration);
+    let mut sum_per_week = 0;
+    let mut current_week = 0;
+    let mut sum_per_month = 0;
+    let mut current_month = 0;
+    let mut monthly_totals: BTreeMap<u32, i32> = BTreeMap::new();
+
+    println!("CW {:10} {:3} {:8} ", "Date", "Day", "Duration");
+    for (dt, accum_per_day) in &daily_sum {
+        if current_week == 0 {
+            current_week = dt.iso_week().week();
+        }
+        if current_month == 0 {
+            current_month = dt.month();
+        }
+
+        if is_new_week(current_week, dt) {
+            print_sum_per_week(&mut sum_per_week, dt.iso_week().week() - 1);
+            current_week = dt.iso_week().week();
+            sum_per_week = 0;
+        }
+        if dt.month() > current_month {
+            monthly_totals.insert(current_month, sum_per_month);
+            current_month = dt.month();
+            sum_per_month = 0;
+        }
+        let duration_this_day = seconds_to_hour_and_min(accum_per_day);
+        println!("{:2} {:10} {:3} {:8}", dt.iso_week().week(), dt, dt.weekday(), duration_this_day);
+        sum_per_week = sum_per_week + accum_per_day;
+        sum_per_month = sum_per_month + accum_per_day;
+    }
+    print_sum_per_week(&mut sum_per_week, Local::now().iso_week().week());
+
+    println!();
+    for (month, total) in monthly_totals {
+        println!("{:9} {}", month_name(month).name(), seconds_to_hour_and_min(&total));
     }
 }
 
+// This ought to be part of the Rust runtime :-)
+fn month_name(n: u32) -> Month {
+    match n {
+        1 => Month::January,
+        2 => Month::February,
+        3 => Month::March,
+        4 => Month::April,
+        5 => Month::May,
+        6 => Month::June,
+        7 => Month::July,
+        8 => Month::August,
+        9 => Month::September,
+        10 => Month::October,
+        11 => Month::November,
+        12 => Month::December,
+        _ => panic!("Invalid month number {}", n),
+    }
+}
+
+fn is_new_week(current_week: u32, dt: &NaiveDate) -> bool {
+    dt.iso_week().week() > current_week
+}
+
+fn print_sum_per_week(sum_per_week: &mut i32, week: u32) {
+    println!("{:-<23}", "");
+    println!("ISO week {}, sum: {} ", week, seconds_to_hour_and_min(&sum_per_week));
+    println!("{:=<23}", "");
+    println!();
+}
+
+fn seconds_to_hour_and_min(accum: &i32) -> String {
+    let hour = *accum / 3600;
+    let min = *accum % 3600 / 60;
+    let duration = format!("{:02}:{:02}", hour, min);
+    duration
+}
+
 fn issue_and_entry_report(status_entries: &mut [Worklog], issue_information: &mut HashMap<String, JiraIssue>) {
-    println!("{:8} {:12} {:10} {:<7} {:28} {:-10} {:6}", "Issue", "IssueId", "Id", "Weekday", "Started", "Time spent", "In seconds");
+    println!("{:8} {:12} {:10} {:<7} {:28} {:6}", "Issue", "IssueId", "Id", "Weekday", "Started", "Time spent");
     status_entries.sort_by(|e, other| e.issueId.cmp(&other.issueId).then_with(|| e.started.cmp(&other.started)));
 
     for e in status_entries.iter() {
@@ -213,27 +306,27 @@ fn issue_and_entry_report(status_entries: &mut [Worklog], issue_information: &mu
             Some(issue) => &issue.key
         };
         println!(
-            "{:8} {:12} {:10} {:<7} {:28} {:-10} {:6}s",
+            "{:8} {:12} {:10} {:<7} {:28} {:6}",
             issue_key,
             e.issueId,
             e.id,
             format!("{}", e.started.weekday()),
             format!("{}", e.started.with_timezone(&Local).format("%Y-%m-%d %H:%M %z")),
-            format!("{}", e.timeSpent),
-            e.timeSpentSeconds
+            seconds_to_hour_and_min(&e.timeSpentSeconds)
         );
     }
 }
 
 async fn add_multiple_entries(
     jira_client: JiraClient,
-    time_tracking_options: TimeTrackingOptions,
+    time_tracking_options: TimeTrackingConfiguration,
     issue: String,
     durations: Vec<String>,
     comment: Option<String>,
 ) {
     // Parses the list of durations in the format XXXnn,nnU, i.e. Mon:1,5h into Weekday, duration and unit
     let durations: Vec<(Weekday, f32, String)> = parse_worklog_durations(durations);
+
     for entry in durations.into_iter() {
         let weekday = entry.0;
         let duration = entry.1;
@@ -259,7 +352,7 @@ async fn add_multiple_entries(
 
 async fn add_single_entry(
     jira_client: &JiraClient,
-    time_tracking_options: &TimeTrackingOptions,
+    time_tracking_options: &TimeTrackingConfiguration,
     issue: String,
     duration: &str,
     started: Option<String>,

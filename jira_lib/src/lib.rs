@@ -18,9 +18,22 @@ pub mod config;
 pub const JIRA_URL: &str = "https://autostore.atlassian.net/rest/api/latest";
 const FUTURE_BUFFER_SIZE: usize = 20;
 
+
 #[derive(Debug, Serialize, Deserialize)]
 #[allow(non_snake_case)]
-pub struct TimeTrackingOptions {
+pub struct GlobalSettings {
+    votingEnabled: bool,
+    watchingEnabled: bool,
+    unassignedIssuesAllowed: bool,
+    subTasksEnabled: bool,
+    issueLinkingEnabled: bool,
+    timeTrackingEnabled: bool,
+    attachmentsEnabled: bool,
+    timeTrackingConfiguration: TimeTrackingConfiguration,
+}
+#[derive(Debug, Serialize, Deserialize)]
+#[allow(non_snake_case)]
+pub struct TimeTrackingConfiguration {
     pub workingHoursPerDay: f32,
     pub workingDaysPerWeek: f32,
     pub timeFormat: String,
@@ -258,9 +271,11 @@ impl JiraClient {
         authorisation
     }
 
-    pub async fn get_time_tracking_options(&self) -> TimeTrackingOptions {
-        let resource = "/configuration/timetracking/options";
-        Self::get_jira_resource::<TimeTrackingOptions>(&self.http_client, resource).await
+    pub async fn get_time_tracking_options(&self) -> TimeTrackingConfiguration {
+        let resource = "/configuration";
+        let global_settings = Self::get_jira_resource::<GlobalSettings>(&self.http_client, resource).await;
+        global_settings.timeTrackingConfiguration
+
     }
 
 
@@ -410,10 +425,6 @@ impl JiraClient {
         resource
     }
 
-    /*    pub async fn get_jira_resource<T: DeserializeOwned>(&self, rest_resource: &str) -> T {
-            Self::assoc_get_jira_resource(&self.http_client, rest_resource).await
-        }
-    */
     async fn get_jira_resource<T: DeserializeOwned>(http_client: &Client, rest_resource: &str) -> T {
         let url = format!("{}{}", JIRA_URL, rest_resource);
 
@@ -421,8 +432,8 @@ impl JiraClient {
     }
 
     async fn get_jira_data_from_url<T: DeserializeOwned>(http_client: &Client, url: String) -> T {
-        let _url_decoded = urlencoding::decode(&url).unwrap();
-        debug!("Calling new get_jira_data_from_url");
+        let url_decoded = urlencoding::decode(&url).unwrap();
+        debug!("Calling new get_jira_data_from_url({})", url_decoded);
 
         let start = Instant::now();
         let response = http_client.get(url.clone()).send().await.unwrap();
@@ -559,7 +570,7 @@ impl JiraClient {
         let url = format!("{}/issue/{}/worklog/{}", self.jira_url, &issue_id, &worklog_id);
         let response = self.http_client.delete(url).send().await.unwrap();
         match response.status() {
-            reqwest::StatusCode::NO_CONTENT => Ok(()),
+            reqwest::StatusCode::NO_CONTENT => Ok(()), // 204
             other => Err(JiraError::DeleteFailed(other))
         }
     }
