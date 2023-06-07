@@ -14,7 +14,7 @@ use std::fs::File;
 use std::{env, fmt};
 use std::collections::{BTreeMap, HashMap};
 use std::process::exit;
-use jira_lib::config::config_file_name;
+use jira_lib::config::{ config_file_name, load_or_create_configuration, save_configuration};
 
 mod date_util;
 
@@ -48,9 +48,13 @@ enum SubCommand {
     #[command(arg_required_else_help = true)]
     Add(Add),
     /// Delete work log entry
+    #[command(arg_required_else_help = true)]
     Del(Del),
     /// Get status of work log entries
+    #[command(arg_required_else_help = true)]
     Status(Status),
+    #[command(arg_required_else_help = true)]
+    Config(Configuration),
 }
 
 #[derive(Args)]
@@ -107,29 +111,62 @@ impl fmt::Display for LogLevel {
     }
 }
 
+/// Create, modify or list the configuration file.
+/// The configuration file will be automagically created if you use --token, --user or --jira_url
+#[derive(Parser)]
+struct Configuration {
+    /// The Jira security API token obtained from your Manage Account -> Security
+    #[arg(short, long)]
+    token: Option<String>,
+    /// Your email address, i.e. steinar.cook@autostoresystem.com
+    #[arg(short, long)]
+    user: Option<String>,
+    /// Lists the current configuration (if it exists) and exit
+    #[arg(short, long)]
+    list: bool,
+    /// The URL of Jira, don't change this unless you know what you are doing
+    #[arg(short,long, default_value="https://autostore.atlassian.net/rest/api/latest")]
+    jira_url: Option<String>,
+}
+
 #[tokio::main]
 async fn main() {
     let opts: Opts = Opts::parse();
-
     configure_logging(&opts);
+
+    if let SubCommand::Config(config) = &opts.subcmd {
+
+            if config.list {
+                list_config_and_exit();
+            }
+
+            let mut app_config = match load_or_create_configuration(){
+                Ok(ac) => ac,
+                Err(e) => { panic!("Unable to load or create configuration file {}, reason:{}", config_file_name().to_string_lossy(),e)}
+            };
+
+            if let Some(user) = &config.user {
+                app_config.jira.user = user.to_string();
+            }
+            if let Some(token) = &config.token {
+                app_config.jira.token = token.to_string();
+            }
+            if let Some(jira_url) = &config.jira_url {
+                app_config.jira.jira_url = jira_url.to_string();
+            }
+            save_configuration(app_config);
+            println!("Configuration saved to {}", config_file_name().to_string_lossy());
+            exit(0);
+    }
+
 
     let configuration = match config::load_configuration() {
         Ok(c) => c,
         Err(_) => {
-            match config::create_sample_configuration() {
-                Ok(_) => {
-                    println!("Seems you have no configuration file. Created sample configuration file:");
-                    println!("\t {}", config_file_name().to_string_lossy());
-                    println!("Please edit with a programmers editor and retry!");
-                    exit(4);
-                }
-                Err(e) => {
-                    eprintln!("Unable to load configuration file and not able to create sample config file");
-                    eprintln!("Config file name: {}", config_file_name().to_string_lossy());
-                    eprintln!("Reason: {}", e);
-                    exit(8);
-                }
-            }
+            println!("Config file {} not found.", config_file_name().to_string_lossy());
+            println!("Create it with: jira_worklog config --user <EMAIL> --token <JIRA_TOKEN>");
+            println!("See 'config' subcommand for more details");
+            exit(4);
         }
     };
 
@@ -205,7 +242,22 @@ async fn main() {
             println!("");
             summary_report(&mut status_entries);
         }
+        _ => {}
     }
+}
+
+fn list_config_and_exit() {
+    println!("Configuration file {}:\n", config::config_file_name().to_string_lossy());
+    match config::load_configuration() {
+        Ok(config) => {
+            let toml_as_string = config::application_config_to_string(&config);
+            println!("{}", toml_as_string);
+        }
+        Err(_) => {
+            println!("Config file does not exist or is empty. Use --token and --user to create it")
+        }
+    }
+    exit(0);
 }
 
 fn summary_report(status_entries: &mut [Worklog]) {

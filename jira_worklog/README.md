@@ -3,7 +3,22 @@
 The `jira_worklog` utility allows you to enter your worklog as easy and simple
 as possible.
 
-Here are some examples:
+## Installation
+Once you have downloaded and installed `jira_worklog` in your path:
+ 1. Obtain a Jira API security token from:
+    1. Log in to Jira
+    2. Click on the picture of yourself in the upper right corner ("Your profile and settings")
+    3. Click "Manage account"
+    4. Click "Security"
+    5. Choose "Create and manage API tokens" allmost at the bottom of the page
+    6. Click "Create your API token" and copy the token to your clip board
+2. Execute this command:
+    ````shell
+    jira_worklog config --user steinar.cook@autostoresystem.com --token vbF**************E3
+    ````
+## Examples 
+
+Here are some examples on how to use the utility.
 
 ### Adding worklog entries
 

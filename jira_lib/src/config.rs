@@ -1,9 +1,10 @@
 use std::fs::File;
 use std::io;
-use std::io::{Read, Write};
+use std::io::{ Read, Write};
 use std::path::{Path, PathBuf};
 use directories;
 use directories::ProjectDirs;
+use log::debug;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -16,7 +17,7 @@ impl Default for ApplicationConfig {
     fn default() -> Self {
         ApplicationConfig {
             jira: Default::default(),
-            dbms: Default::default()
+            dbms: Default::default(),
         }
     }
 }
@@ -29,7 +30,7 @@ pub struct WorklogDBMS {
 
 impl Default for WorklogDBMS {
     fn default() -> Self {
-        WorklogDBMS { connect: "host=postgres.testenv.autostoresystem.com user=postgres password=***************".to_string()}
+        WorklogDBMS { connect: "host=postgres.testenv.autostoresystem.com user=postgres password=***************".to_string() }
     }
 }
 
@@ -44,7 +45,6 @@ impl Default for Jira {
     fn default() -> Self {
         Jira { jira_url: "https://autostore.atlassian.net/rest/api/latest".to_string(), user: "user.name@autostoresystem.com".to_string(), token: "< your secrete Jira token goes here>".to_string() }
     }
-
 }
 
 pub fn config_file_name() -> PathBuf {
@@ -57,7 +57,38 @@ pub fn load_configuration() -> Result<ApplicationConfig, io::Error> {
     read_configuration(config_file_name().as_path())
 }
 
-fn read_configuration(path: &Path) -> Result<ApplicationConfig, io::Error>{
+pub fn save_configuration(application_config: ApplicationConfig) {
+    create_configuration_file(&application_config, &config_file_name())
+}
+
+pub fn create_and_save_sample_configuration() -> Result<ApplicationConfig, io::Error> {
+    let application_config = ApplicationConfig::default();
+    create_configuration_file(&application_config, &config_file_name());
+    Ok(application_config)
+}
+
+pub fn load_or_create_configuration() -> Result<ApplicationConfig, io::Error> {
+    match is_configuration_file_available() {
+        None => {
+             create_and_save_sample_configuration()
+        }
+        Some(app_config) => Ok(app_config)
+    }
+}
+
+pub fn is_configuration_file_available() -> Option<ApplicationConfig> {
+    let p = config_file_name();
+    if p.exists() && p.is_file() {
+        match load_configuration() {
+            Ok(app_config) => Some(app_config),
+            Err(e) => { panic!("Unable to load the configuration file from {}, reson: {}", config_file_name().to_string_lossy(), e) }
+        }
+    } else {
+        Option::None
+    }
+}
+
+fn read_configuration(path: &Path) -> Result<ApplicationConfig, io::Error> {
     let mut file = match File::open(path) {
         Ok(f) => f,
         Err(e) => return Err(e)
@@ -69,46 +100,61 @@ fn read_configuration(path: &Path) -> Result<ApplicationConfig, io::Error>{
     Ok(config)
 }
 
-pub fn create_sample_configuration() -> Result<PathBuf, io::Error>{
-    let path_buf = config_file_name();
-    let application_config = ApplicationConfig::default();
-    create_configuration_file(&application_config, &config_file_name());
-    Ok(path_buf)
+
+fn create_configuration_file(application_config: &ApplicationConfig, path: &PathBuf) {
+    let directory = path.parent().unwrap();
+    match directory.try_exists() {
+        Ok(_) => {}
+        Err(_) => {
+            debug!("Some parts of {} does not exist", directory.to_string_lossy());
+            match std::fs::create_dir_all(directory) {
+                Ok(_) => {
+                    debug!("Created path {}", directory.to_string_lossy())
+                }
+                Err(e) => { panic!("Unable to create path {}, {}", directory.to_string_lossy(), e) }
+            }
+        }
+    }
+    let mut file = match File::create(path) {
+        Ok(f) => f,
+        Err(_) => panic!("Unable to create file named '{}'", path.to_string_lossy()),
+    };
+    let toml = application_config_to_string(application_config);
+
+    match file.write_all(toml.as_bytes()) {
+        Ok(_) => {}
+        Err(e) => panic!("Unable to write configuration to TOML file: {}", e)
+    };
 }
 
-pub fn create_configuration_file(application_config: &ApplicationConfig, path: &PathBuf) {
+pub fn application_config_to_string(application_config: &ApplicationConfig) -> String {
+    let toml = match toml::to_string::<ApplicationConfig>(application_config) {
+        Ok(s) => s,
+        Err(e) => panic!("Unable to transform application config {:?} structure into Toml: {}", application_config, e),
+    };
+    toml
+}
+
+pub fn write_configuration(application_config: &ApplicationConfig, path: &PathBuf) {
+    debug!("Writing configuration to {}", &path.to_string_lossy());
+
     let mut file = match File::create(path) {
         Ok(f) => f,
         Err(_) => panic!("Unable to create file named '{}'", path.to_string_lossy()),
     };
     let toml = match toml::to_string::<ApplicationConfig>(application_config) {
         Ok(s) => s,
-        Err(e) =>  panic!("Unable to transform application config {:?} structure into Toml: {}", application_config, e),
+        Err(e) => panic!("Unable to transform application config {:?} structure into Toml: {}", application_config, e),
     };
+
+    debug!("Configuration is: {:?}", &toml);
 
     match file.write_all(toml.as_bytes()) {
         Ok(_) => {}
-        Err(e) =>  panic!("Unable to write configuration to TOML file: {}",e )
+        Err(e) => panic!("Unable to write configuration to TOML file: {}", e)
     };
 }
 
-pub fn write_configuration(application_config: &ApplicationConfig, path: &PathBuf) {
-    let mut file = match File::open(path) {
-        Ok(f) => f,
-        Err(_) => panic!("Unable to create file named '{}'", path.to_string_lossy()),
-    };
-    let toml = match toml::to_string::<ApplicationConfig>(application_config) {
-        Ok(s) => s,
-        Err(e) =>  panic!("Unable to transform application config {:?} structure into Toml: {}", application_config, e),
-    };
-
-    match file.write_all(toml.as_bytes()) {
-        Ok(_) => {}
-        Err(e) =>  panic!("Unable to write configuration to TOML file: {}",e )
-    };
-}
-
-pub fn create_application_config_file() {}
 
 #[cfg(test)]
 mod tests {
@@ -133,11 +179,10 @@ mod tests {
         let application_config = ApplicationConfig::default();
 
         create_configuration_file(&application_config, &tmp_config_file);
-        if let Ok(result) = read_configuration(&tmp_config_file){
+        if let Ok(result) = read_configuration(&tmp_config_file) {
             assert_eq!(&application_config, &result);
         } else {
             panic!("Unable to read the TOML configuration back from disk");
         }
-
     }
 }
