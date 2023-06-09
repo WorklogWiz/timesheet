@@ -5,7 +5,9 @@ use std::fmt::Write;
 use log::{debug, info};
 use tokio_postgres::types::ToSql;
 use std::collections::HashSet;
+use std::process::exit;
 use chrono::NaiveDateTime;
+use reqwest::StatusCode;
 
 const DBMS_CHUNK_SIZE: usize = 1000;
 
@@ -199,7 +201,14 @@ pub async fn etl_issues_worklogs_and_persist(jira_client: &JiraClient, dbms_clie
 
     info!("Retrieving the issues and worklogs ....");
     let filter = issues_filter.unwrap_or(vec![]);
-    let jira_projects = jira_client.get_issues_and_worklogs(projects, filter, started_after).await;
+    let jira_projects = match jira_client.get_issues_and_worklogs(projects, filter, started_after).await {
+        Ok(r) => r,
+        Err(e) => match e {
+                sc => { eprintln!("get_issues_and_worklogs() failed with http code {}", e);
+                exit(4);
+            }
+        }
+    };
     info!("Tada: number of projects {}", jira_projects.len());
 
     info!("Collecting all authors from all worklog entries and making a unique list of them...");
@@ -207,7 +216,8 @@ pub async fn etl_issues_worklogs_and_persist(jira_client: &JiraClient, dbms_clie
     for p in &jira_projects {
         for issue in &p.issues {
             for wlog in &issue.worklogs {
-                authors.insert(wlog.author.clone());
+                authors.insert(
+                    wlog.author.clone());
             }
         }
     }

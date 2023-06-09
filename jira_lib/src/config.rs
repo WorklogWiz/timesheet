@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io;
+use std::{fs, io};
 use std::io::{ Read, Write};
 use std::path::{Path, PathBuf};
 use directories;
@@ -59,6 +59,10 @@ pub fn load_configuration() -> Result<ApplicationConfig, io::Error> {
 
 pub fn save_configuration(application_config: ApplicationConfig) {
     create_configuration_file(&application_config, &config_file_name())
+}
+
+pub fn remove_configuration() -> std::io::Result<()> {
+       fs::remove_file(config_file_name().as_path())
 }
 
 pub fn create_and_save_sample_configuration() -> Result<ApplicationConfig, io::Error> {

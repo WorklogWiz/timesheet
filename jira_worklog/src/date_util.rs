@@ -248,16 +248,20 @@ fn test_calculate_starting_point() {
 pub fn parse_worklog_durations(entries: Vec<String>) -> Vec<(Weekday, f32, String)> {
     lazy_static! {
         // Mon:1,5h
+        // Capturing regexp
         static ref DURATION_EXPR: Regex = Regex::new(r"^(\w{3}):(\d+(?:[\.,]\d{1,2})?\w)$").unwrap();
     }
 
     let mut result: Vec<(Weekday, f32, String)> = Vec::new();
 
+    // Iterates the pattern and extracts tuples of Weekday names and duration
     for s in entries.into_iter() {
         match DURATION_EXPR.captures(&s) {
-            Some(caps) => {
-                let week_day = String::from(&caps[1]).parse::<Weekday>().unwrap();
-                let (duration, unit) = TimeSpent::parse_to_unit_and_duration(&caps[2]).expect("parsing error!");
+            Some(captured) => {
+                // Parses 3 character weekday abbreviation to Weekday enumerator
+                let week_day = String::from(&captured[1]).parse::<Weekday>().unwrap();
+                // Parses the duration into duration and unit as separate values
+                let (duration, unit) = TimeSpent::parse_to_unit_and_duration(&captured[2]).expect("parsing error!");
 
                 result.push((week_day, duration, unit));
             }

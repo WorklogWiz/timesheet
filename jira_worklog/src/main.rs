@@ -14,7 +14,8 @@ use std::fs::File;
 use std::{env, fmt};
 use std::collections::{BTreeMap, HashMap};
 use std::process::exit;
-use jira_lib::config::{ config_file_name, load_or_create_configuration, save_configuration};
+use reqwest::StatusCode;
+use jira_lib::config::{ApplicationConfig, config_file_name, load_or_create_configuration, remove_configuration, save_configuration};
 
 mod date_util;
 
@@ -37,7 +38,8 @@ struct Opts {
     #[command(subcommand)]
     subcmd: SubCommand,
 
-    #[arg(global = true, short, long, default_value = "info")]
+    // TODO handle cases where only -v without an argument is specified
+    #[arg(global = true, short, long, global=true)]
     verbosity: Option<LogLevel>,
 }
 
@@ -60,13 +62,13 @@ enum SubCommand {
 #[derive(Args)]
 struct Add {
     /// Duration of work in hours (h) or days (d)
-    /// If more than a single entry separate with spaces and three letter abbreviatio of
+    /// If more than a single entry separate with spaces and three letter abbreviation of
     /// weekday name:
     ///     --durations Mon:1,5h Tue:1d Wed:3,5h Fri:1d
     #[arg(short, long, num_args(1..))]
     durations: Vec<String>,
     /// Jira issue to register work on
-    #[arg(short, long, required=true)]
+    #[arg(short, long, required = true)]
     issue: String,
     /// work started
     #[arg(name = "started", short, long, requires = "durations")]
@@ -77,15 +79,15 @@ struct Add {
 
 #[derive(Args)]
 struct Del {
-    #[arg(short, long, required=true)]
+    #[arg(short, long, required = true)]
     issue_id: String,
-    #[arg(short = 'w', long, required=true)]
+    #[arg(short = 'w', long, required = true)]
     worklog_id: String,
 }
 
 #[derive(Parser)]
 struct Status {
-    #[arg(short, long, num_args(1..), required=true)]
+    #[arg(short, long, num_args(1..), required = true)]
     issues: Vec<String>,
     // Consider a vector here
     #[arg(short, long)]
@@ -125,71 +127,30 @@ struct Configuration {
     #[arg(short, long)]
     list: bool,
     /// The URL of Jira, don't change this unless you know what you are doing
-    #[arg(short,long, default_value="https://autostore.atlassian.net/rest/api/latest")]
+    #[arg(short, long, default_value = "https://autostore.atlassian.net/rest/api/latest")]
     jira_url: Option<String>,
+    #[arg(long,default_value_t=false)]
+    remove: bool
 }
 
 #[tokio::main]
 async fn main() {
     let opts: Opts = Opts::parse();
-    configure_logging(&opts);
+    configure_logging(&opts); // Handles the -v option
 
-    if let SubCommand::Config(config) = &opts.subcmd {
-
-            if config.list {
-                list_config_and_exit();
-            }
-
-            let mut app_config = match load_or_create_configuration(){
-                Ok(ac) => ac,
-                Err(e) => { panic!("Unable to load or create configuration file {}, reason:{}", config_file_name().to_string_lossy(),e)}
-            };
-
-            if let Some(user) = &config.user {
-                app_config.jira.user = user.to_string();
-            }
-            if let Some(token) = &config.token {
-                app_config.jira.token = token.to_string();
-            }
-            if let Some(jira_url) = &config.jira_url {
-                app_config.jira.jira_url = jira_url.to_string();
-            }
-            save_configuration(app_config);
-            println!("Configuration saved to {}", config_file_name().to_string_lossy());
-            exit(0);
-    }
-
-
-    let configuration = match config::load_configuration() {
-        Ok(c) => c,
-        Err(_) => {
-            println!("Config file {} not found.", config_file_name().to_string_lossy());
-            println!("Create it with: jira_worklog config --user <EMAIL> --token <JIRA_TOKEN>");
-            println!("See 'config' subcommand for more details");
-            exit(4);
-        }
-    };
-
-    debug!("jira_url: '{}'", configuration.jira.jira_url);
-    debug!("user: '{}'", configuration.jira.user);
-    debug!("token: '{}'", configuration.jira.token);
-
-    let jira_client = match jira_lib::JiraClient::new(
-        &configuration.jira.jira_url,
-        &configuration.jira.user,
-        &configuration.jira.token,
-    ) {
-        Ok(client) => client,
-        Err(e) => {
-            panic!("Unable to create a new http-client for Jira: {}", e)
-        }
-    };
-
-    let time_tracking_options = jira_client.get_time_tracking_options().await;
-    info!("Global Jira options: {:?}", &time_tracking_options);
-
+    // TODO Handle unknown issue keys with user friendly message
     match opts.subcmd {
         SubCommand::Add(mut add) => {
+            let jira_client = get_jira_client();
+
+            let time_tracking_options = jira_client.get_time_tracking_options().await;
+            info!("Global Jira options: {:?}", &time_tracking_options);
+
+            if add.durations.is_empty(){
+                eprintln!("Must specify a duration with --duration");
+                exit(4);
+            }
+
             add.issue = add.issue.to_uppercase(); // Ensure the issue id is always uppercase
 
             // If there is only a single duration which does starts with a numeric
@@ -206,10 +167,25 @@ async fn main() {
         }
 
         SubCommand::Del(delete) => {
+            let jira_client = get_jira_client();
+
             let current_user = jira_client.get_current_user().await;
-            let worklog_entry = jira_client
+            let worklog_entry = match jira_client
                 .get_worklog(&delete.issue_id, &delete.worklog_id)
-                .await;
+                .await {
+                Ok(result) => result,
+                Err(e) => match e {
+                    StatusCode::NOT_FOUND => {
+                        println!("Worklog {} for issue '{}' not found", &delete.worklog_id,&delete.issue_id);
+                        exit(4);
+                    }
+                    other => {
+                        eprintln!("ERROR: unknown http status code: {}", other);
+                        exit(16)
+                    }
+                }
+            };
+
             if worklog_entry.author.accountId != current_user.account_id {
                 eprintln!(
                     "ERROR: You are not the owner of worklog with id {}",
@@ -220,10 +196,15 @@ async fn main() {
 
             match jira_client.delete_worklog(delete.issue_id, delete.worklog_id.to_owned()).await {
                 Ok(_) => println!("Jira work log id {} deleted", &delete.worklog_id),
-                Err(e) => println!("An error occured, worklog entry probably not deleted: {}", e),
+                Err(e) => {
+                    println!("An error occured, worklog entry probably not deleted: {}", e);
+                    exit(4);
+                },
             }
         }
+
         SubCommand::Status(status) => {
+            let jira_client = get_jira_client();
             // TODO: Convert started_after from String in ISO8601 form to DateTime<Local>
             let start_after = status.after.map(|s| str_to_date_time(&s).unwrap());
 
@@ -231,10 +212,34 @@ async fn main() {
             let mut issue_information: HashMap<String, JiraIssue> = HashMap::new();
 
             for issue in status.issues.iter() {
-                let mut entries = jira_client.get_worklogs_for_current_user(issue, start_after).await;
+                let mut entries = match jira_client.get_worklogs_for_current_user(issue, start_after).await {
+                    Ok(result) => result,
+                    Err(e) => match e {
+                        StatusCode::NOT_FOUND => {
+                            eprintln!("Issue {} not found", issue);
+                            exit(4);
+                        }
+                        other => {
+                            eprintln!("ERROR: Unknown http status code {} for issue {}", other, issue);
+                            exit(16);
+                        }
+                    }
+                };
                 status_entries.append(&mut entries);
-                let issue_info = jira_client.get_issue_by_id_or_key(issue).await;
-// Allows us to lookup the issue by numeric id to augment the report
+                let issue_info = match jira_client.get_issue_by_id_or_key(issue).await {
+                    Ok(r) => r,
+                    Err(e) => match e {
+                        StatusCode::NOT_FOUND => {
+                            eprintln!("Issue {} not found", issue);
+                            exit(4);
+                        }
+                        other => {
+                            eprintln!("ERROR: Unknown http status code {} for issue {}", other, issue);
+                            exit(4);
+                        }
+                    }
+                };
+                // Allows us to lookup the issue by numeric id to augment the report
                 issue_information.insert(issue_info.id.to_string(), issue_info);
             };
 
@@ -242,8 +247,73 @@ async fn main() {
             println!("");
             summary_report(&mut status_entries);
         }
-        _ => {}
+
+        SubCommand::Config(config) => {
+            match config {
+                Configuration { list: true, remove:false,.. } => {
+                    list_config_and_exit();
+                }
+                Configuration { user, token, jira_url, list: false, remove:false } => {
+                    let mut app_config = match load_or_create_configuration() {
+                        Ok(ac) => ac,
+                        Err(e) => { panic!("Unable to load or create configuration file {}, reason:{}", config_file_name().to_string_lossy(), e) }
+                    };
+                    if let Some(user) = user {
+                        app_config.jira.user = user.to_string();
+                    }
+                    if let Some(token) = token {
+                        app_config.jira.token = token.to_string();
+                    }
+                    if let Some(jira_url) = jira_url {
+                        app_config.jira.jira_url = jira_url.to_string();
+                    }
+                    save_configuration(app_config);
+                    println!("Configuration saved to {}", config_file_name().to_string_lossy());
+                    exit(0);
+                }
+                Configuration {remove: true,..} => {
+                    match remove_configuration() {
+                        Ok(_) => { println!("Configuration file {} removed", config_file_name().to_string_lossy())}
+                        Err(e) => { println!("ERROR:Unable to remove configuration file {} : {}", config_file_name().to_string_lossy(),e)}
+                    }
+                }
+            }
+        } // end Config
     }
+}
+
+fn get_jira_client() -> JiraClient {
+    let app_config = get_app_config();
+
+    let jira_client = match jira_lib::JiraClient::new(
+        &app_config.jira.jira_url,
+        &app_config.jira.user,
+        &app_config.jira.token,
+    ) {
+        Ok(client) => client,
+        Err(e) => {
+            eprintln!("ERROR: Unable to create a new http-client for Jira: {}", e);
+            exit(8);
+        }
+    };
+    jira_client
+}
+
+fn get_app_config() -> ApplicationConfig {
+    let app_config = match config::load_configuration() {
+        Ok(c) => c,
+        Err(_) => {
+            println!("Config file {} not found.", config_file_name().to_string_lossy());
+            println!("Create it with: jira_worklog config --user <EMAIL> --token <JIRA_TOKEN>");
+            println!("See 'config' subcommand for more details");
+            exit(4);
+        }
+    };
+
+    debug!("jira_url: '{}'", app_config.jira.jira_url);
+    debug!("user: '{}'", app_config.jira.user);
+    debug!("token: '{}'", app_config.jira.token);
+    app_config
 }
 
 fn list_config_and_exit() {
@@ -443,14 +513,27 @@ async fn add_single_entry(
     println!("\tDuration: {}s", time_spent_seconds);
     println!("\tComment: {}", comment.as_deref().unwrap_or("None"));
 
-    let result = jira_client
+    let result = match jira_client
         .insert_worklog(
             issue.as_str(),
             calculated_start,
             time_spent_seconds,
             comment.unwrap_or("".to_string()).as_str(),
         )
-        .await;
+        .await {
+        Ok(result) => result,
+        Err(e) => match e {
+            StatusCode::NOT_FOUND => {
+                eprintln!("WARNING: Issue {} not found", issue);
+                exit(4);
+            }
+            other => {
+                eprintln!("ERROR: Unable to insert worklog entry for issue {}, http error code {}", issue, other);
+                exit(4);
+            }
+        }
+    };
+
     println!(
         "Added work log entry Id: {} Time spent: {} Time spent in seconds: {} Comment: {}",
         result.id,
@@ -463,6 +546,10 @@ async fn add_single_entry(
 fn configure_logging(opts: &Opts) {
     let mut tmp_dir = env::temp_dir();
     tmp_dir.push("jira_worklog.log");
+
+    if opts.verbosity.is_some() {
+        println!("Logging to {}", &tmp_dir.to_string_lossy());
+    }
 
     let target = Box::new(File::create(tmp_dir).expect("Can't create file"));
 

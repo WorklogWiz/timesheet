@@ -1,7 +1,17 @@
 # The Jira worklog utility
 
-The `jira_worklog` utility allows you to enter your worklog as easy and simple
-as possible.
+The `jira_worklog` utility allows you to enter your Jira worklog entries as easy and simple
+as possible from the command line.
+
+````shell
+# Add one day of work to Jira issue TIME-94
+jira_worklog add -i time-94 -d 1d
+
+# Give me status for the last 30 days for time-94 and time-40
+jira_worklog status - time-94 time-40
+````
+
+See the detailed examples below for more details.
 
 ## Installation
 Once you have downloaded and installed `jira_worklog` in your path:
@@ -9,13 +19,29 @@ Once you have downloaded and installed `jira_worklog` in your path:
     1. Log in to Jira
     2. Click on the picture of yourself in the upper right corner ("Your profile and settings")
     3. Click "Manage account"
-    4. Click "Security"
+    4. Click "Security" ![](images/jira_security.png)
     5. Choose "Create and manage API tokens" allmost at the bottom of the page
     6. Click "Create your API token" and copy the token to your clip board
-2. Execute this command:
+2. Execute this command to create the configuration file:
     ````shell
+   # Creates the configuration file and stores your credentials in it
     jira_worklog config --user steinar.cook@autostoresystem.com --token vbF**************E3
     ````
+
+### Notes on security
+The configuration file is stored without encryption in a location, which depends on the operating system you are using.
+See the table below for details.
+
+If you think your machine has been compromised, go to Jira account ira and "Revoke" the API key.
+
+You can remove your local configuration file using the command: `jira_worklog config --remove`
+
+|Operating system | Config file location                                               |
+|-------|--------------------------------------------------------------------|
+|MacOs: | `/Users/steinar/Library/Preferences/com.autostore.jira_worklog`    |
+|Windows: | `C:\Users\Alice\AppData\Roaming\com.autostore\jira_worklog\config` |
+|Linux: | `/home/steinar/.config/jira_worklog`                               |
+
 ## Examples 
 
 Here are some examples on how to use the utility.
@@ -136,9 +162,3 @@ We all make mistakes every now then. To remove an entry you need to specify the
 jira_worklog del -i time-94 -w 216626
 `````
 
-## Configuration file
-|Operating system | Config file location                                            |
-|-------|-----------------------------------------------------------------|
-|MacOs: | `/Users/steinar/Library/Preferences/com.autostore.jira_worklog` |
-|Windows: | `TBD`                                                           |
-|Linux: | `TBD`                                                           |

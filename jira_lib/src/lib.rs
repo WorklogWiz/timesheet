@@ -1,3 +1,5 @@
+extern crate core;
+
 use std::error::Error;
 use std::fmt;
 use std::fmt::Formatter;
@@ -8,7 +10,7 @@ use futures::StreamExt;
 use log::{debug, info};
 use reqwest::header::HeaderMap;
 use reqwest::header::HeaderValue;
-use reqwest::{Client};
+use reqwest::{Client, StatusCode};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde::Serialize;
@@ -167,6 +169,7 @@ pub struct JiraUser {
 pub enum JiraError {
     RequiredParameter(String),
     DeleteFailed(reqwest::StatusCode),
+    WorklogNotFound(String, String)
 }
 
 
@@ -178,6 +181,9 @@ impl fmt::Display for JiraError {
             },
             JiraError::DeleteFailed(sc) => {
                 write!(f, "Failed to delete: {}", sc)
+            }
+            JiraError::WorklogNotFound(issue, worklog_id) => {
+                write!(f,"Worklog entry with issue_key: {} and worklog_id: {} not found", issue, worklog_id)
             }
         }
     }
@@ -273,9 +279,10 @@ impl JiraClient {
 
     pub async fn get_time_tracking_options(&self) -> TimeTrackingConfiguration {
         let resource = "/configuration";
-        let global_settings = Self::get_jira_resource::<GlobalSettings>(&self.http_client, resource).await;
-        global_settings.timeTrackingConfiguration
-
+        match Self::get_jira_resource::<GlobalSettings>(&self.http_client, resource, reqwest::StatusCode::OK).await {
+            Ok(global_settings) => global_settings.timeTrackingConfiguration,
+            Err(http_status) => panic!("Unexpected http status code {} when retrieving global time tracking options from Jira", http_status)
+        }
     }
 
 
@@ -284,9 +291,12 @@ impl JiraClient {
         self.get_all_projects(filter).await
     }
 
-    pub async fn get_issue_by_id_or_key(&self, id: &str ) -> JiraIssue {
+    pub async fn get_issue_by_id_or_key(&self, id: &str ) -> Result<JiraIssue, reqwest::StatusCode> {
         let resource = format!("/issue/{}", id);
-        Self::get_jira_resource::<JiraIssue>(&self.http_client, &resource).await
+        match Self::get_jira_resource::<JiraIssue>(&self.http_client, &resource, reqwest::StatusCode::OK).await {
+            Ok(issue) => Ok(issue),
+            Err(http_code) => Err(http_code)
+        }
     }
 
     /// Retrieves all Jira projects, filtering out the private ones
@@ -297,8 +307,9 @@ impl JiraClient {
         let mut project_page = Self::get_jira_resource::<JiraProjectsPage>(
             &self.http_client,
             &Self::project_search_resource(start_at, project_keys),
+            reqwest::StatusCode::OK
         )
-            .await;
+            .await.unwrap();
 
         let mut projects = Vec::<JiraProject>::new();
         if project_page.values.is_empty() {
@@ -317,7 +328,7 @@ impl JiraClient {
         // While there is a URL for the next page ...
         while let Some(url) = &project_page.nextPage {
             // Fetch next page of data
-            project_page = Self::get_jira_data_from_url::<JiraProjectsPage>(&self.http_client, url.clone()).await;
+            project_page = Self::get_jira_data_from_url::<JiraProjectsPage>(&self.http_client, url.clone(),reqwest::StatusCode::OK ).await.unwrap();
             // Filter out the private projects and append to our list of projects
             projects.append(
                 &mut project_page
@@ -343,7 +354,16 @@ impl JiraClient {
 
         let mut issues = Vec::<JiraIssue>::new();
         loop {
-            let mut issue_page = Self::get_jira_resource::<JiraIssuesPage>(http_client, &resource).await;
+            let mut issue_page = match  Self::get_jira_resource::<JiraIssuesPage>(http_client, &resource, reqwest::StatusCode::OK).await {
+                Ok(p) => p,
+                Err(e) => match e {
+                    reqwest::StatusCode::NOT_FOUND => {
+                        panic!("Project {} not found", project_key);
+                    }
+                    other => { panic!("Unexpected http status code {} for {}", other, resource)}
+                }
+            };
+
             // issues.len() will be invalid once we move the contents of the issues into our result
             let is_last_page = issue_page.issues.len() < issue_page.max_results as usize;
             if !is_last_page {
@@ -365,13 +385,16 @@ impl JiraClient {
         http_client: &Client,
         issue_key: String,
         started_after: NaiveDateTime,
-    ) -> Vec<Worklog> {
+    ) -> Result<Vec<Worklog>, StatusCode> {
         let mut resource_name = Self::compose_worklogs_url(issue_key.as_str(), 0, 5000, started_after);
         let mut worklogs: Vec<Worklog> = Vec::<Worklog>::new();
 
         debug!("Retrieving worklogs for {}", issue_key);
         loop {
-            let mut worklog_page = Self::get_jira_resource::<WorklogsPage>(http_client, &resource_name).await;
+            let mut worklog_page = match Self::get_jira_resource::<WorklogsPage>(http_client, &resource_name, reqwest::StatusCode::OK).await {
+                Ok(wp) => wp,
+                Err(http_code) => return Err(http_code)
+            };
             let is_last_page = worklog_page.worklogs.len() < worklog_page.max_results as usize;
             if !is_last_page {
                 resource_name = Self::compose_worklogs_url(
@@ -386,7 +409,7 @@ impl JiraClient {
                 break;
             }
         }
-        worklogs
+        Ok(worklogs)
     }
 
     // -----------------------
@@ -425,13 +448,13 @@ impl JiraClient {
         resource
     }
 
-    async fn get_jira_resource<T: DeserializeOwned>(http_client: &Client, rest_resource: &str) -> T {
+    async fn get_jira_resource<T: DeserializeOwned>(http_client: &Client, rest_resource: &str, code: StatusCode) -> Result<T, reqwest::StatusCode> {
         let url = format!("{}{}", JIRA_URL, rest_resource);
 
-        Self::get_jira_data_from_url::<T>(http_client, url).await
+        Self::get_jira_data_from_url::<T>(http_client, url, code).await
     }
 
-    async fn get_jira_data_from_url<T: DeserializeOwned>(http_client: &Client, url: String) -> T {
+    async fn get_jira_data_from_url<T: DeserializeOwned>(http_client: &Client, url: String, expected_http_code: StatusCode) -> Result<T,reqwest::StatusCode> {
         let url_decoded = urlencoding::decode(&url).unwrap();
         debug!("Calling new get_jira_data_from_url({})", url_decoded);
 
@@ -440,31 +463,17 @@ impl JiraClient {
         let elapsed = start.elapsed();
         debug!("{} took {}ms", url, elapsed.as_millis());
         // Downloads the entire body of the response and convert from JSON to type safe struct
-        let typed_result: T = match response.status() {
-            reqwest::StatusCode::OK => {
-                // Transforms JSON in body to type safe struct
-                match response.json::<T>().await {
-                    Ok(wl) => {
-                        debug!("Elapsed time for parsing {}", start.elapsed().as_millis());
-                        wl
-                    } // Everything OK, return the Worklogs struct
-                    Err(err) => panic!("EROR Obtaining response in JSON format: {:?}", err),
-                }
+        if response.status() == expected_http_code {
+            // Transforms JSON in body to type safe struct
+            match response.json::<T>().await {
+                Ok(wl) => {
+                    debug!("Elapsed time for parsing {}", start.elapsed().as_millis());
+                    return Ok(wl)
+                } // Everything OK, return the Worklogs struct
+                Err(err) => panic!("EROR Obtaining response in JSON format: {:?}", err),
             }
-            reqwest::StatusCode::UNAUTHORIZED => panic!("Not authorized, API key has probably changed"),
-            reqwest::StatusCode::TOO_MANY_REQUESTS => {
-                panic!("429 - Too many requests {:?}", response.headers())
-            }
-
-            other => {
-                let decoded_url = urlencoding::decode(&url).unwrap();
-                panic!(
-                    "Error code {:?} for {}\nencoded url={}",
-                    other, &decoded_url, &url
-                );
-            }
-        };
-        typed_result
+        }
+        Err(response.status())
     }
 
 
@@ -497,7 +506,7 @@ impl JiraClient {
     }
 
     // todo: clean up and make simpler!
-    pub async fn get_issues_and_worklogs(&self, projects: Vec<JiraProject>, issues_filter: Vec<String>, started_after: NaiveDateTime) -> Vec<JiraProject> {
+    pub async fn get_issues_and_worklogs(&self, projects: Vec<JiraProject>, issues_filter: Vec<String>, started_after: NaiveDateTime) -> Result<Vec<JiraProject>, StatusCode> {
         let mut futures_stream = futures::stream::iter(projects)
             .map(|mut project| {
                 let client = self.http_client.clone();
@@ -525,18 +534,22 @@ impl JiraClient {
                     for issue in &mut project.issues {
                         debug!("Retrieving worklogs for issue {}", &issue.key);
                         let key = issue.key.to_string();
-                        let mut worklogs = Self::get_worklogs_for(&client, key, started_after).await;
+                        let mut worklogs = match Self::get_worklogs_for(&client, key, started_after).await{
+                            Ok(result) => result,
+                            Err(e) => return Err(e)
+                        };
                         debug!("Issue {} has {} worklog entries", issue.key, worklogs.len());
                         issue.worklogs.append(&mut worklogs);
                     }
-                    project
+                    Ok(project)
                 })
             })
             .buffer_unordered(FUTURE_BUFFER_SIZE);
 
         let mut result = Vec::<JiraProject>::new();
         while let Some(r) = futures_stream.next().await {
-            match r {
+
+            match r.unwrap() {
                 Ok(jp) => {
                     info!("Data retrieved from Jira for project {}", jp.key);
                     result.push(jp);
@@ -544,10 +557,10 @@ impl JiraClient {
                 Err(e) => eprintln!("Error: {:?}", e),
             }
         }
-        result
+        Ok(result)
     }
 
-    pub async fn insert_worklog(&self, issue_id: &str, started: DateTime<Local>, time_spent_seconds: i32, comment: &str) -> Worklog {
+    pub async fn insert_worklog(&self, issue_id: &str, started: DateTime<Local>, time_spent_seconds: i32, comment: &str) -> Result<Worklog, StatusCode> {
         // This is how Jira needs it.
         // Note! The formatting in Jira is based on the time zone of the user. Remember to change it
         // if you fly across the ocean :-)
@@ -563,55 +576,51 @@ impl JiraClient {
         let url = format!("{}/issue/{}/worklog", self.jira_url, issue_id);
         debug!("Composed url for worklog insert: {}", url);
 
-        Self::post_jira_data::<Worklog>(&self.http_client, url, json).await
+        Self::post_jira_data::<Worklog>(&self.http_client, url, json, StatusCode::CREATED).await
     }
 
     pub async fn delete_worklog(&self, issue_id: String, worklog_id: String) -> Result<(), JiraError> {
+
         let url = format!("{}/issue/{}/worklog/{}", self.jira_url, &issue_id, &worklog_id);
         let response = self.http_client.delete(url).send().await.unwrap();
         match response.status() {
             reqwest::StatusCode::NO_CONTENT => Ok(()), // 204
+            reqwest::StatusCode::NOT_FOUND => Err(JiraError::WorklogNotFound(issue_id, worklog_id)),
             other => Err(JiraError::DeleteFailed(other))
         }
     }
 
-    async fn post_jira_data<T: DeserializeOwned>(http_client: &Client, url: String, body: String) -> T {
+    async fn post_jira_data<T: DeserializeOwned>(http_client: &Client, url: String, body: String, http_status_code: StatusCode) -> Result<T, StatusCode> {
         let response = http_client.post(url.clone())
             .body(body)
             .header("Content-Type", "application/json")
             .send().await.unwrap();
 
-        let typed_result: T = match response.status() {
-            reqwest::StatusCode::CREATED => {
-                match response.json::<T>().await {
-                    Ok(worklog) => worklog,
-                    Err(e) => { panic!("Unable to parse respose to something meaningful: {:?}", e) }
-                }
+        if response.status() == http_status_code {
+            match response.json::<T>().await {
+                Ok(worklog) => Ok(worklog),
+                Err(e) => { panic!("Unable to parse respose to something meaningful: {:?}", e) }
             }
-            // Add other http response codes here.
-            reqwest::StatusCode::UNAUTHORIZED => panic!("You are not authorized! Have you supplied the right credentials?"),
-            reqwest::StatusCode::TOO_MANY_REQUESTS => {
-                panic!("429 - Too many requests {:?}", response.headers())
-            }
-            other => {
-                let decoded_url = urlencoding::decode(&url).unwrap();
-                panic!("Error code {:?} for {}", other, decoded_url);
-            }
-        };
-        typed_result
+        } else {
+            Err(response.status())
+        }
     }
 
     pub async fn get_current_user(&self) -> JiraUser {
         let resource = "/myself";
-        Self::get_jira_resource::<JiraUser>(&self.http_client, resource).await
+        match Self::get_jira_resource::<JiraUser>(&self.http_client, resource, reqwest::StatusCode::OK).await {
+            Ok(ju) => ju,
+            Err(e) => unexpected_http_code_panic(resource, e),
+
+        }
     }
 
-    pub async fn get_worklog(&self, issue_id: &str, worklog_id: &str) -> Worklog {
+    pub async fn get_worklog(&self, issue_id: &str, worklog_id: &str) -> Result<Worklog, StatusCode> {
         let resource = format!("/issue/{}/worklog/{}", issue_id, worklog_id);
-        Self::get_jira_resource::<Worklog>(&self.http_client, &resource).await
+        Self::get_jira_resource::<Worklog>(&self.http_client, &resource, reqwest::StatusCode::OK).await
     }
 
-    pub async fn get_worklogs_for_current_user(&self, issue_key: &str, started_after: Option<DateTime<Local>>) -> Vec<Worklog> {
+    pub async fn get_worklogs_for_current_user(&self, issue_key: &str, started_after: Option<DateTime<Local>>) -> Result<Vec<Worklog>, StatusCode> {
         if issue_key.is_empty() {
             panic!("Must specify an issue key");
         }
@@ -624,11 +633,21 @@ impl JiraClient {
             Some(dt) => dt
         };
         let naive_date_time = NaiveDateTime::from_timestamp_millis(date_time.timestamp_millis()).unwrap();
-        let result = Self::get_worklogs_for(&self.http_client, issue_key.to_string(), naive_date_time).await;
+        let result = match Self::get_worklogs_for(&self.http_client, issue_key.to_string(), naive_date_time).await {
+            Ok(r) => r,
+            Err(e) => match e {
+                StatusCode::NOT_FOUND =>   return Err(e),
+                other => panic!("Unexpected http code {} for issue {} ", other, issue_key),
+            }
+        };
         debug!("Worklogs retrieved, filtering them for current user ....");
-        result.into_iter().filter(|wl| wl.author.accountId == current_user.account_id).collect()
+        Ok(result.into_iter().filter(|wl| wl.author.accountId == current_user.account_id).collect())
     }
-} // end of JiraClient
+}
+
+fn unexpected_http_code_panic(url: &str, sc: StatusCode) -> JiraUser {
+    panic!("Unexpected http code: {}, for {}", sc, url)
+}
 
 
 pub fn midnight_a_month_ago_in() -> NaiveDateTime {
