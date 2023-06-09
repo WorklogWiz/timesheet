@@ -38,7 +38,6 @@ struct Opts {
     #[command(subcommand)]
     subcmd: SubCommand,
 
-    // TODO handle cases where only -v without an argument is specified
     #[arg(global = true, short, long, global=true)]
     verbosity: Option<LogLevel>,
 }
@@ -138,12 +137,18 @@ async fn main() {
     let opts: Opts = Opts::parse();
     configure_logging(&opts); // Handles the -v option
 
-    // TODO Handle unknown issue keys with user friendly message
     match opts.subcmd {
         SubCommand::Add(mut add) => {
             let jira_client = get_jira_client();
 
-            let time_tracking_options = jira_client.get_time_tracking_options().await;
+            let time_tracking_options = match jira_client.get_time_tracking_options().await {
+                Ok(t) => t,
+                Err(e) => {
+                    eprintln!("Failed to create the Jira client. Http status code {}", e);
+                    exit(4);
+                }
+            };
+
             info!("Global Jira options: {:?}", &time_tracking_options);
 
             if add.durations.is_empty(){
