@@ -167,7 +167,8 @@ async fn main() {
                 debug!("Handling multiple entries");
                 add_multiple_entries(jira_client, time_tracking_options, add.issue, add.durations, add.comment).await;
             } else {
-                panic!("Internal error, unable to parse the durations. Did not understand: {}", add.durations[0]);
+                eprintln!("Internal error, unable to parse the durations. Did not understand: {}", add.durations[0]);
+                exit(4);
             }
         }
 
@@ -261,7 +262,10 @@ async fn main() {
                 Configuration { user, token, jira_url, list: false, remove:false } => {
                     let mut app_config = match load_or_create_configuration() {
                         Ok(ac) => ac,
-                        Err(e) => { panic!("Unable to load or create configuration file {}, reason:{}", config_file_name().to_string_lossy(), e) }
+                        Err(e) => {
+                            eprintln!("ERROR: Unable to load or create configuration file {}, reason:{}", config_file_name().to_string_lossy(), e);
+                            exit(4);
+                        }
                     };
                     if let Some(user) = user {
                         app_config.jira.user = user.to_string();
@@ -496,10 +500,10 @@ async fn add_single_entry(
         time_tracking_options.workingDaysPerWeek,
     ) {
         Ok(time_spent) => time_spent.time_spent_seconds,
-        Err(e) => panic!(
-            "Unable to figure out the duration of your worklog entry {}",
-            e
-        ),
+        Err(e) => {
+            eprintln!("Unable to figure out the duration of your worklog entry from '{}' {}", duration, e);
+            exit(4);
+        }
     };
     debug!("time spent in seconds: {}_", time_spent_seconds);
 

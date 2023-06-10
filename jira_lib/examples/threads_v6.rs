@@ -23,7 +23,7 @@ async fn main() {
 
     let project_keys = projects.iter().map(|p| p.key.to_string()).collect();
     let start = Instant::now();
-    let issues = get_all_the_bloody_issues(&http_client, project_keys).await;
+    let issues = get_all_the_bloody_issues(&jira_client, project_keys).await;
     println!("Retrieved {} issues in {}ms", issues.len(), start.elapsed().as_millis());
 
     let issue_keys = issues.iter().map(|i| i.key.to_string()).collect();
@@ -34,11 +34,10 @@ async fn main() {
 }
 
 
-async fn get_all_the_bloody_issues(http_client: &Client, project_keys : Vec<String> ) -> Vec<JiraIssue> {
-
+async fn get_all_the_bloody_issues(jira_client: &JiraClient, project_keys : Vec<String> ) -> Vec<JiraIssue> {
     let futures_result: Vec<Vec<JiraIssue>> = stream::iter(project_keys).map(|p| {
 
-        JiraClient::get_issues_for_single_project(http_client, p)
+        jira_client.get_issues_for_single_project(p)
     }).buffer_unordered(30).collect().await;
 
     futures_result.into_iter().flatten().collect()

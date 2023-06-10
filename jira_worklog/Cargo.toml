@@ -1,0 +1,29 @@
+[package]
+name = "jira_worklog"
+description = "Add, delete and get statistics about Jira worklog entries"
+readme = "README.md"
+authors= ["Steinar Overbeck Cook <steinar.cook@autostoresystem.com>"]
+version = "0.2.6"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clap = { version = "4.2.2", features = ["derive"] }
+
+chrono = { version = "0.4", features = ["serde"] }
+
+regex = "1"
+lazy_static = "1"
+log = "0.4"
+
+env_logger = "0.10"
+
+jira_lib = { path = "../jira_lib" }
+reqwest = { version = "0.11", features = ["json"] }
+tokio = { version = "1", features = ["full"] }
+toml = "0.7.4"
+dirs = "5.0.1"
+directories = "5.0.1"
+
+serde = "1"
