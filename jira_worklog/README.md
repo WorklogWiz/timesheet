@@ -3,6 +3,11 @@
 The `jira_worklog` utility allows you to enter your Jira worklog entries as easy and simple
 as possible from the command line.
 
+This utility will let you add your work log entries in less than 1s.
+
+A quick status report for the last 30 days typically executes in less than 2-3 seconds.
+
+
 ````shell
 # Add one day of work to Jira issue TIME-94
 jira_worklog add -i time-94 -d 1d
