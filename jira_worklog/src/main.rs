@@ -33,7 +33,7 @@ mod date_util;
 /// 7:30 specifies 7 hours and 30 minutes
 ///
 ///
-#[command(version, author, about)] // Read from Cargo.toml
+#[command(author, about)] // Read from Cargo.toml
 struct Opts {
     #[command(subcommand)]
     subcmd: SubCommand,
@@ -41,7 +41,7 @@ struct Opts {
     #[arg(global = true, short, long, global=true)]
     verbosity: Option<LogLevel>,
 }
-
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Subcommand)]
 enum SubCommand {
@@ -134,6 +134,8 @@ struct Configuration {
 
 #[tokio::main]
 async fn main() {
+    println!("Version: {}", VERSION);
+
     let opts: Opts = Opts::parse();
     configure_logging(&opts); // Handles the -v option
 

@@ -1,4 +1,4 @@
-use std::fs::File;
+use std::fs::{create_dir_all, File};
 use std::{fs, io};
 use std::io::{ Read, Write};
 use std::path::{Path, PathBuf};
@@ -119,6 +119,23 @@ fn create_configuration_file(application_config: &ApplicationConfig, path: &Path
             }
         }
     }
+
+    match path.parent(){
+        None => { },   // Root directory ??
+        Some(parent ) => {
+            match create_dir_all(parent) {
+                Err(e) => {
+                    panic!("Unable to recursively create directory {}, cause: {}", parent.to_string_lossy(),e)
+                },
+                Ok(()) => {
+                    if !parent.is_dir() {
+                        panic!("Interesting, directory {} created, but it does not exis!", parent.to_string_lossy());
+                    }
+                }
+            }
+        }
+    }
+
     let mut file = match File::create(path) {
         Ok(f) => f,
         Err(_) => panic!("Unable to create file named '{}'", path.to_string_lossy()),

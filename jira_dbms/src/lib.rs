@@ -7,7 +7,6 @@ use tokio_postgres::types::ToSql;
 use std::collections::HashSet;
 use std::process::exit;
 use chrono::NaiveDateTime;
-use reqwest::StatusCode;
 
 const DBMS_CHUNK_SIZE: usize = 1000;
 
