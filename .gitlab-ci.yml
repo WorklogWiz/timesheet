@@ -1,0 +1,32 @@
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - changes:
+      - ./**/**.md
+      - .editorconfig
+      - .gitignore
+      when: never
+
+prepare:build-rust-builder:
+  rules:
+    - changes:
+      - ".devcontainer/Dockerfile"
+  stage: .pre
+  script:
+    - >
+    - docker login $CI_REGISTRY --username $CI_REGISTRY_USER --password $CI_JOB_TOKEN
+    - docker build -t $CI_REGISTRY_IMAGE/rust-builder - < .devcontainer/Dockerfile
+    - docker push $CI_REGISTRY_IMAGE/rust-builder
+  tags:
+    - linux-docker-in-docker
+
+build-rust-app:linux:
+  stage: build
+  image: $CI_REGISTRY_IMAGE/rust-builder:latest
+  tags:
+    - linux-docker
+  script:
+    - >
+    - cargo build --release
+    - cargo test --release
