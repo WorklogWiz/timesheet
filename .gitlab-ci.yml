@@ -8,22 +8,9 @@ workflow:
       - .gitignore
       when: never
 
-prepare:build-rust-builder:
-  rules:
-    - changes:
-      - ".devcontainer/Dockerfile"
-  stage: .pre
-  script:
-    - >
-    - docker login $CI_REGISTRY --username $CI_REGISTRY_USER --password $CI_JOB_TOKEN
-    - docker build -t $CI_REGISTRY_IMAGE/rust-builder - < .devcontainer/Dockerfile
-    - docker push $CI_REGISTRY_IMAGE/rust-builder
-  tags:
-    - linux-docker-in-docker
-
 build-rust-app:linux:
   stage: build
-  image: $CI_REGISTRY_IMAGE/rust-builder:latest
+  image: rust:1.73-alpine3.18
   tags:
     - linux-docker
   script:
