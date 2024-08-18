@@ -1,9 +1,6 @@
 //! # The Jira worklog command line utility
 //!
-use crate::date_util::{
-    calculate_started_time, date_of_last_weekday, parse_worklog_durations, str_to_date_time,
-    TimeSpent,
-};
+use crate::date_util::{calculate_started_time, date_of_last_weekday, DateTimeError, parse_worklog_durations, str_to_date_time, TimeSpent};
 use chrono::{Datelike, Local, Month, NaiveDate, TimeZone, Weekday};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use env_logger::Env;
@@ -512,7 +509,10 @@ async fn add_single_entry(
     // If a starting point was given, transform it from string to a full DateTime<Local>
     let starting_point = started.as_ref().map(|dt| str_to_date_time(dt).unwrap());
     // Optionally calculates the starting point after which it is verified
-    let calculated_start = calculate_started_time(starting_point, time_spent_seconds).unwrap();
+    let calculated_start = calculate_started_time(starting_point, time_spent_seconds).unwrap_or_else(|err: DateTimeError| {
+        eprintln!("{}", err);
+        exit(4);
+    });
 
     println!("Using these parameters as input:");
     println!("\tIssue: {}", issue.as_str());

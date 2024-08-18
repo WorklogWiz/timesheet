@@ -63,7 +63,7 @@ fn test_as_date_time() {
 #[derive(Debug)]
 pub enum DateTimeError {
     InvalidInput(String),
-    StartAndDurationExceedsNow,
+    StartAndDurationExceedsNow{start : DateTime<Local>, duration: Duration , end: DateTime<Local>},
 }
 
 impl Display for DateTimeError {
@@ -72,8 +72,8 @@ impl Display for DateTimeError {
             DateTimeError::InvalidInput(s) => {
                 write!(f, "Invalid input {}", s)
             }
-            DateTimeError::StartAndDurationExceedsNow => {
-                write!(f, "Starting point + duration > now")
+            DateTimeError::StartAndDurationExceedsNow{start, duration, end} => {
+                write!(f, "Starting point {} + duration {} gives {}, which is greater than {} (now)", start, duration, end, Local::now())
             }
         }
     }
@@ -195,7 +195,7 @@ fn test_to_jira_timestamp() {
 /// Calculates and verifies the starting point. If no starting point is given,
 /// `duration_seconds` is subtracted from the current time, else if a starting
 /// point was supplied, we use that as-is.
-/// Finally we ensure that the starting point with the addition of `duration_seconds` does
+/// Finally, we ensure that the starting point with the addition of `duration_seconds` does
 /// not go past the current time.
 pub fn calculate_started_time(
     starting_point: Option<DateTime<Local>>,
@@ -208,11 +208,12 @@ pub fn calculate_started_time(
     let proposed_starting_point =
         starting_point.map_or(now.checked_sub_signed(duration).unwrap(), |v| v);
 
+    //  start + duration > now is an error!
     let end_time = proposed_starting_point
         .checked_add_signed(duration)
         .unwrap();
     if end_time.gt(&now) {
-        Err(DateTimeError::StartAndDurationExceedsNow)
+        Err(DateTimeError::StartAndDurationExceedsNow{start: proposed_starting_point, duration, end: end_time })
     } else {
         Ok(proposed_starting_point) // It's ok
     }
