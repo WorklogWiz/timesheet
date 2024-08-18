@@ -167,3 +167,21 @@ We all make mistakes every now then. To remove an entry you need to specify the
 jira_worklog del -i time-94 -w 216626
 `````
 
+### Debug
+A log-file is created behind the scenes if you use the `--verbosity` option, which allows for debugging:
+````shell
+jira_worklog status -i time-40 -v debug
+````
+
+Output would look something like this:
+````shell
+jira_worklog status -i TIME-40 -v debug
+Version: 0.2.7
+Logging to /var/folders/ll/ywcp72091yv33vkts306qs0r0000gn/T/jira_worklog.log
+Issue    IssueId      Id         Weekday Started                      Time spent
+TIME-40  85002        304588     Mon     2024-08-05 08:00 +0200       07:30 
+TIME-40  85002        304589     Tue     2024-08-06 08:00 +0200       07:30 
+...... lots of data .....
+````
+
+You can specify one of `debug`, `info`, `warn` or `error`

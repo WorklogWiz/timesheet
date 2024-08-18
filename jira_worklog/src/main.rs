@@ -181,7 +181,7 @@ async fn main() {
                 Ok(result) => result,
                 Err(e) => match e {
                     StatusCode::NOT_FOUND => {
-                        println!("Worklog {} for issue '{}' not found", &delete.worklog_id,&delete.issue_id);
+                        eprintln!("Worklog {} for issue '{}' not found", &delete.worklog_id,&delete.issue_id);
                         exit(4);
                     }
                     other => {
