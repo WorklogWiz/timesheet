@@ -427,7 +427,7 @@ fn seconds_to_hour_and_min(accum: &i32) -> String {
 }
 
 fn issue_and_entry_report(status_entries: &mut [Worklog], issue_information: &mut HashMap<String, JiraIssue>) {
-    println!("{:8} {:12} {:10} {:<7} {:28} {:6}", "Issue", "IssueId", "Id", "Weekday", "Started", "Time spent");
+    println!("{:8} {:7} {:7} {:<7} {:22} {:10} {}", "Issue", "IssueId", "Id", "Weekday", "Started", "Time spent","Comment");
     status_entries.sort_by(|e, other| e.issueId.cmp(&other.issueId).then_with(|| e.started.cmp(&other.started)));
 
     for e in status_entries.iter() {
@@ -436,13 +436,14 @@ fn issue_and_entry_report(status_entries: &mut [Worklog], issue_information: &mu
             Some(issue) => &issue.key
         };
         println!(
-            "{:8} {:12} {:10} {:<7} {:28} {:6}",
+            "{:8} {:7} {:7} {:<7} {:22} {:10} {}",
             issue_key,
             e.issueId,
             e.id,
             format!("{}", e.started.weekday()),
             format!("{}", e.started.with_timezone(&Local).format("%Y-%m-%d %H:%M %z")),
-            seconds_to_hour_and_min(&e.timeSpentSeconds)
+            seconds_to_hour_and_min(&e.timeSpentSeconds),
+            e.comment.as_deref().unwrap_or("")
         );
     }
 }

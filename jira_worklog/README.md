@@ -5,9 +5,21 @@ as possible from the command line.
 
 This utility will let you add your work log entries in less than 1s.
 
-A quick status report for the last 30 days typically executes in less than 2-3 seconds.
+A quick status report for the last 30 days typically executes in less than 2-3 seconds, unless 
+the Jira project contains thousands of entries. 
 
+Disclaimer: Network latency and the response time of Jira is the main culprit of any delays 
 
+<!-- TOC -->
+* [The Jira worklog utility](#the-jira-worklog-utility)
+  * [Installation](#installation)
+    * [Notes on security](#notes-on-security)
+  * [Examples](#examples-)
+    * [Adding worklog entries](#adding-worklog-entries)
+    * [Status of your worklog entries](#status-of-your-worklog-entries)
+    * [Removing entries](#removing-entries)
+    * [Debug](#debug)
+<!-- TOC -->
 ````shell
 # Add one day of work to Jira issue TIME-94
 jira_worklog add -i time-94 -d 1d
