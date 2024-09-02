@@ -25,3 +25,5 @@ cargo build --target x86_64-pc-windows-gnu
 
 **Note** This was the first entry I found on Google in June 2023. The Windows executable 
 is rather large, so perhaps there is better way to do this.
+
+Moved to autostore-tools repo on Sept 2, 2024
