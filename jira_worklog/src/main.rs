@@ -500,7 +500,7 @@ async fn add_single_entry(
     ) {
         Ok(time_spent) => time_spent.time_spent_seconds,
         Err(e) => {
-            eprintln!("Unable to figure out the duration of your worklog entry from '{}' {}", duration, e);
+            eprintln!("Unable to figure out the duration of your worklog entry from '{}', error message is: {}", duration, e);
             exit(4);
         }
     };
