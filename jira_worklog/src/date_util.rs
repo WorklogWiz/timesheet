@@ -1,5 +1,5 @@
 use chrono::offset::TimeZone;
-use chrono::{Datelike, DateTime, Days, Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, ParseResult, Weekday};
+use chrono::{Datelike, DateTime, Days, Duration, Local, Month, NaiveDate, NaiveDateTime, NaiveTime, ParseResult, Weekday};
 use lazy_static::lazy_static;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
@@ -336,4 +336,35 @@ fn test_date_and_timezone_conversion() {
     let minutes = (45000 % 3600) / 60;
     println!("{}:{}", hour, minutes);
 
+}
+
+// This ought to be part of the Rust runtime :-)
+#[allow(dead_code)]
+pub fn month_name(n: u32) -> Month {
+    match n {
+        1 => Month::January,
+        2 => Month::February,
+        3 => Month::March,
+        4 => Month::April,
+        5 => Month::May,
+        6 => Month::June,
+        7 => Month::July,
+        8 => Month::August,
+        9 => Month::September,
+        10 => Month::October,
+        11 => Month::November,
+        12 => Month::December,
+        _ => panic!("Invalid month number {}", n),
+    }
+}
+
+pub fn is_new_week(current_week: u32, dt: &NaiveDate) -> bool {
+    dt.iso_week().week() > current_week
+}
+
+pub fn seconds_to_hour_and_min(accum: &i32) -> String {
+    let hour = *accum / 3600;
+    let min = *accum % 3600 / 60;
+    let duration = format!("{:02}:{:02}", hour, min);
+    duration
 }

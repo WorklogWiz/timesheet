@@ -679,13 +679,10 @@ pub async fn get_worklog(&self, issue_id: &str, worklog_id: &str) -> Result<Work
             panic!("Must specify an issue key");
         }
         let current_user = self.get_current_user().await;
-        let date_time = match started_after {
-            None => {
-                // Defaults to a month (approx)
-                Local::now().checked_sub_days(Days::new(30)).unwrap()
-            }
-            Some(dt) => dt
-        };
+        let date_time = started_after.unwrap_or_else(|| {
+            // Defaults to a month (approx)
+            Local::now().checked_sub_days(Days::new(30)).unwrap()
+        });
         let naive_date_time = NaiveDateTime::from_timestamp_millis(date_time.timestamp_millis()).unwrap();
         let result = match Self::get_worklogs_for(&self.http_client, issue_key.to_string(), naive_date_time).await {
             Ok(r) => r,
@@ -694,7 +691,7 @@ pub async fn get_worklog(&self, issue_id: &str, worklog_id: &str) -> Result<Work
                 other => panic!("Unexpected http code {} for issue {} ", other, issue_key),
             }
         };
-        debug!("Worklogs retrieved, filtering them for current user ....");
+        debug!("Work logs retrieved, filtering them for current user ....");
         Ok(result.into_iter().filter(|wl| wl.author.accountId == current_user.account_id).collect())
     }
 }

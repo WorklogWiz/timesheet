@@ -41,7 +41,7 @@ pub fn table_report(
             current_week = date.iso_week().week();
         }
         // End of previous week, report Weekly total
-        if crate::is_new_week(current_week, date) {
+        if crate::date_util::is_new_week(current_week, date) {
             print_weekly_total_per_issue(
                 &issue_keys_by_command_line_order,
                 &mut weekly_totals_per_jira_key,
@@ -79,7 +79,7 @@ fn print_daily_entry(date: &NaiveDate,issue_keys_by_command_line_order: &Vec<Jir
         let seconds = daily_total_per_jira_key
             .get(jira_key)
             .unwrap_or(&default_value);
-        let hh_mm_string = crate::seconds_to_hour_and_min(seconds);
+        let hh_mm_string = crate::date_util::seconds_to_hour_and_min(seconds);
         print!(
             " {:>8}",
             if *seconds == 0 {
@@ -96,7 +96,7 @@ fn print_daily_entry(date: &NaiveDate,issue_keys_by_command_line_order: &Vec<Jir
             .or_insert(seconds.clone());
         debug!("Weekly total for {} {:?}", jira_key, _s);
     }
-    print!(" {:>8}", crate::seconds_to_hour_and_min(&daily_total));
+    print!(" {:>8}", crate::date_util::seconds_to_hour_and_min(&daily_total));
 
     println!();
 }
@@ -130,11 +130,11 @@ fn print_weekly_total_per_issue(
     let mut week_grand_total = 0;
     for issue_key in issue_keys_by_command_line_order.iter() {
         let seconds = sum_per_week_per_jira_key.get(issue_key).unwrap_or(&default);
-        let hh_mm_string = crate::seconds_to_hour_and_min(&seconds);
+        let hh_mm_string = crate::date_util::seconds_to_hour_and_min(&seconds);
         print!(" {:>8}", hh_mm_string);
         week_grand_total += seconds;
     }
-    print!(" {:>8}", crate::seconds_to_hour_and_min(&week_grand_total));
+    print!(" {:>8}", crate::date_util::seconds_to_hour_and_min(&week_grand_total));
     println!();
 
     // prints the ================= below the totals

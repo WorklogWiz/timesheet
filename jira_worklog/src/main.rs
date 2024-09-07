@@ -4,7 +4,7 @@ use crate::date_util::{
     calculate_started_time, date_of_last_weekday, DateTimeError, parse_worklog_durations,
     str_to_date_time, TimeSpent,
 };
-use chrono::{Datelike, Local, Month, NaiveDate, TimeZone, Weekday};
+use chrono::{Datelike, Local, NaiveDate, TimeZone, Weekday};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use env_logger::Env;
 use jira_lib::config::{
@@ -431,7 +431,8 @@ fn list_config_and_exit() {
     exit(0);
 }
 
-#[allow(dead_code)]
+
+#[allow(dead_code, deprecated)]
 fn old_weekly_summary_report(worklog_entries: &mut [Worklog]) {
     // Accumulates the total amount of hours per day
     let mut daily_sum: BTreeMap<NaiveDate, i32> = BTreeMap::new();
@@ -460,7 +461,7 @@ fn old_weekly_summary_report(worklog_entries: &mut [Worklog]) {
             current_month = dt.month();
         }
 
-        if is_new_week(current_week, dt) {
+        if date_util::is_new_week(current_week, dt) {
             print_sum_per_week(&mut sum_per_week, dt.iso_week().week() - 1);
             current_week = dt.iso_week().week();
             sum_per_week = 0;
@@ -471,7 +472,7 @@ fn old_weekly_summary_report(worklog_entries: &mut [Worklog]) {
             current_month = dt.month();
             sum_per_month = 0;
         }
-        let duration_this_day = seconds_to_hour_and_min(accum_per_day);
+        let duration_this_day = date_util::seconds_to_hour_and_min(accum_per_day);
         println!(
             "{:2} {:10} {:3} {:8}",
             dt.iso_week().week(),
@@ -488,41 +489,10 @@ fn old_weekly_summary_report(worklog_entries: &mut [Worklog]) {
     for (month, total) in monthly_totals {
         println!(
             "{:9} {}",
-            month_name(month).name(),
-            seconds_to_hour_and_min(&total)
+            date_util::month_name(month).name(),
+            date_util::seconds_to_hour_and_min(&total)
         );
     }
-}
-
-// This ought to be part of the Rust runtime :-)
-#[allow(dead_code)]
-fn month_name(n: u32) -> Month {
-    match n {
-        1 => Month::January,
-        2 => Month::February,
-        3 => Month::March,
-        4 => Month::April,
-        5 => Month::May,
-        6 => Month::June,
-        7 => Month::July,
-        8 => Month::August,
-        9 => Month::September,
-        10 => Month::October,
-        11 => Month::November,
-        12 => Month::December,
-        _ => panic!("Invalid month number {}", n),
-    }
-}
-
-fn is_new_week(current_week: u32, dt: &NaiveDate) -> bool {
-    dt.iso_week().week() > current_week
-}
-
-fn seconds_to_hour_and_min(accum: &i32) -> String {
-    let hour = *accum / 3600;
-    let min = *accum % 3600 / 60;
-    let duration = format!("{:02}:{:02}", hour, min);
-    duration
 }
 
 fn issue_and_entry_report(
@@ -554,7 +524,7 @@ fn issue_and_entry_report(
                 "{}",
                 e.started.with_timezone(&Local).format("%Y-%m-%d %H:%M %z")
             ),
-            seconds_to_hour_and_min(&e.timeSpentSeconds),
+            date_util::seconds_to_hour_and_min(&e.timeSpentSeconds),
             e.comment.as_deref().unwrap_or("")
         );
     }
@@ -708,7 +678,7 @@ pub fn print_sum_per_week(sum_per_week: &mut i32, week: u32) {
     println!(
         "ISO week {}, sum: {} ",
         week,
-        seconds_to_hour_and_min(&sum_per_week)
+        date_util::seconds_to_hour_and_min(&sum_per_week)
     );
     println!("{:=<23}", "");
     println!();
