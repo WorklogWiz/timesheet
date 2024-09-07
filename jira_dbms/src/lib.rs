@@ -10,6 +10,7 @@ use chrono::NaiveDateTime;
 
 const DBMS_CHUNK_SIZE: usize = 1000;
 
+
 pub async fn dbms_async_init(connect: &str) -> Result<tokio_postgres::Client, Error > {
 
     debug!("Connecting with {}", connect);
@@ -203,7 +204,7 @@ pub async fn etl_issues_worklogs_and_persist(jira_client: &JiraClient, dbms_clie
     let jira_projects = match jira_client.get_issues_and_worklogs(projects, filter, started_after).await {
         Ok(r) => r,
         Err(e) => match e {
-                sc => { eprintln!("get_issues_and_worklogs() failed with http code {}", e);
+                _sc => { eprintln!("get_issues_and_worklogs() failed with http code {}", e);
                 exit(4);
             }
         }

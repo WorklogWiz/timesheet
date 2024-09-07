@@ -1,5 +1,6 @@
 extern crate core;
 
+use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
 use std::fmt::Formatter;
@@ -14,6 +15,8 @@ use reqwest::{Client, StatusCode};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde::Serialize;
+use postgres_types::{IsNull, ToSql, Type};
+use postgres_types::private::BytesMut;
 
 pub mod config;
 
@@ -114,13 +117,60 @@ pub struct JiraIssuesPage {
     pub isLast: Option<bool>,
     pub issues: Vec<JiraIssue>,
 }
+#[derive(Debug, Deserialize,Serialize,Default, Eq, PartialEq, Clone)]
+pub struct JiraKey(pub String);
+
+impl ToSql for JiraKey {
+    fn to_sql(&self, _ty: &Type, out: &mut BytesMut) -> Result<IsNull, Box<dyn Error + Sync + Send>>
+    where
+        Self: Sized
+    {
+        out.extend_from_slice(self.0.as_bytes());
+        Ok(IsNull::No)
+    }
+
+    fn accepts(ty: &Type) -> bool
+    where
+        Self: Sized
+    {
+        ty == &Type::TEXT
+    }
+
+    fn to_sql_checked(&self, ty: &Type, out: &mut BytesMut) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
+        if Self::accepts(ty){
+            self.to_sql(ty, out)
+        } else {
+            Err(format!("Type {:?} not accepted for JiraKey", ty).into())
+        }
+    }
+}
+impl JiraKey {
+   pub fn value(&self) -> &str {
+        &self.0
+    }
+}
+impl fmt::Display for JiraKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+impl Ord for JiraKey {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.to_uppercase().cmp(&other.0.to_uppercase())
+    }
+}
+impl PartialOrd for JiraKey {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
 
 #[derive(Debug, Deserialize, Serialize, Default)]
 pub struct JiraIssue {
-    pub id: String,
+    pub id: String, // Numeric id
     #[serde(alias = "self")]
     pub self_url: String,
-    pub key: String,
+    pub key: JiraKey,
 
     #[serde(skip)] // Added after deserializing
     pub worklogs: Vec<Worklog>,
@@ -533,7 +583,7 @@ pub async fn get_issues_and_worklogs(&self, projects: Vec<JiraProject>, issues_f
                 let issues: Vec<JiraIssue> = issues
                     .into_iter()
                     .filter(|issue| {
-                        filter.is_empty() || !filter.is_empty() && filter.contains(&issue.key)
+                        filter.is_empty() || !filter.is_empty() && filter.contains(&issue.key.0)
                     })
                     .collect();
                 debug!("Filtered {} issues for {}", issues.len(), &project.key);
@@ -545,7 +595,7 @@ pub async fn get_issues_and_worklogs(&self, projects: Vec<JiraProject>, issues_f
                         Ok(result) => result,
                         Err(e) => return Err(e)
                     };
-                    debug!("Issue {} has {} worklog entries", issue.key, worklogs.len());
+                    debug!("Issue {} has {} worklog entries", issue.key.0, worklogs.len());
                     issue.worklogs.append(&mut worklogs);
                 }
                 Ok(project)
@@ -661,4 +711,16 @@ pub fn midnight_a_month_ago_in() -> NaiveDateTime {
         a_month_ago.date_naive(),
         NaiveTime::from_hms_opt(0, 0, 0).unwrap(),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_jira_key() {
+        let k1 = JiraKey("TIME-40".to_string());
+        let k2 = JiraKey("TIME-40".to_string());
+        assert_eq!(&k1, &k2, "Seems JiraKey does not compare by value");
+    }
 }

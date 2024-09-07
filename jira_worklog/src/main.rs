@@ -1,20 +1,27 @@
 //! # The Jira worklog command line utility
 //!
-use crate::date_util::{calculate_started_time, date_of_last_weekday, DateTimeError, parse_worklog_durations, str_to_date_time, TimeSpent};
+use crate::date_util::{
+    calculate_started_time, date_of_last_weekday, DateTimeError, parse_worklog_durations,
+    str_to_date_time, TimeSpent,
+};
 use chrono::{Datelike, Local, Month, NaiveDate, TimeZone, Weekday};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use env_logger::Env;
-use jira_lib::{config, JiraClient, JiraIssue, TimeTrackingConfiguration, Worklog};
+use jira_lib::config::{
+    ApplicationConfig, config_file_name, load_or_create_configuration, remove_configuration,
+    save_configuration,
+};
+use jira_lib::{config, JiraClient, JiraIssue, JiraKey, TimeTrackingConfiguration, Worklog};
 use log::{debug, info};
+use reqwest::StatusCode;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Formatter;
 use std::fs::File;
-use std::{env, fmt};
-use std::collections::{BTreeMap, HashMap};
 use std::process::exit;
-use reqwest::StatusCode;
-use jira_lib::config::{ApplicationConfig, config_file_name, load_or_create_configuration, remove_configuration, save_configuration};
+use std::{env, fmt};
 
 mod date_util;
+mod table_report;
 
 #[derive(Parser)]
 /// Jira worklog utility - add, delete and list jira worklog entries
@@ -35,7 +42,7 @@ struct Opts {
     #[command(subcommand)]
     subcmd: SubCommand,
 
-    #[arg(global = true, short, long, global=true)]
+    #[arg(global = true, short, long, global = true)]
     verbosity: Option<LogLevel>,
 }
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -123,10 +130,14 @@ struct Configuration {
     #[arg(short, long)]
     list: bool,
     /// The URL of Jira, don't change this unless you know what you are doing
-    #[arg(short, long, default_value = "https://autostore.atlassian.net/rest/api/latest")]
+    #[arg(
+        short,
+        long,
+        default_value = "https://autostore.atlassian.net/rest/api/latest"
+    )]
     jira_url: Option<String>,
-    #[arg(long,default_value_t=false)]
-    remove: bool
+    #[arg(long, default_value_t = false)]
+    remove: bool,
 }
 
 #[tokio::main]
@@ -150,7 +161,7 @@ async fn main() {
 
             info!("Global Jira options: {:?}", &time_tracking_options);
 
-            if add.durations.is_empty(){
+            if add.durations.is_empty() {
                 eprintln!("Must specify a duration with --duration");
                 exit(4);
             }
@@ -158,15 +169,37 @@ async fn main() {
             add.issue = add.issue.to_uppercase(); // Ensure the issue id is always uppercase
 
             // If there is only a single duration which does starts with a numeric
-            debug!("Length: {} and durations[0]: {}", add.durations.len(), add.durations[0].chars().next().unwrap());
+            debug!(
+                "Length: {} and durations[0]: {}",
+                add.durations.len(),
+                add.durations[0].chars().next().unwrap()
+            );
             if add.durations.len() == 1 && add.durations[0].chars().next().unwrap() <= '9' {
                 println!("Adding single entry");
-                add_single_entry(&jira_client, &time_tracking_options, add.issue, &add.durations[0], add.started, add.comment).await;
+                add_single_entry(
+                    &jira_client,
+                    &time_tracking_options,
+                    add.issue,
+                    &add.durations[0],
+                    add.started,
+                    add.comment,
+                )
+                .await;
             } else if add.durations.len() >= 1 && add.durations[0].chars().next().unwrap() >= 'A' {
                 debug!("Handling multiple entries");
-                add_multiple_entries(jira_client, time_tracking_options, add.issue, add.durations, add.comment).await;
+                add_multiple_entries(
+                    jira_client,
+                    time_tracking_options,
+                    add.issue,
+                    add.durations,
+                    add.comment,
+                )
+                .await;
             } else {
-                eprintln!("Internal error, unable to parse the durations. Did not understand: {}", add.durations[0]);
+                eprintln!(
+                    "Internal error, unable to parse the durations. Did not understand: {}",
+                    add.durations[0]
+                );
                 exit(4);
             }
         }
@@ -177,18 +210,22 @@ async fn main() {
             let current_user = jira_client.get_current_user().await;
             let worklog_entry = match jira_client
                 .get_worklog(&delete.issue_id, &delete.worklog_id)
-                .await {
+                .await
+            {
                 Ok(result) => result,
                 Err(e) => match e {
                     StatusCode::NOT_FOUND => {
-                        eprintln!("Worklog {} for issue '{}' not found", &delete.worklog_id,&delete.issue_id);
+                        eprintln!(
+                            "Worklog {} for issue '{}' not found",
+                            &delete.worklog_id, &delete.issue_id
+                        );
                         exit(4);
                     }
                     other => {
                         eprintln!("ERROR: unknown http status code: {}", other);
                         exit(16)
                     }
-                }
+                },
             };
 
             if worklog_entry.author.accountId != current_user.account_id {
@@ -199,12 +236,18 @@ async fn main() {
                 std::process::exit(403);
             }
 
-            match jira_client.delete_worklog(delete.issue_id, delete.worklog_id.to_owned()).await {
+            match jira_client
+                .delete_worklog(delete.issue_id, delete.worklog_id.to_owned())
+                .await
+            {
                 Ok(_) => println!("Jira work log id {} deleted", &delete.worklog_id),
                 Err(e) => {
-                    println!("An error occured, worklog entry probably not deleted: {}", e);
+                    println!(
+                        "An error occured, worklog entry probably not deleted: {}",
+                        e
+                    );
                     exit(4);
-                },
+                }
             }
         }
 
@@ -213,11 +256,14 @@ async fn main() {
             // TODO: Convert started_after from String in ISO8601 form to DateTime<Local>
             let start_after = status.after.map(|s| str_to_date_time(&s).unwrap());
 
-            let mut status_entries: Vec<Worklog> = Vec::new();
+            let mut worklog_entries: Vec<Worklog> = Vec::new();
             let mut issue_information: HashMap<String, JiraIssue> = HashMap::new();
 
             for issue in status.issues.iter() {
-                let mut entries = match jira_client.get_worklogs_for_current_user(issue, start_after).await {
+                let mut entries = match jira_client
+                    .get_worklogs_for_current_user(issue, start_after)
+                    .await
+                {
                     Ok(result) => result,
                     Err(e) => match e {
                         StatusCode::NOT_FOUND => {
@@ -225,12 +271,15 @@ async fn main() {
                             exit(4);
                         }
                         other => {
-                            eprintln!("ERROR: Unknown http status code {} for issue {}", other, issue);
+                            eprintln!(
+                                "ERROR: Unknown http status code {} for issue {}",
+                                other, issue
+                            );
                             exit(16);
                         }
-                    }
+                    },
                 };
-                status_entries.append(&mut entries);
+                worklog_entries.append(&mut entries);
                 let issue_info = match jira_client.get_issue_by_id_or_key(issue).await {
                     Ok(r) => r,
                     Err(e) => match e {
@@ -239,54 +288,92 @@ async fn main() {
                             exit(4);
                         }
                         other => {
-                            eprintln!("ERROR: Unknown http status code {} for issue {}", other, issue);
+                            eprintln!(
+                                "ERROR: Unknown http status code {} for issue {}",
+                                other, issue
+                            );
                             exit(4);
                         }
-                    }
+                    },
                 };
-                // Allows us to lookup the issue by numeric id to augment the report
+                // Allows us to look up the issue by numeric id to augment the report
                 issue_information.insert(issue_info.id.to_string(), issue_info);
-            };
+            }
 
-            issue_and_entry_report(&mut status_entries, &mut issue_information);
+            issue_and_entry_report(&mut worklog_entries, &mut issue_information);
             println!("");
-            summary_report(&mut status_entries);
+            // old_weekly_summary_report(&mut worklog_entries);
+
+            let issue_keys_by_command_line_order = status
+                .issues
+                .iter()
+                .map(|k| JiraKey(k.to_owned()))
+                .collect();
+            table_report::table_report(
+                &mut worklog_entries,
+                &issue_keys_by_command_line_order,
+                &issue_information,
+            );
         }
 
-        SubCommand::Config(config) => {
-            match config {
-                Configuration { list: true, remove:false,.. } => {
-                    list_config_and_exit();
-                }
-                Configuration { user, token, jira_url, list: false, remove:false } => {
-                    let mut app_config = match load_or_create_configuration() {
-                        Ok(ac) => ac,
-                        Err(e) => {
-                            eprintln!("ERROR: Unable to load or create configuration file {}, reason:{}", config_file_name().to_string_lossy(), e);
-                            exit(4);
-                        }
-                    };
-                    if let Some(user) = user {
-                        app_config.jira.user = user.to_string();
-                    }
-                    if let Some(token) = token {
-                        app_config.jira.token = token.to_string();
-                    }
-                    if let Some(jira_url) = jira_url {
-                        app_config.jira.jira_url = jira_url.to_string();
-                    }
-                    save_configuration(app_config);
-                    println!("Configuration saved to {}", config_file_name().to_string_lossy());
-                    exit(0);
-                }
-                Configuration {remove: true,..} => {
-                    match remove_configuration() {
-                        Ok(_) => { println!("Configuration file {} removed", config_file_name().to_string_lossy())}
-                        Err(e) => { println!("ERROR:Unable to remove configuration file {} : {}", config_file_name().to_string_lossy(),e)}
-                    }
-                }
+        SubCommand::Config(config) => match config {
+            Configuration {
+                list: true,
+                remove: false,
+                ..
+            } => {
+                list_config_and_exit();
             }
-        } // end Config
+            Configuration {
+                user,
+                token,
+                jira_url,
+                list: false,
+                remove: false,
+            } => {
+                let mut app_config = match load_or_create_configuration() {
+                    Ok(ac) => ac,
+                    Err(e) => {
+                        eprintln!(
+                            "ERROR: Unable to load or create configuration file {}, reason:{}",
+                            config_file_name().to_string_lossy(),
+                            e
+                        );
+                        exit(4);
+                    }
+                };
+                if let Some(user) = user {
+                    app_config.jira.user = user.to_string();
+                }
+                if let Some(token) = token {
+                    app_config.jira.token = token.to_string();
+                }
+                if let Some(jira_url) = jira_url {
+                    app_config.jira.jira_url = jira_url.to_string();
+                }
+                save_configuration(app_config);
+                println!(
+                    "Configuration saved to {}",
+                    config_file_name().to_string_lossy()
+                );
+                exit(0);
+            }
+            Configuration { remove: true, .. } => match remove_configuration() {
+                Ok(_) => {
+                    println!(
+                        "Configuration file {} removed",
+                        config_file_name().to_string_lossy()
+                    )
+                }
+                Err(e) => {
+                    println!(
+                        "ERROR:Unable to remove configuration file {} : {}",
+                        config_file_name().to_string_lossy(),
+                        e
+                    )
+                }
+            },
+        }, // end Config
     }
 }
 
@@ -311,7 +398,10 @@ fn get_app_config() -> ApplicationConfig {
     let app_config = match config::load_configuration() {
         Ok(c) => c,
         Err(_) => {
-            println!("Config file {} not found.", config_file_name().to_string_lossy());
+            println!(
+                "Config file {} not found.",
+                config_file_name().to_string_lossy()
+            );
             println!("Create it with: jira_worklog config --user <EMAIL> --token <JIRA_TOKEN>");
             println!("See 'config' subcommand for more details");
             exit(4);
@@ -325,7 +415,10 @@ fn get_app_config() -> ApplicationConfig {
 }
 
 fn list_config_and_exit() {
-    println!("Configuration file {}:\n", config::config_file_name().to_string_lossy());
+    println!(
+        "Configuration file {}:\n",
+        config::config_file_name().to_string_lossy()
+    );
     match config::load_configuration() {
         Ok(config) => {
             let toml_as_string = config::application_config_to_string(&config);
@@ -338,13 +431,14 @@ fn list_config_and_exit() {
     exit(0);
 }
 
-fn summary_report(status_entries: &mut [Worklog]) {
+#[allow(dead_code)]
+fn old_weekly_summary_report(worklog_entries: &mut [Worklog]) {
+    // Accumulates the total amount of hours per day
     let mut daily_sum: BTreeMap<NaiveDate, i32> = BTreeMap::new();
-
-    for worklog_entry in status_entries.iter() {
+    for worklog_entry in worklog_entries.iter() {
         let local_date = worklog_entry.started.with_timezone(&Local).date_naive();
         let _accumulated = match daily_sum.get(&local_date) {
-            None => { daily_sum.insert(local_date, worklog_entry.timeSpentSeconds) }
+            None => daily_sum.insert(local_date, worklog_entry.timeSpentSeconds),
             Some(accumulated) => {
                 daily_sum.insert(local_date, accumulated + worklog_entry.timeSpentSeconds)
             }
@@ -371,13 +465,20 @@ fn summary_report(status_entries: &mut [Worklog]) {
             current_week = dt.iso_week().week();
             sum_per_week = 0;
         }
+        // Excludes current month
         if dt.month() > current_month {
             monthly_totals.insert(current_month, sum_per_month);
             current_month = dt.month();
             sum_per_month = 0;
         }
         let duration_this_day = seconds_to_hour_and_min(accum_per_day);
-        println!("{:2} {:10} {:3} {:8}", dt.iso_week().week(), dt, dt.weekday(), duration_this_day);
+        println!(
+            "{:2} {:10} {:3} {:8}",
+            dt.iso_week().week(),
+            dt,
+            dt.weekday(),
+            duration_this_day
+        );
         sum_per_week = sum_per_week + accum_per_day;
         sum_per_month = sum_per_month + accum_per_day;
     }
@@ -385,11 +486,16 @@ fn summary_report(status_entries: &mut [Worklog]) {
 
     println!();
     for (month, total) in monthly_totals {
-        println!("{:9} {}", month_name(month).name(), seconds_to_hour_and_min(&total));
+        println!(
+            "{:9} {}",
+            month_name(month).name(),
+            seconds_to_hour_and_min(&total)
+        );
     }
 }
 
 // This ought to be part of the Rust runtime :-)
+#[allow(dead_code)]
 fn month_name(n: u32) -> Month {
     match n {
         1 => Month::January,
@@ -412,13 +518,6 @@ fn is_new_week(current_week: u32, dt: &NaiveDate) -> bool {
     dt.iso_week().week() > current_week
 }
 
-fn print_sum_per_week(sum_per_week: &mut i32, week: u32) {
-    println!("{:-<23}", "");
-    println!("ISO week {}, sum: {} ", week, seconds_to_hour_and_min(&sum_per_week));
-    println!("{:=<23}", "");
-    println!();
-}
-
 fn seconds_to_hour_and_min(accum: &i32) -> String {
     let hour = *accum / 3600;
     let min = *accum % 3600 / 60;
@@ -426,14 +525,24 @@ fn seconds_to_hour_and_min(accum: &i32) -> String {
     duration
 }
 
-fn issue_and_entry_report(status_entries: &mut [Worklog], issue_information: &mut HashMap<String, JiraIssue>) {
-    println!("{:8} {:7} {:7} {:<7} {:22} {:10} {}", "Issue", "IssueId", "Id", "Weekday", "Started", "Time spent","Comment");
-    status_entries.sort_by(|e, other| e.issueId.cmp(&other.issueId).then_with(|| e.started.cmp(&other.started)));
+fn issue_and_entry_report(
+    status_entries: &mut [Worklog],
+    issue_information: &mut HashMap<String, JiraIssue>,
+) {
+    println!(
+        "{:8} {:7} {:7} {:<7} {:22} {:10} {}",
+        "Issue", "IssueId", "Id", "Weekday", "Started", "Time spent", "Comment"
+    );
+    status_entries.sort_by(|e, other| {
+        e.issueId
+            .cmp(&other.issueId)
+            .then_with(|| e.started.cmp(&other.started))
+    });
 
     for e in status_entries.iter() {
         let issue_key: &str = match issue_information.get(&e.issueId) {
             None => "Unknown",
-            Some(issue) => &issue.key
+            Some(issue) => &issue.key.value(),
         };
         println!(
             "{:8} {:7} {:7} {:<7} {:22} {:10} {}",
@@ -441,7 +550,10 @@ fn issue_and_entry_report(status_entries: &mut [Worklog], issue_information: &mu
             e.issueId,
             e.id,
             format!("{}", e.started.weekday()),
-            format!("{}", e.started.with_timezone(&Local).format("%Y-%m-%d %H:%M %z")),
+            format!(
+                "{}",
+                e.started.with_timezone(&Local).format("%Y-%m-%d %H:%M %z")
+            ),
             seconds_to_hour_and_min(&e.timeSpentSeconds),
             e.comment.as_deref().unwrap_or("")
         );
@@ -475,9 +587,15 @@ async fn add_multiple_entries(
             "Adding {}, {}, {}, {:?}",
             issue, &duration, started, comment
         );
-        add_single_entry(&jira_client, &time_tracking_options,
-                         issue.to_string(), &duration, Some(started),
-                         comment.clone()).await;
+        add_single_entry(
+            &jira_client,
+            &time_tracking_options,
+            issue.to_string(),
+            &duration,
+            Some(started),
+            comment.clone(),
+        )
+        .await;
     }
 }
 
@@ -510,10 +628,11 @@ async fn add_single_entry(
     // If a starting point was given, transform it from string to a full DateTime<Local>
     let starting_point = started.as_ref().map(|dt| str_to_date_time(dt).unwrap());
     // Optionally calculates the starting point after which it is verified
-    let calculated_start = calculate_started_time(starting_point, time_spent_seconds).unwrap_or_else(|err: DateTimeError| {
-        eprintln!("{}", err);
-        exit(4);
-    });
+    let calculated_start = calculate_started_time(starting_point, time_spent_seconds)
+        .unwrap_or_else(|err: DateTimeError| {
+            eprintln!("{}", err);
+            exit(4);
+        });
 
     println!("Using these parameters as input:");
     println!("\tIssue: {}", issue.as_str());
@@ -532,7 +651,8 @@ async fn add_single_entry(
             time_spent_seconds,
             comment.unwrap_or("".to_string()).as_str(),
         )
-        .await {
+        .await
+    {
         Ok(result) => result,
         Err(e) => match e {
             StatusCode::NOT_FOUND => {
@@ -540,10 +660,13 @@ async fn add_single_entry(
                 exit(4);
             }
             other => {
-                eprintln!("ERROR: Unable to insert worklog entry for issue {}, http error code {}", issue, other);
+                eprintln!(
+                    "ERROR: Unable to insert worklog entry for issue {}, http error code {}",
+                    issue, other
+                );
                 exit(4);
             }
-        }
+        },
     };
 
     println!(
@@ -575,6 +698,18 @@ fn configure_logging(opts: &Opts) {
             LogLevel::Error => "error",
         },
     )))
-        .target(env_logger::Target::Pipe(target))
-        .init();
+    .target(env_logger::Target::Pipe(target))
+    .init();
+}
+
+#[allow(dead_code)]
+pub fn print_sum_per_week(sum_per_week: &mut i32, week: u32) {
+    println!("{:-<23}", "");
+    println!(
+        "ISO week {}, sum: {} ",
+        week,
+        seconds_to_hour_and_min(&sum_per_week)
+    );
+    println!("{:=<23}", "");
+    println!();
 }
