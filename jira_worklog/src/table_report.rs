@@ -2,6 +2,22 @@ use jira_lib::{JiraIssue, JiraKey, Worklog};
 use std::collections::{BTreeMap, HashMap};
 use chrono::{Datelike, NaiveDate};
 use log::debug;
+use crate::date_util::{month_name, seconds_to_hour_and_min};
+//
+// Prints a report with tables like this:
+//
+// Date       Day  time-147 time-117 time-40    Total
+// -------------- -------- -------- -------- --------
+// 2024-09-02 Mon    07:30        -        -    07:30
+// 2024-09-03 Tue        -    07:30        -    07:30
+// 2024-09-04 Wed    07:30        -        -    07:30
+// 2024-09-05 Thu    07:30        -        -    07:30
+// 2024-09-06 Fri    10:30        -        -    10:30
+// 2024-09-07 Sat    03:00        -        -    03:00
+// -------------- -------- -------- -------- --------
+// ISO Week 36       36:00    07:30    00:00    43:30
+// ============== ======== ======== ======== ========
+//
 
 pub fn table_report(
     worklog_entries: &mut [Worklog],
@@ -10,8 +26,6 @@ pub fn table_report(
 ) {
     // Holds the accumulated work hours per date and then per issue key
     let mut daily_totals_for_all_jira_key: BTreeMap<NaiveDate, BTreeMap<JiraKey, i32>> = BTreeMap::new();
-
-    // print_table_header(issue_keys_by_command_line_order);
 
     // Iterates all work logs and accumulates them by date, Jira issue key
     for e in worklog_entries.iter() {
@@ -31,11 +45,11 @@ pub fn table_report(
             .or_insert(e.timeSpentSeconds);
     }
 
-    print_table_header(issue_keys_by_command_line_order);
+    print_weekly_table_header(issue_keys_by_command_line_order);
 
-    //  { week_no, { jira_key, accumulated sum}}
     let mut weekly_totals_per_jira_key: BTreeMap<JiraKey, i32> = BTreeMap::new();
     let mut current_week = 0;
+    let mut monthly_totals_per_week : BTreeMap<u32, BTreeMap<u32, i32>> = BTreeMap::new();
     for (date, daily_total_per_jira_key) in daily_totals_for_all_jira_key.iter() {
         if current_week == 0 {
             current_week = date.iso_week().week();
@@ -49,8 +63,20 @@ pub fn table_report(
             );
 
             current_week = date.iso_week().week();
+
+            let current_week_totals = weekly_totals_per_jira_key.values().sum();
+            debug!("Total for CW {} is {}", current_week, current_week_totals);
+
+            let month_entry = monthly_totals_per_week
+                .entry(date.month())// Get or create the monthly hashmap
+                .or_insert(BTreeMap::new())  // If it does not exist, insert a new hashmap
+                .entry(current_week)
+                .and_modify(|v| *v += current_week_totals)
+                .or_insert(current_week_totals);
+            debug!("Monthly totals so far {:?}", month_entry);
+
             weekly_totals_per_jira_key.clear(); // Remove all entries, prep for next week
-            print_table_header(issue_keys_by_command_line_order);
+            print_weekly_table_header(issue_keys_by_command_line_order); // Table header for next week
         }
 
         print_daily_entry(date,issue_keys_by_command_line_order, &mut weekly_totals_per_jira_key, daily_total_per_jira_key);
@@ -64,6 +90,18 @@ pub fn table_report(
         );
     }
 
+    // Print totals for each week and each month
+    for (month_no, weekly_total) in monthly_totals_per_week {
+        let mut monthly_total = 0;
+        for (cw, week_total) in weekly_total {
+            println!("CW {:<6}: {:>8}", cw, seconds_to_hour_and_min(&week_total));
+            monthly_total += week_total;
+        }
+        println!("{:-<19}", "");
+        println!("{:9}: {:>8}", month_name(month_no).name(), seconds_to_hour_and_min(&monthly_total));
+        println!("{:=<19}", "");
+        println!();
+    }
 }
 
 fn print_daily_entry(date: &NaiveDate,issue_keys_by_command_line_order: &Vec<JiraKey>, weekly_totals_per_jira_key: &mut BTreeMap<JiraKey, i32>,  daily_total_per_jira_key: &BTreeMap<JiraKey, i32>) {
@@ -101,7 +139,7 @@ fn print_daily_entry(date: &NaiveDate,issue_keys_by_command_line_order: &Vec<Jir
     println!();
 }
 
-fn print_table_header(issue_keys_by_command_line_order: &Vec<JiraKey>) {
+fn print_weekly_table_header(issue_keys_by_command_line_order: &Vec<JiraKey>) {
     print!("{:10} {:3} ", "Date", "Day");
     for jira_issue in issue_keys_by_command_line_order {
         print!(" {:8}", jira_issue.value());

@@ -645,7 +645,8 @@ async fn add_single_entry(
         result.timeSpent,
         result.timeSpentSeconds,
         result.comment.unwrap_or("".to_string())
-    )
+    );
+    println!("To delete entry: jira_worklog del -i {} -w {}", issue, result.id);
 }
 
 fn configure_logging(opts: &Opts) {
