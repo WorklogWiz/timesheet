@@ -1,0 +1,15 @@
+build:win64-msvc:
+  stage: build
+  image: $CI_REGISTRY/autostore/ci/rust-msvc:240909
+  tags:
+    - docker-windows-2022
+  script:
+    - $env:RUSTFLAGS="-Ctarget-feature=+crt-static"
+    - cargo build --release
+    - Get-ChildItem target/release
+    - mv target/release/jira_worklog* .
+  artifacts:
+    paths:
+      - jira_worklog.exe
+      - jira_worklog_etl.exe
+    expire_in: 14 days
