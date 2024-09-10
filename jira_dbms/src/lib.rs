@@ -1,24 +1,21 @@
-use postgres::Client;
-use tokio_postgres::{Error, NoTls};
-use jira_lib::{Author, JiraClient, JiraIssue, JiraProject, Worklog};
-use std::fmt::Write;
-use log::{debug, info};
-use tokio_postgres::types::ToSql;
-use std::collections::HashSet;
-use std::process::exit;
 use chrono::NaiveDateTime;
+use jira_lib::{Author, JiraClient, JiraIssue, JiraProject, Worklog};
+use log::{debug, info};
+use postgres::Client;
+use std::collections::HashSet;
+use std::fmt::Write;
+use std::process::exit;
+use tokio_postgres::types::ToSql;
+use tokio_postgres::{Error, NoTls};
 
 const DBMS_CHUNK_SIZE: usize = 1000;
 
-
-pub async fn dbms_async_init(connect: &str) -> Result<tokio_postgres::Client, Error > {
-
+pub async fn dbms_async_init(connect: &str) -> Result<tokio_postgres::Client, Error> {
     debug!("Connecting with {}", connect);
 
     let result = tokio_postgres::connect(connect, NoTls).await;
     match result {
         Ok((client, connection)) => {
-
             tokio::spawn(async move {
                 if let Err(e) = connection.await {
                     eprintln!("connection error: {}", e);
@@ -26,12 +23,12 @@ pub async fn dbms_async_init(connect: &str) -> Result<tokio_postgres::Client, Er
             });
             Ok(client)
         }
-        Err(err) => Err(err)
+        Err(err) => Err(err),
     }
 }
 
 pub fn dbms_init(connect: &str) -> Result<Client, Error> {
-     Client::connect(connect, NoTls)
+    Client::connect(connect, NoTls)
 }
 
 #[deprecated()]
@@ -46,9 +43,15 @@ pub async fn insert_project(dbms: &mut tokio_postgres::Client, project: &JiraPro
     on conflict (id) do nothing
     "#;
 
-    match dbms.execute(stmt, &[&project.id, &project.key, &project.name, &project.url]).await {
+    match dbms
+        .execute(
+            stmt,
+            &[&project.id, &project.key, &project.name, &project.url],
+        )
+        .await
+    {
         Ok(_) => {}
-        Err(e) => panic!("Unable to insert project {:?}, cause: {}", project, e)
+        Err(e) => panic!("Unable to insert project {:?}, cause: {}", project, e),
     }
 }
 
@@ -66,7 +69,19 @@ pub async fn insert_issue(dbms: &mut tokio_postgres::Client, project_id: &str, i
         "#;
     let asset_name = issue.fields.asset.as_ref().map(|a| a.value.to_string());
 
-    match dbms.execute(stmt, &[&issue.id, &issue.key, &project_id, &issue.fields.summary, &asset_name]).await {
+    match dbms
+        .execute(
+            stmt,
+            &[
+                &issue.id,
+                &issue.key,
+                &project_id,
+                &issue.fields.summary,
+                &asset_name,
+            ],
+        )
+        .await
+    {
         Ok(_) => {}
         Err(e) => panic!("Unable to insert new issue {:?}, \nError: {:?}", &issue, e),
     }
@@ -82,9 +97,18 @@ pub async fn insert_author(dbms: &mut tokio_postgres::Client, author: &Author) -
         returning account_id
         "#;
 
-    match dbms.query_one(stmt, &[&author.accountId, &author.emailAddress, &author.displayName]).await {
+    match dbms
+        .query_one(
+            stmt,
+            &[&author.accountId, &author.emailAddress, &author.displayName],
+        )
+        .await
+    {
         Ok(row) => row.get(0),
-        Err(dbms_err) => panic!("Unable to insert new jira.author, using sql: {}, \nreason: {:?}", stmt, dbms_err)
+        Err(dbms_err) => panic!(
+            "Unable to insert new jira.author, using sql: {}, \nreason: {:?}",
+            stmt, dbms_err
+        ),
     }
 }
 
@@ -93,24 +117,32 @@ pub async fn batch_insert_authors(dbms: &mut tokio_postgres::Client, authors: &[
         let (sql, params) = compose_batch_insert_authors_sql(authors);
         match dbms.execute(sql.as_str(), &params[..]).await {
             Ok(_) => {}
-            Err(err) => panic!("Unable to insert authors. Cause: {:?}", err)
+            Err(err) => panic!("Unable to insert authors. Cause: {:?}", err),
         }
         info!("Upserted {} authors", authors_chunk.len());
     }
 }
 
-fn compose_batch_insert_authors_sql(authors_chucnk: &[Author]) -> (String, Vec<&(dyn ToSql + Sync)>) {
+fn compose_batch_insert_authors_sql(
+    authors_chucnk: &[Author],
+) -> (String, Vec<&(dyn ToSql + Sync)>) {
     let mut insert_stmt = r#"insert into
     jira.author (account_id, email_address, display_name)
         values
-    "#.to_string();
+    "#
+        .to_string();
     let on_conflict = "on conflict (account_id) do nothing";
     let mut params = Vec::<&(dyn ToSql + Sync)>::new();
     for (i, author) in authors_chucnk.iter().enumerate() {
         if i > 0 {
             write!(insert_stmt, ",").unwrap();
         }
-        write!(insert_stmt, "\n{}", format_args!("( ${}, ${}, ${})", i * 3 + 1, i * 3 + 2, i * 3 + 3)).unwrap();
+        write!(
+            insert_stmt,
+            "\n{}",
+            format_args!("( ${}, ${}, ${})", i * 3 + 1, i * 3 + 2, i * 3 + 3)
+        )
+            .unwrap();
         params.push(&author.accountId);
         params.push(&author.emailAddress);
         params.push(&author.displayName);
@@ -128,17 +160,28 @@ pub async fn insert_worklog(dbms: &mut tokio_postgres::Client, worklog: &Worklog
         do
             nothing
     "#;
-    match dbms.execute(stmt, &[&worklog.id, &worklog.author.accountId, &worklog.created,
-        &worklog.updated, &worklog.started, &worklog.timeSpent, &worklog.timeSpentSeconds,
-        &worklog.issueId]).await {
+    match dbms
+        .execute(
+            stmt,
+            &[
+                &worklog.id,
+                &worklog.author.accountId,
+                &worklog.created,
+                &worklog.updated,
+                &worklog.started,
+                &worklog.timeSpent,
+                &worklog.timeSpentSeconds,
+                &worklog.issueId,
+            ],
+        )
+        .await
+    {
         Ok(_) => (),
-        Err(err) => panic!("Unable to upsert new worklog entry: {:?}", err)
+        Err(err) => panic!("Unable to upsert new worklog entry: {:?}", err),
     }
 }
 
-
 pub async fn batch_insert_worklogs(dbms: &mut tokio_postgres::Client, worklogs: &[Worklog]) {
-
     // Splits the insert statement into chunks of PostgresSQL limit of 1000 entries
     for worklog_chunck in worklogs.chunks(DBMS_CHUNK_SIZE) {
         let (sql, params) = compose_batch_insert_worklog_sql(worklog_chunck);
@@ -150,7 +193,9 @@ pub async fn batch_insert_worklogs(dbms: &mut tokio_postgres::Client, worklogs: 
 }
 
 /// Dynamically composes the SQL and the list of parameters to insert a batch of Worklog items
-fn compose_batch_insert_worklog_sql(worklog_chunck: &[Worklog]) -> (String, Vec<&(dyn ToSql + Sync)>) {
+fn compose_batch_insert_worklog_sql(
+    worklog_chunck: &[Worklog],
+) -> (String, Vec<&(dyn ToSql + Sync)>) {
     let mut insert_stmt = r#"
     insert into jira.worklog (
             id,
@@ -162,7 +207,8 @@ fn compose_batch_insert_worklog_sql(worklog_chunck: &[Worklog]) -> (String, Vec<
             timespentseconds,
             issueid
            ) values
-           "#.to_string();
+           "#
+        .to_string();
     let on_conflict_part = String::from(" on conflict (id) do nothing ");
 
     let mut params = Vec::<&(dyn ToSql + Sync)>::new();
@@ -170,8 +216,22 @@ fn compose_batch_insert_worklog_sql(worklog_chunck: &[Worklog]) -> (String, Vec<
         if i > 0 {
             write!(insert_stmt, ",").unwrap();
         }
-        write!(insert_stmt, "\n{}", format_args!("( ${}, ${}, ${}, ${}, ${}, ${}, ${}, ${} )",
-                                                 i * 8 + 1, i * 8 + 2, i * 8 + 3, i * 8 + 4, i * 8 + 5, i * 8 + 6, i * 8 + 7, i * 8 + 8)).unwrap();
+        write!(
+            insert_stmt,
+            "\n{}",
+            format_args!(
+                "( ${}, ${}, ${}, ${}, ${}, ${}, ${}, ${} )",
+                i * 8 + 1,
+                i * 8 + 2,
+                i * 8 + 3,
+                i * 8 + 4,
+                i * 8 + 5,
+                i * 8 + 6,
+                i * 8 + 7,
+                i * 8 + 8
+            )
+        )
+            .unwrap();
 
         params.push(&worklog_entry.id);
         params.push(&worklog_entry.author.accountId);
@@ -189,22 +249,35 @@ fn compose_batch_insert_worklog_sql(worklog_chunck: &[Worklog]) -> (String, Vec<
 
 /// Extracts all issues and accompanying worklogs for the supplied list of projects. Worklogs are retrieved for work started after `startedAfter`, which
 /// specified a timestamp in UNIX time, with a granularity of milliseconds
-pub async fn etl_issues_worklogs_and_persist(jira_client: &JiraClient, dbms_client: &mut tokio_postgres::Client, projects: Vec<JiraProject>, issues_filter: Option<Vec<String>>, started_after: NaiveDateTime) {
+pub async fn etl_issues_worklogs_and_persist(
+    jira_client: &JiraClient,
+    dbms_client: &mut tokio_postgres::Client,
+    projects: Vec<JiraProject>,
+    issues_filter: Option<Vec<String>>,
+    started_after: NaiveDateTime,
+) {
     if projects.is_empty() {
         println!("No projects found!");
         return;
     }
 
     for (i, project) in projects.iter().enumerate() {
-        info!("Project: {} {} {} {}", i, project.id, project.key, project.name);
+        info!(
+            "Project: {} {} {} {}",
+            i, project.id, project.key, project.name
+        );
     }
 
     info!("Retrieving the issues and worklogs ....");
-    let filter = issues_filter.unwrap_or(vec![]);
-    let jira_projects = match jira_client.get_issues_and_worklogs(projects, filter, started_after).await {
+    let filter = issues_filter.unwrap_or_default();
+    let jira_projects = match jira_client
+        .get_issues_and_worklogs(projects, filter, started_after)
+        .await
+    {
         Ok(r) => r,
-        Err(e) => match e {
-                _sc => { eprintln!("get_issues_and_worklogs() failed with http code {}", e);
+        Err(e) => {
+            {
+                eprintln!("get_issues_and_worklogs() failed with http code {}", e);
                 exit(4);
             }
         }
@@ -216,12 +289,10 @@ pub async fn etl_issues_worklogs_and_persist(jira_client: &JiraClient, dbms_clie
     for p in &jira_projects {
         for issue in &p.issues {
             for wlog in &issue.worklogs {
-                authors.insert(
-                    wlog.author.clone());
+                authors.insert(wlog.author.clone());
             }
         }
     }
-
 
     let mut unique_authors = Vec::from_iter(authors);
     unique_authors.sort_by(|a, b| a.accountId.cmp(&b.accountId));
@@ -233,30 +304,37 @@ pub async fn etl_issues_worklogs_and_persist(jira_client: &JiraClient, dbms_clie
     insert_assets(dbms_client, &project_assets[..]).await;
 
     info!("Upserting {} authors", unique_authors.len());
-    batch_insert_authors( dbms_client, &unique_authors[..]).await;
-
+    batch_insert_authors(dbms_client, &unique_authors[..]).await;
 
     for project in &jira_projects {
         println!("Project: {} {}", project.key, project.name);
-        insert_project( dbms_client, project).await;
+        insert_project(dbms_client, project).await;
 
         for issue in &project.issues {
-            insert_issue( dbms_client, &project.id, issue).await;
+            insert_issue(dbms_client, &project.id, issue).await;
             if !issue.worklogs.is_empty() {
-                println!("Processing {} worklogs for {}", issue.worklogs.len(), issue.key);
-                batch_insert_worklogs( dbms_client, &issue.worklogs[..]).await;
+                println!(
+                    "Processing {} worklogs for {}",
+                    issue.worklogs.len(),
+                    issue.key
+                );
+                batch_insert_worklogs(dbms_client, &issue.worklogs[..]).await;
             }
         }
     }
 }
 
 fn extract_assets_from_time_issues(projects: &[JiraProject]) -> Vec<String> {
-    projects.iter()
-        .flat_map(|p| p.issues.iter()
-            .filter(|i| i.fields.asset.as_ref().is_some())
-            .map(|i| i.fields.asset.as_ref().unwrap().value.to_string())).collect()
+    projects
+        .iter()
+        .flat_map(|p| {
+            p.issues
+                .iter()
+                .filter(|i| i.fields.asset.as_ref().is_some())
+                .map(|i| i.fields.asset.as_ref().unwrap().value.to_string())
+        })
+        .collect()
 }
-
 
 pub async fn insert_assets(dbms: &mut tokio_postgres::Client, assets: &[String]) {
     for asset_chunk in assets.chunks(DBMS_CHUNK_SIZE) {
@@ -276,7 +354,9 @@ pub async fn insert_assets(dbms: &mut tokio_postgres::Client, assets: &[String])
 
         match dbms.execute(&sql, &params[..]).await {
             Ok(_) => {}
-            Err(e) => { panic!("Failed to insert authors, SQL: {} \n cause: {:?}", sql, e) }
+            Err(e) => {
+                panic!("Failed to insert authors, SQL: {} \n cause: {:?}", sql, e)
+            }
         }
     }
 }
@@ -284,7 +364,7 @@ pub async fn insert_assets(dbms: &mut tokio_postgres::Client, assets: &[String])
 #[cfg(test)]
 mod tests {
     use super::*;
-    use jira_lib::{JiraAsset, JiraFields, WorklogsPage};
+    use jira_lib::{JiraAsset, JiraFields, JiraKey, WorklogsPage};
 
     async fn load_config_and_get_dbms_connection() -> tokio_postgres::Client {
         let config = jira_lib::config::load_configuration().unwrap();
@@ -292,7 +372,6 @@ mod tests {
         let mut client = dbms_async_init(&config.dbms.connect).await.unwrap();
         client
     }
-
 
     #[tokio::test]
     async fn test_insert_author() {
@@ -303,13 +382,21 @@ mod tests {
             displayName: "Steinar".to_string(),
         };
         let account_id = insert_author(&mut client, &author).await;
-        assert!(account_id.len() > 0, "No value returned when inserting author");
+        assert!(
+            account_id.len() > 0,
+            "No value returned when inserting author"
+        );
         let account_id = insert_author(&mut client, &author).await;
         assert!(account_id.len() > 0, "No value returned from second insert");
 
-        client.execute("delete from jira.author where account_id=$1", &[&author.accountId]).await.unwrap();
+        client
+            .execute(
+                "delete from jira.author where account_id=$1",
+                &[&author.accountId],
+            )
+            .await
+            .unwrap();
     }
-
 
     #[tokio::test]
     async fn test_insert_worklog() {
@@ -331,8 +418,11 @@ mod tests {
     fn test_compose_batch_insert_worklog_sql() {
         use std::fs;
 
-        let contents = fs::read_to_string("tests/time-40_worklog_results.json").expect("Expected to load json file");
-        let worklogs = serde_json::from_str::<WorklogsPage>(&contents).unwrap().worklogs;
+        let contents = fs::read_to_string("tests/time-40_worklog_results.json")
+            .expect("Expected to load json file");
+        let worklogs = serde_json::from_str::<WorklogsPage>(&contents)
+            .unwrap()
+            .worklogs;
         let (sql, _params) = compose_batch_insert_worklog_sql(&worklogs[0..13]);
         println!("SQL: {}", sql);
     }
@@ -360,39 +450,62 @@ mod tests {
     async fn test_insert_issues() {
         let mut dbms = load_config_and_get_dbms_connection().await;
 
-        let project_id: String = match dbms.query_one("select jira.project.id from jira.project limit 1", &[]).await {
+        let project_id: String = match dbms
+            .query_one("select jira.project.id from jira.project limit 1", &[])
+            .await
+        {
             Ok(row) => row.get(0),
-            Err(err) => panic!("Unable to retrieve a prject id from DBMS {:?}", err)
+            Err(err) => panic!("Unable to retrieve a prject id from DBMS {:?}", err),
         };
-        let asset_id: i32 = match dbms.query_one("select id from jira.asset where asset_name='Project_Interface http Modernization'", &[]).await {
+        let asset_id: i32 = match dbms
+            .query_one(
+                "select id from jira.asset where asset_name='Project_Interface http Modernization'",
+                &[],
+            )
+            .await
+        {
             Ok(row) => row.get(0),
-            Err(err) => panic!("Unable to retrive asset_id, cause: {:?}", err)
+            Err(err) => panic!("Unable to retrive asset_id, cause: {:?}", err),
         };
 
         let issue = JiraIssue {
             id: "42".to_string(),
             self_url: "www.rubbish.com".to_string(),
-            key: "SOC-42".to_string(),
+            key: JiraKey("SOC-42".to_string()),
             worklogs: vec![],
             fields: JiraFields {
                 summary: "SOC-42 is just an example".to_string(),
-                asset: Some(
-                    JiraAsset {
-                        id: asset_id.to_string(),
-                        value: "Project_Interface http Modernization".to_string(), url: "rubbish".to_string()
-                    }
-                ),
+                asset: Some(JiraAsset {
+                    id: asset_id.to_string(),
+                    value: "Project_Interface http Modernization".to_string(),
+                    url: "rubbish".to_string(),
+                }),
             },
         };
 
         insert_issue(&mut dbms, &project_id, &issue).await;
-        let asset_id: Option::<i32> = match dbms.query_one("select asset_id from jira.issue where issue.id=$1", &[&issue.id]).await {
+        let asset_id: Option<i32> = match dbms
+            .query_one(
+                "select asset_id from jira.issue where issue.id=$1",
+                &[&issue.id],
+            )
+            .await
+        {
             Ok(row) => row.get(0),
-            Err(err) => panic!("Unable to retrieve the asset_id from inserted issue. Cause: {:?}", err)
+            Err(err) => panic!(
+                "Unable to retrieve the asset_id from inserted issue. Cause: {:?}",
+                err
+            ),
         };
-        assert!(asset_id.is_some(),"Ouch unable to retrieve the asset back from the database");
+        assert!(
+            asset_id.is_some(),
+            "Ouch unable to retrieve the asset back from the database"
+        );
 
-        let result = match dbms.execute("delete from jira.issue where id=$1", &[&issue.id]).await {
+        let result = match dbms
+            .execute("delete from jira.issue where id=$1", &[&issue.id])
+            .await
+        {
             Ok(rows) => rows,
             Err(err) => panic!("Unable to remove inserted test data {:?}", err),
         };

@@ -38,7 +38,7 @@ pub fn table_report(
         };
         let date_entry = daily_totals_for_all_jira_key
             .entry(e.started.date_naive())
-            .or_insert(BTreeMap::new());
+            .or_default(); // Inserts new  BTreeMap, which is default
         let _daily_total_for_jira_key = date_entry
             .entry(issue_key.to_owned())
             .and_modify(|v| *v += e.timeSpentSeconds)
@@ -57,7 +57,7 @@ pub fn table_report(
         // End of previous week, report Weekly total
         if crate::date_util::is_new_week(current_week, date) {
             print_weekly_total_per_issue(
-                &issue_keys_by_command_line_order,
+                issue_keys_by_command_line_order,
                 &mut weekly_totals_per_jira_key,
                 &mut current_week,
             );
@@ -69,7 +69,7 @@ pub fn table_report(
 
             let month_entry = monthly_totals_per_week
                 .entry(date.month())// Get or create the monthly hashmap
-                .or_insert(BTreeMap::new())  // If it does not exist, insert a new hashmap
+                .or_default()  // If it does not exist, insert a new hashmap
                 .entry(current_week)
                 .and_modify(|v| *v += current_week_totals)
                 .or_insert(current_week_totals);
@@ -82,9 +82,9 @@ pub fn table_report(
         print_daily_entry(date,issue_keys_by_command_line_order, &mut weekly_totals_per_jira_key, daily_total_per_jira_key);
     }
     // In case the last week is incomplete, we need to print those too
-    if weekly_totals_per_jira_key.is_empty() == false {
+    if !weekly_totals_per_jira_key.is_empty() {
         print_weekly_total_per_issue(
-            &issue_keys_by_command_line_order,
+            issue_keys_by_command_line_order,
             &mut weekly_totals_per_jira_key,
             &mut current_week,
         );
@@ -104,7 +104,7 @@ pub fn table_report(
     }
 }
 
-fn print_daily_entry(date: &NaiveDate,issue_keys_by_command_line_order: &Vec<JiraKey>, weekly_totals_per_jira_key: &mut BTreeMap<JiraKey, i32>,  daily_total_per_jira_key: &BTreeMap<JiraKey, i32>) {
+fn print_daily_entry(date: &NaiveDate,issue_keys_by_command_line_order: &[JiraKey], weekly_totals_per_jira_key: &mut BTreeMap<JiraKey, i32>,  daily_total_per_jira_key: &BTreeMap<JiraKey, i32>) {
     let default_value = 0;
 
     print!("{:10} {:3}", date, date.weekday());
@@ -131,7 +131,7 @@ fn print_daily_entry(date: &NaiveDate,issue_keys_by_command_line_order: &Vec<Jir
         let _s = weekly_totals_per_jira_key
             .entry(jira_key.to_owned())
             .and_modify(|v| *v += seconds)
-            .or_insert(seconds.clone());
+            .or_insert(*seconds);
         debug!("Weekly total for {} {:?}", jira_key, _s);
     }
     print!(" {:>8}", crate::date_util::seconds_to_hour_and_min(&daily_total));
@@ -154,7 +154,7 @@ fn print_weekly_table_header(issue_keys_by_command_line_order: &Vec<JiraKey>) {
 mod tests {}
 
 fn print_weekly_total_per_issue(
-    issue_keys_by_command_line_order: &Vec<JiraKey>,
+    issue_keys_by_command_line_order: &[JiraKey],
     sum_per_week_per_jira_key: &mut BTreeMap<JiraKey, i32>,
     current_week: &mut u32,
 ) {
@@ -168,7 +168,7 @@ fn print_weekly_total_per_issue(
     let mut week_grand_total = 0;
     for issue_key in issue_keys_by_command_line_order.iter() {
         let seconds = sum_per_week_per_jira_key.get(issue_key).unwrap_or(&default);
-        let hh_mm_string = crate::date_util::seconds_to_hour_and_min(&seconds);
+        let hh_mm_string = crate::date_util::seconds_to_hour_and_min(seconds);
         print!(" {:>8}", hh_mm_string);
         week_grand_total += seconds;
     }
@@ -181,7 +181,7 @@ fn print_weekly_total_per_issue(
     println!();
 }
 
-fn print_double_line(issue_keys_by_command_line_order: &Vec<JiraKey>) {
+fn print_double_line(issue_keys_by_command_line_order: &[JiraKey]) {
     print!("{:=<14}", "");
     for _i in 0..issue_keys_by_command_line_order.len() {
         print!(" {:=<8}", "");
@@ -191,7 +191,7 @@ fn print_double_line(issue_keys_by_command_line_order: &Vec<JiraKey>) {
     println!();
 }
 
-fn print_single_dashed_line(issue_keys_by_command_line_order: &Vec<JiraKey>) {
+fn print_single_dashed_line(issue_keys_by_command_line_order: &[JiraKey]) {
     print!("{:-<14}", "");
 
     // print the dashes for each jira_key

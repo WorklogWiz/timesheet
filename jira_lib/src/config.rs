@@ -141,33 +141,11 @@ fn create_configuration_file(application_config: &ApplicationConfig, path: &Path
 }
 
 pub fn application_config_to_string(application_config: &ApplicationConfig) -> String {
-    let toml = match toml::to_string::<ApplicationConfig>(application_config) {
+    match toml::to_string::<ApplicationConfig>(application_config) {
         Ok(s) => s,
         Err(e) => panic!("Unable to transform application config {:?} structure into Toml: {}", application_config, e),
-    };
-    toml
+    }
 }
-
-pub fn write_configuration(application_config: &ApplicationConfig, path: &PathBuf) {
-    debug!("Writing configuration to {}", &path.to_string_lossy());
-
-    let mut file = match File::create(path) {
-        Ok(f) => f,
-        Err(_) => panic!("Unable to create file named '{}'", path.to_string_lossy()),
-    };
-    let toml = match toml::to_string::<ApplicationConfig>(application_config) {
-        Ok(s) => s,
-        Err(e) => panic!("Unable to transform application config {:?} structure into Toml: {}", application_config, e),
-    };
-
-    debug!("Configuration is: {:?}", &toml);
-
-    match file.write_all(toml.as_bytes()) {
-        Ok(_) => {}
-        Err(e) => panic!("Unable to write configuration to TOML file: {}", e)
-    };
-}
-
 
 #[cfg(test)]
 mod tests {

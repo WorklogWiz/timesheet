@@ -185,7 +185,7 @@ async fn main() {
                     add.comment,
                 )
                 .await;
-            } else if add.durations.len() >= 1 && add.durations[0].chars().next().unwrap() >= 'A' {
+            } else if !add.durations.is_empty() && add.durations[0].chars().next().unwrap() >= 'A' {
                 debug!("Handling multiple entries");
                 add_multiple_entries(
                     jira_client,
@@ -301,8 +301,7 @@ async fn main() {
             }
 
             issue_and_entry_report(&mut worklog_entries, &mut issue_information);
-            println!("");
-            // old_weekly_summary_report(&mut worklog_entries);
+            println!();
 
             let issue_keys_by_command_line_order = status
                 .issues
@@ -380,7 +379,7 @@ async fn main() {
 fn get_jira_client() -> JiraClient {
     let app_config = get_app_config();
 
-    let jira_client = match jira_lib::JiraClient::new(
+    match jira_lib::JiraClient::new(
         &app_config.jira.jira_url,
         &app_config.jira.user,
         &app_config.jira.token,
@@ -390,8 +389,7 @@ fn get_jira_client() -> JiraClient {
             eprintln!("ERROR: Unable to create a new http-client for Jira: {}", e);
             exit(8);
         }
-    };
-    jira_client
+    }
 }
 
 fn get_app_config() -> ApplicationConfig {
@@ -480,8 +478,8 @@ fn old_weekly_summary_report(worklog_entries: &mut [Worklog]) {
             dt.weekday(),
             duration_this_day
         );
-        sum_per_week = sum_per_week + accum_per_day;
-        sum_per_month = sum_per_month + accum_per_day;
+        sum_per_week += accum_per_day;
+        sum_per_month += accum_per_day;
     }
     print_sum_per_week(&mut sum_per_week, Local::now().iso_week().week());
 
@@ -500,8 +498,8 @@ fn issue_and_entry_report(
     issue_information: &mut HashMap<String, JiraIssue>,
 ) {
     println!(
-        "{:8} {:7} {:7} {:<7} {:22} {:10} {}",
-        "Issue", "IssueId", "Id", "Weekday", "Started", "Time spent", "Comment"
+        "{:8} {:7} {:7} {:<7} {:22} {:10} Comment",
+        "Issue", "IssueId", "Id", "Weekday", "Started", "Time spent",
     );
     status_entries.sort_by(|e, other| {
         e.issueId
@@ -512,7 +510,7 @@ fn issue_and_entry_report(
     for e in status_entries.iter() {
         let issue_key: &str = match issue_information.get(&e.issueId) {
             None => "Unknown",
-            Some(issue) => &issue.key.value(),
+            Some(issue) => issue.key.value(),
         };
         println!(
             "{:8} {:7} {:7} {:<7} {:22} {:10} {}",
@@ -679,7 +677,7 @@ pub fn print_sum_per_week(sum_per_week: &mut i32, week: u32) {
     println!(
         "ISO week {}, sum: {} ",
         week,
-        date_util::seconds_to_hour_and_min(&sum_per_week)
+        date_util::seconds_to_hour_and_min(sum_per_week)
     );
     println!("{:=<23}", "");
     println!();
