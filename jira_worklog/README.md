@@ -44,6 +44,14 @@ Once you have downloaded and installed `jira_worklog` in your path:
    # Creates the configuration file and stores your credentials in it
     jira_worklog config --user steinar.cook@autostoresystem.com --token vbF**************E3
     ````
+### Using `curl` to verify your security token
+Here is how you can retrieve data from Jira using the `curl` utility from the command line:
+````shell
+curl --request GET \
+  --url 'https://autostore.atlassian.net/rest/api/2/myself' \
+  --user '<your email here>@autostoresystem.com:<paste your security token here>' \
+  --header 'Accept: application/json'
+````
 
 ### Notes on security
 The configuration file is stored without encryption in a location, which depends on the operating system you are using.

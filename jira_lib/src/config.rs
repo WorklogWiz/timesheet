@@ -7,20 +7,12 @@ use directories::ProjectDirs;
 use log::debug;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Default)]
 pub struct ApplicationConfig {
     pub jira: Jira,
     pub dbms: WorklogDBMS,
 }
 
-impl Default for ApplicationConfig {
-    fn default() -> Self {
-        ApplicationConfig {
-            jira: Default::default(),
-            dbms: Default::default(),
-        }
-    }
-}
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct WorklogDBMS {

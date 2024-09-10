@@ -298,7 +298,7 @@ impl JiraClient {
         Ok(JiraClient {
             jira_url: jira_url.to_string(),
             user_name: user_name.to_string(),
-            http_client: http_client,
+            http_client,
         })
     }
 
@@ -330,8 +330,6 @@ impl JiraClient {
 
     fn create_auth_value(user: &str, token: &str) -> String {
         debug!("create_auth_value({},{})", user, token);
-        let user = user;
-        let token = token;
         let mut s: String = String::from(user);
         s.push(':');
         s.push_str(token);
@@ -361,7 +359,7 @@ impl JiraClient {
         &self,
         filter_projects_opt: Option<Vec<String>>,
     ) -> Vec<JiraProject> {
-        let filter = filter_projects_opt.unwrap_or(vec![]);
+        let filter = filter_projects_opt.unwrap_or_default();
         self.get_all_projects(filter).await
     }
 
