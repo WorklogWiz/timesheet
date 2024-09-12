@@ -2,6 +2,7 @@ use std::fs::{create_dir_all, File};
 use std::{fs, io};
 use std::io::{ Read, Write};
 use std::path::{Path, PathBuf};
+use std::process::exit;
 use directories;
 use directories::ProjectDirs;
 use log::debug;
@@ -92,8 +93,15 @@ fn read_configuration(path: &Path) -> Result<ApplicationConfig, io::Error> {
 
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
-    let config: ApplicationConfig = toml::from_str(&contents).unwrap();
-    Ok(config)
+    match toml::from_str::<ApplicationConfig>(&contents){
+        Ok(config) => Ok(config),
+        Err(err) => {
+            eprintln!("ERROR: Unable to parse {}", path.to_string_lossy());
+            eprintln!("Cause: {:?}", err);
+
+            exit(4);
+        }
+    }
 }
 
 

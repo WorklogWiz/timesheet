@@ -26,7 +26,7 @@ Disclaimer: Network latency and the response time of Jira is the main culprit of
 jira_worklog add -i time-94 -d 1d
 
 # Give me status for the last 30 days for time-94 and time-40
-jira_worklog status - time-94 time-40
+jira_worklog status -i time-94 time-40
 ````
 
 See the detailed examples below for more details.

@@ -1,4 +1,4 @@
-use jira_lib::{Author, JiraFields, JiraIssue, JiraProject, Worklog};
+use jira_lib::{Author, JiraFields, JiraIssue, JiraKey, JiraProject, Worklog};
 
 #[test]
 fn test_collect_authors() {
@@ -11,7 +11,7 @@ fn test_collect_authors() {
         issues: vec![JiraIssue {
             id: "".to_string(),
             self_url: "".to_string(),
-            key: "".to_string(),
+            key: JiraKey("".to_string()),
             fields: JiraFields {summary: "Rubbish".to_string(),asset: Option::None },
             worklogs: vec![
                 Worklog {
@@ -27,6 +27,7 @@ fn test_collect_authors() {
                     timeSpent: "".to_string(),
                     timeSpentSeconds: 0,
                     issueId: "".to_string(),
+                    comment: None,
                 },
                 Worklog {
                     author: Author {
@@ -41,6 +42,7 @@ fn test_collect_authors() {
                     timeSpent: "".to_string(),
                     timeSpentSeconds: 0,
                     issueId: "".to_string(),
+                    comment: None,
                 },
                 Worklog {
                     author: Author {
@@ -55,6 +57,7 @@ fn test_collect_authors() {
                     timeSpent: "".to_string(),
                     timeSpentSeconds: 0,
                     issueId: "".to_string(),
+                    comment: None,
                 },
             ],
         }],

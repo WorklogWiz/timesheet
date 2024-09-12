@@ -4,6 +4,7 @@ use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
 use std::fmt::Formatter;
+use std::process::exit;
 use std::time::Instant;
 
 use chrono::{DateTime, Days, Local, Months, NaiveDateTime, NaiveTime, TimeZone, Utc};
@@ -66,8 +67,7 @@ pub struct Worklog {
     pub started: DateTime<Utc>,
     pub timeSpent: String,
     pub timeSpentSeconds: i32,
-    pub issueId: String,
-    // Numeric FK to issue
+    pub issueId: String,    // Numeric FK to issue
     pub comment: Option<String>,
 }
 
@@ -535,7 +535,6 @@ impl JiraClient {
         max_results: i32,
         started_after: NaiveDateTime,
     ) -> String {
-
         format!(
             "/issue/{}/worklog?startAt={}&maxResults={}&startedAfter={}",
             issue_key,
@@ -737,6 +736,8 @@ impl JiraClient {
         body: String,
         http_status_code: StatusCode,
     ) -> Result<T, StatusCode> {
+
+
         let response = http_client
             .post(url.clone())
             .body(body)
@@ -749,10 +750,13 @@ impl JiraClient {
             match response.json::<T>().await {
                 Ok(worklog) => Ok(worklog),
                 Err(e) => {
-                    panic!("Unable to parse respose to something meaningful: {:?}", e)
+                    eprintln!("ERROR: posting to {}", url);
+                    eprintln!("ERROR: Unable to deserialize the json body {:?}", e);
+                    exit(4);
                 }
             }
         } else {
+            eprintln!("HTTP Post to {}\n failed: {:?}", url, response);
             Err(response.status())
         }
     }
@@ -767,7 +771,14 @@ impl JiraClient {
         .await
         {
             Ok(ju) => ju,
-            Err(e) => unexpected_http_code_panic(resource, e),
+            Err(StatusCode::UNAUTHORIZED) => {
+                eprintln!("{} \nNot authorized (401) check your credentials", resource);
+                exit(4)
+            }
+            Err(e) => {
+                eprintln!("ERROR: http status code {} for {}", e, resource);
+                exit(4);
+            }
         }
     }
 
@@ -794,8 +805,9 @@ impl JiraClient {
             // Defaults to a month (approx)
             Local::now().checked_sub_days(Days::new(30)).unwrap()
         });
-        let naive_date_time =
-            DateTime::from_timestamp_millis(date_time.timestamp_millis()).unwrap().naive_local();
+        let naive_date_time = DateTime::from_timestamp_millis(date_time.timestamp_millis())
+            .unwrap()
+            .naive_local();
         let result =
             match Self::get_worklogs_for(&self.http_client, issue_key.to_string(), naive_date_time)
                 .await
@@ -812,10 +824,6 @@ impl JiraClient {
             .filter(|wl| wl.author.accountId == current_user.account_id)
             .collect())
     }
-}
-
-fn unexpected_http_code_panic(url: &str, sc: StatusCode) -> JiraUser {
-    panic!("Unexpected http code: {}, for {}", sc, url)
 }
 
 pub fn midnight_a_month_ago_in() -> NaiveDateTime {

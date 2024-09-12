@@ -369,7 +369,7 @@ mod tests {
     async fn load_config_and_get_dbms_connection() -> tokio_postgres::Client {
         let config = jira_lib::config::load_configuration().unwrap();
 
-        let mut client = dbms_async_init(&config.dbms.connect).await.unwrap();
+        let client = dbms_async_init(&config.dbms.connect).await.unwrap();
         client
     }
 
