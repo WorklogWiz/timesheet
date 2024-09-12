@@ -3,3 +3,4 @@
 .DS_Store
 Cargo.lock
 /config.backup
+/jira_worklog_etl/README.md
