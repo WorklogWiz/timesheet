@@ -107,7 +107,6 @@ pub struct TimeSpent {
 }
 
 impl TimeSpent {
-    // TODO: this should return an Err when something goes wrong rather than panicking
     pub fn from_str(
         s: &str,
         work_hours_per_day: f32,
