@@ -1,7 +1,5 @@
 use chrono;
-use chrono::{Months, NaiveDateTime, NaiveTime, TimeZone};
-use chrono_tz::Tz;
-use chrono_tz::UTC;
+use chrono::{Months, NaiveDateTime, NaiveTime};
 
 fn main() {
     let arg = "2022-01-15".to_string();
@@ -36,7 +34,9 @@ fn main() {
 #[test]
 pub fn parse_time_zone() {
 
-
+    use chrono_tz::Tz;
+    use chrono_tz::UTC;
+    use chrono::TimeZone;
     let tz: Tz = "US/Mountain".parse().unwrap();
     let dt = tz.ymd(2023, 4, 22).and_hms(12,0,0);
     let utc = dt.with_timezone(&UTC);

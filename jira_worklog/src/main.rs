@@ -12,6 +12,8 @@ use jira_lib::config::{
     save_configuration,
 };
 use jira_lib::{config, JiraClient, JiraIssue, JiraKey, TimeTrackingConfiguration, Worklog};
+use jira_lib::journal::add_journal;
+
 use log::{debug, info};
 use reqwest::StatusCode;
 use std::collections::{BTreeMap, HashMap};
@@ -22,6 +24,7 @@ use std::{env, fmt};
 
 mod date_util;
 mod table_report;
+
 
 #[derive(Parser)]
 /// Jira worklog utility - add, delete and list jira worklog entries
@@ -146,10 +149,11 @@ async fn main() {
 
     let opts: Opts = Opts::parse();
     configure_logging(&opts); // Handles the -v option
+    let app_config = get_app_config();
 
     match opts.subcmd {
         SubCommand::Add(mut add) => {
-            let jira_client = get_jira_client();
+            let jira_client = get_jira_client(&app_config);
 
             let time_tracking_options = match jira_client.get_time_tracking_options().await {
                 Ok(t) => t,
@@ -205,7 +209,7 @@ async fn main() {
         }
 
         SubCommand::Del(delete) => {
-            let jira_client = get_jira_client();
+            let jira_client = get_jira_client(&app_config);
 
             let current_user = jira_client.get_current_user().await;
             let worklog_entry = match jira_client
@@ -252,7 +256,7 @@ async fn main() {
         }
 
         SubCommand::Status(status) => {
-            let jira_client = get_jira_client();
+            let jira_client = get_jira_client(&app_config);
             // TODO: Convert started_after from String in ISO8601 form to DateTime<Local>
             let start_after = status.after.map(|s| str_to_date_time(&s).unwrap());
 
@@ -316,6 +320,8 @@ async fn main() {
         }
 
         SubCommand::Config(config) => match config {
+
+            // List current configuration
             Configuration {
                 list: true,
                 remove: false,
@@ -323,6 +329,7 @@ async fn main() {
             } => {
                 list_config_and_exit();
             }
+            // Add new values to the configuration
             Configuration {
                 user,
                 token,
@@ -376,8 +383,7 @@ async fn main() {
     }
 }
 
-fn get_jira_client() -> JiraClient {
-    let app_config = get_app_config();
+fn get_jira_client(app_config: &ApplicationConfig) -> JiraClient {
 
     match jira_lib::JiraClient::new(
         &app_config.jira.jira_url,
@@ -574,7 +580,7 @@ async fn add_single_entry(
     duration: &str,
     started: Option<String>,
     comment: Option<String>,
-) {
+)  {
     debug!(
         "add_single_entry({}, {}, {:?}, {:?})",
         &issue, duration, started, comment
@@ -639,12 +645,14 @@ async fn add_single_entry(
 
     println!(
         "Added work log entry Id: {} Time spent: {} Time spent in seconds: {} Comment: {}",
-        result.id,
-        result.timeSpent,
-        result.timeSpentSeconds,
-        result.comment.unwrap_or("".to_string())
+        &result.id,
+        &result.timeSpent,
+        &result.timeSpentSeconds,
+        &result.comment.unwrap_or("".to_string())
     );
     println!("To delete entry: jira_worklog del -i {} -w {}", issue, result.id);
+
+
 }
 
 fn configure_logging(opts: &Opts) {

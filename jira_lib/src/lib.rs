@@ -20,6 +20,7 @@ use serde::Deserialize;
 use serde::Serialize;
 
 pub mod config;
+pub mod journal;
 
 pub const JIRA_URL: &str = "https://autostore.atlassian.net/rest/api/latest";
 const FUTURE_BUFFER_SIZE: usize = 20;

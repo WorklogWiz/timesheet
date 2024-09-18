@@ -1,29 +1,52 @@
-use std::fs::{create_dir_all, File};
-use std::{fs, io};
-use std::io::{ Read, Write};
-use std::path::{Path, PathBuf};
-use std::process::exit;
 use directories;
 use directories::ProjectDirs;
 use log::debug;
 use serde::{Deserialize, Serialize};
+use std::fs::{create_dir_all, File};
+use std::io::{Read, Write};
+use std::path::{Path, PathBuf};
+use std::process::exit;
+use std::{fs, io};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Default)]
 pub struct ApplicationConfig {
     pub jira: Jira,
     pub dbms: WorklogDBMS,
+    /// This will ensure that the filename is created, even if the Toml file
+    /// is an old version, which does not have an application_data section
+    #[serde(default="default_application_data_section")]
+    pub application_data: ApplicationData,
 }
 
+/// Holds the configuration for the application_data section of the Toml file
+#[derive(Serialize,Deserialize,Debug,PartialEq)]
+pub struct ApplicationData {
+    pub journal_data_file_name: String,
+}
+
+impl Default for ApplicationData {
+    fn default() -> Self {
+        ApplicationData { journal_data_file_name: journal_data_file_name().to_string_lossy().to_string() }
+    }
+}
+
+fn default_application_data_section() -> ApplicationData {
+    ApplicationData::default()
+}
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct WorklogDBMS {
-    // host=.... user=.... password=.... (note space as delimiteder beteween key/values
-    pub connect: String,    // Connect string
+    // host=.... user=.... password=.... (note space as delimiter between key/values
+    pub connect: String, // Connect string
 }
 
 impl Default for WorklogDBMS {
     fn default() -> Self {
-        WorklogDBMS { connect: "host=postgres.testenv.autostoresystem.com user=postgres password=***************".to_string() }
+        WorklogDBMS {
+            connect:
+                "host=postgres.testenv.autostoresystem.com user=postgres password=***************"
+                    .to_string(),
+        }
     }
 }
 
@@ -36,14 +59,32 @@ pub struct Jira {
 
 impl Default for Jira {
     fn default() -> Self {
-        Jira { jira_url: "https://autostore.atlassian.net/rest/api/latest".to_string(), user: "user.name@autostoresystem.com".to_string(), token: "< your secrete Jira token goes here>".to_string() }
+        Jira {
+            jira_url: "https://autostore.atlassian.net/rest/api/latest".to_string(),
+            user: "user.name@autostoresystem.com".to_string(),
+            token: "< your secrete Jira token goes here>".to_string(),
+        }
     }
 }
 
 pub fn config_file_name() -> PathBuf {
-    let project_dirs = ProjectDirs::from("com", "autostore", "jira_worklog").expect("Unable to determine the name of the configuration file");
+    let project_dirs = project_dirs();
     let p = project_dirs.preference_dir();
     PathBuf::from(p)
+}
+
+pub fn journal_data_file_name() -> PathBuf {
+    let p = project_dirs();
+    let data_dir = p.data_dir();
+    let journal_file_name = data_dir.join("worklog_journal.csv");
+
+    PathBuf::from(journal_file_name)
+}
+
+fn project_dirs() -> ProjectDirs {
+    let project_dirs = ProjectDirs::from("com", "autostore", "jira_worklog")
+        .expect("Unable to determine the name of the 'project_dirs' directory name");
+    project_dirs
 }
 
 pub fn load_configuration() -> Result<ApplicationConfig, io::Error> {
@@ -55,7 +96,7 @@ pub fn save_configuration(application_config: ApplicationConfig) {
 }
 
 pub fn remove_configuration() -> std::io::Result<()> {
-       fs::remove_file(config_file_name().as_path())
+    fs::remove_file(config_file_name().as_path())
 }
 
 pub fn create_and_save_sample_configuration() -> Result<ApplicationConfig, io::Error> {
@@ -66,10 +107,8 @@ pub fn create_and_save_sample_configuration() -> Result<ApplicationConfig, io::E
 
 pub fn load_or_create_configuration() -> Result<ApplicationConfig, io::Error> {
     match is_configuration_file_available() {
-        None => {
-             create_and_save_sample_configuration()
-        }
-        Some(app_config) => Ok(app_config)
+        None => create_and_save_sample_configuration(),
+        Some(app_config) => Ok(app_config),
     }
 }
 
@@ -78,7 +117,13 @@ pub fn is_configuration_file_available() -> Option<ApplicationConfig> {
     if p.exists() && p.is_file() {
         match load_configuration() {
             Ok(app_config) => Some(app_config),
-            Err(e) => { panic!("Unable to load the configuration file from {}, reson: {}", config_file_name().to_string_lossy(), e) }
+            Err(e) => {
+                panic!(
+                    "Unable to load the configuration file from {}, reson: {}",
+                    config_file_name().to_string_lossy(),
+                    e
+                )
+            }
         }
     } else {
         Option::None
@@ -88,12 +133,12 @@ pub fn is_configuration_file_available() -> Option<ApplicationConfig> {
 fn read_configuration(path: &Path) -> Result<ApplicationConfig, io::Error> {
     let mut file = match File::open(path) {
         Ok(f) => f,
-        Err(e) => return Err(e)
+        Err(e) => return Err(e),
     };
 
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
-    match toml::from_str::<ApplicationConfig>(&contents){
+    match toml::from_str::<ApplicationConfig>(&contents) {
         Ok(config) => Ok(config),
         Err(err) => {
             eprintln!("ERROR: Unable to parse {}", path.to_string_lossy());
@@ -104,36 +149,49 @@ fn read_configuration(path: &Path) -> Result<ApplicationConfig, io::Error> {
     }
 }
 
-
 fn create_configuration_file(application_config: &ApplicationConfig, path: &PathBuf) {
     let directory = path.parent().unwrap();
     match directory.try_exists() {
         Ok(_) => {}
         Err(_) => {
-            debug!("Some parts of {} does not exist", directory.to_string_lossy());
+            debug!(
+                "Some parts of {} does not exist",
+                directory.to_string_lossy()
+            );
             match std::fs::create_dir_all(directory) {
                 Ok(_) => {
                     debug!("Created path {}", directory.to_string_lossy())
                 }
-                Err(e) => { panic!("Unable to create path {}, {}", directory.to_string_lossy(), e) }
+                Err(e) => {
+                    panic!(
+                        "Unable to create path {}, {}",
+                        directory.to_string_lossy(),
+                        e
+                    )
+                }
             }
         }
     }
 
-    match path.parent(){
-        None => { },   // Root directory ??
-        Some(parent ) => {
-            match create_dir_all(parent) {
-                Err(e) => {
-                    panic!("Unable to recursively create directory {}, cause: {}", parent.to_string_lossy(),e)
-                },
-                Ok(()) => {
-                    if !parent.is_dir() {
-                        panic!("Interesting, directory {} created, but it does not exis!", parent.to_string_lossy());
-                    }
+    match path.parent() {
+        None => {} // Root directory ??
+        Some(parent) => match create_dir_all(parent) {
+            Err(e) => {
+                panic!(
+                    "Unable to recursively create directory {}, cause: {}",
+                    parent.to_string_lossy(),
+                    e
+                )
+            }
+            Ok(()) => {
+                if !parent.is_dir() {
+                    panic!(
+                        "Interesting, directory {} created, but it does not exis!",
+                        parent.to_string_lossy()
+                    );
                 }
             }
-        }
+        },
     }
 
     let mut file = match File::create(path) {
@@ -144,14 +202,17 @@ fn create_configuration_file(application_config: &ApplicationConfig, path: &Path
 
     match file.write_all(toml.as_bytes()) {
         Ok(_) => {}
-        Err(e) => panic!("Unable to write configuration to TOML file: {}", e)
+        Err(e) => panic!("Unable to write configuration to TOML file: {}", e),
     };
 }
 
 pub fn application_config_to_string(application_config: &ApplicationConfig) -> String {
     match toml::to_string::<ApplicationConfig>(application_config) {
         Ok(s) => s,
-        Err(e) => panic!("Unable to transform application config {:?} structure into Toml: {}", application_config, e),
+        Err(e) => panic!(
+            "Unable to transform application config {:?} structure into Toml: {}",
+            application_config, e
+        ),
     }
 }
 
@@ -159,13 +220,58 @@ pub fn application_config_to_string(application_config: &ApplicationConfig) -> S
 mod tests {
     use super::*;
 
+    #[cfg(target_os = "macos")]
+    const MAC_OS_APP_DATA_DIR: &str = "Application Support";
+
     #[test]
     pub fn test_load_configuration() {
         let config_result = load_configuration();
-        assert!(config_result.is_ok(), "Unable to load {}", config_file_name().to_string_lossy());
+        assert!(
+            config_result.is_ok(),
+            "Unable to load {}",
+            config_file_name().to_string_lossy()
+        );
 
         let config = config_result.unwrap();
         println!("Config: {:?}", config);
+    }
+
+    #[test]
+    fn test_tom_parsing() {
+        let toml_str = r#"
+        [jira]
+        jira_url = "http"
+        user = "steinar"
+        token = "rubbish"
+
+        [dbms]
+        connect = "some postgres gibberish"
+
+        [application_data]
+        journal_data_file_name = "journal"
+        "#;
+
+        let app_config:ApplicationConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(app_config.application_data.journal_data_file_name, "journal");
+    }
+
+
+    /// Verifies that the journal_data_file_name is populated with a reasonable default even if it
+    /// does not exist in the configuration file on disk
+    #[test]
+    fn test_toml_parsing_with_defaults_generated() {
+        let toml_str = r#"
+        [jira]
+        jira_url = "http"
+        user = "steinar"
+        token = "rubbish"
+
+        [dbms]
+        connect = "some postgres gibberish"
+        "#;
+
+        let app_config:ApplicationConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(app_config.application_data.journal_data_file_name, journal_data_file_name().to_string_lossy());
     }
 
     #[test]
@@ -176,6 +282,9 @@ mod tests {
         let tmp_config_file = std::env::temp_dir().join(file_name);
 
         let application_config = ApplicationConfig::default();
+        if cfg!(target_os = "macos") {
+            assert!(&application_config.application_data.journal_data_file_name.contains(MAC_OS_APP_DATA_DIR));
+        }
 
         create_configuration_file(&application_config, &tmp_config_file);
         if let Ok(result) = read_configuration(&tmp_config_file) {
@@ -183,5 +292,16 @@ mod tests {
         } else {
             panic!("Unable to read the TOML configuration back from disk");
         }
+    }
+
+    #[test]
+    fn test_data_dir_on_mac() {
+        let p = journal_data_file_name();
+
+        if cfg!(target_os = "macos") {
+            assert!(p.to_string_lossy().to_string().contains("Application Support"));
+        }
+
+        eprintln!("{:?}", p.to_string_lossy());
     }
 }

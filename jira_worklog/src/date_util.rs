@@ -1,5 +1,8 @@
 use chrono::offset::TimeZone;
-use chrono::{Datelike, DateTime, Days, Duration, Local, Month, NaiveDate, NaiveDateTime, NaiveTime, ParseResult, Weekday};
+use chrono::{
+    DateTime, Datelike, Days, Duration, Local, Month, NaiveDate, NaiveDateTime, NaiveTime,
+    ParseResult, Weekday,
+};
 use lazy_static::lazy_static;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
@@ -63,7 +66,11 @@ fn test_as_date_time() {
 #[derive(Debug)]
 pub enum DateTimeError {
     InvalidInput(String),
-    StartAndDurationExceedsNow{start : DateTime<Local>, duration: Duration , end: DateTime<Local>},
+    StartAndDurationExceedsNow {
+        start: DateTime<Local>,
+        duration: Duration,
+        end: DateTime<Local>,
+    },
 }
 
 impl Display for DateTimeError {
@@ -72,8 +79,19 @@ impl Display for DateTimeError {
             DateTimeError::InvalidInput(s) => {
                 write!(f, "Invalid input {}", s)
             }
-            DateTimeError::StartAndDurationExceedsNow{start, duration, end} => {
-                write!(f, "Starting point {} + duration {} gives {}, which is greater than {} (now)", start, duration, end, Local::now())
+            DateTimeError::StartAndDurationExceedsNow {
+                start,
+                duration,
+                end,
+            } => {
+                write!(
+                    f,
+                    "Starting point {} + duration {} gives {}, which is greater than {} (now)",
+                    start,
+                    duration,
+                    end,
+                    Local::now()
+                )
             }
         }
     }
@@ -89,21 +107,26 @@ pub struct TimeSpent {
 }
 
 impl TimeSpent {
+    // TODO: this should return an Err when something goes wrong rather than panicking
     pub fn from_str(
         s: &str,
         work_hours_per_day: f32,
         working_days_per_week: f32,
-    ) -> Result<TimeSpent, chrono::ParseError> {
-        let (dur, unit) = Self::parse_to_unit_and_duration(s).unwrap();
+    ) -> Result<TimeSpent, DateTimeError> {
+        let (dur, unit) = match Self::parse_to_unit_and_duration(s) {
+            Ok(result) => result,
+            Err(err) => return Err(DateTimeError::InvalidInput(s.to_string())),
+        };
 
         let seconds = match unit.as_str() {
             "h" | "H" => (dur * 3600.0) as i32,
             "d" | "D" => (dur * work_hours_per_day * 3600.0) as i32,
-            "w" | "W" => {
-                (dur * working_days_per_week * work_hours_per_day * 3600.0) as i32
-            }
+            "w" | "W" => (dur * working_days_per_week * work_hours_per_day * 3600.0) as i32,
             _ => {
-                panic!("Don't know how to handle units of '{}', expected 'h','d', or 'w'", unit)
+                panic!(
+                    "Don't know how to handle units of '{}', expected 'h','d', or 'w'",
+                    unit
+                )
             }
         };
 
@@ -144,10 +167,8 @@ impl TimeSpent {
 
 #[test]
 fn test_parse_to_unit_and_duration() {
-
     assert!(TimeSpent::parse_to_unit_and_duration("1,5h").is_ok());
     assert!(TimeSpent::parse_to_unit_and_duration("Mon:1,5h").is_err());
-
 }
 
 #[test]
@@ -213,7 +234,11 @@ pub fn calculate_started_time(
         .checked_add_signed(duration)
         .unwrap();
     if end_time.gt(&now) {
-        Err(DateTimeError::StartAndDurationExceedsNow{start: proposed_starting_point, duration, end: end_time })
+        Err(DateTimeError::StartAndDurationExceedsNow {
+            start: proposed_starting_point,
+            duration,
+            end: end_time,
+        })
     } else {
         Ok(proposed_starting_point) // It's ok
     }
@@ -262,16 +287,16 @@ pub fn parse_worklog_durations(entries: Vec<String>) -> Vec<(Weekday, f32, Strin
                 // Parses 3 character weekday abbreviation to Weekday enumerator
                 let week_day = String::from(&captured[1]).parse::<Weekday>().unwrap();
                 // Parses the duration into duration and unit as separate values
-                let (duration, unit) = TimeSpent::parse_to_unit_and_duration(&captured[2]).expect("parsing error!");
+                let (duration, unit) =
+                    TimeSpent::parse_to_unit_and_duration(&captured[2]).expect("parsing error!");
 
                 result.push((week_day, duration, unit));
             }
-            None => panic!("Could not parse {} into weekday, duration and unit", s)
+            None => panic!("Could not parse {} into weekday, duration and unit", s),
         }
     }
     result
 }
-
 
 pub fn date_of_last_weekday(weekday: Weekday) -> DateTime<Local> {
     last_weekday_from(Local::now(), weekday)
@@ -280,9 +305,8 @@ pub fn date_of_last_weekday(weekday: Weekday) -> DateTime<Local> {
 /// Given a Weekday, like for instance Friday, find the first Friday in the past given the
 /// supplied starting point
 /// Will return today's date if you supply today's weekday
-pub fn last_weekday_from(starting_date : DateTime<Local>, weekday: Weekday) -> DateTime<Local> {
-
-    let mut current_date : DateTime<Local> = starting_date;
+pub fn last_weekday_from(starting_date: DateTime<Local>, weekday: Weekday) -> DateTime<Local> {
+    let mut current_date: DateTime<Local> = starting_date;
     let one_day = Days::new(1);
 
     for _n in 0..7 {
@@ -292,36 +316,80 @@ pub fn last_weekday_from(starting_date : DateTime<Local>, weekday: Weekday) -> D
         // Skips to previous day
         current_date = current_date.checked_sub_days(one_day).unwrap();
     }
-    panic!("Internal error in transforming {} into a date from starting date {}", weekday, starting_date.date_naive() )
+    panic!(
+        "Internal error in transforming {} into a date from starting date {}",
+        weekday,
+        starting_date.date_naive()
+    )
 }
 
 #[test]
 fn test_weekday_to_date_backwards() {
-    let d = last_weekday_from(Local.with_ymd_and_hms(2023, 5, 31, 0, 0, 0).unwrap(), Weekday::Wed);
-    assert_eq!(d, Local.with_ymd_and_hms(2023,5,31, 0, 0, 0).unwrap(),"Should have been same day");
+    let d = last_weekday_from(
+        Local.with_ymd_and_hms(2023, 5, 31, 0, 0, 0).unwrap(),
+        Weekday::Wed,
+    );
+    assert_eq!(
+        d,
+        Local.with_ymd_and_hms(2023, 5, 31, 0, 0, 0).unwrap(),
+        "Should have been same day"
+    );
 
-    let d = last_weekday_from(Local.with_ymd_and_hms(2023, 5, 31, 0, 0, 0).unwrap(), Weekday::Tue);
-    assert_eq!(d, Local.with_ymd_and_hms(2023,5,30, 0, 0, 0).unwrap(), "Should give day before");
+    let d = last_weekday_from(
+        Local.with_ymd_and_hms(2023, 5, 31, 0, 0, 0).unwrap(),
+        Weekday::Tue,
+    );
+    assert_eq!(
+        d,
+        Local.with_ymd_and_hms(2023, 5, 30, 0, 0, 0).unwrap(),
+        "Should give day before"
+    );
 
-    let d = last_weekday_from(Local.with_ymd_and_hms(2023, 6, 1, 0, 0, 0).unwrap(), Weekday::Fri);
-    assert_eq!(d, Local.with_ymd_and_hms(2023,5,26, 0, 0, 0).unwrap(), "Should give day before");
-
+    let d = last_weekday_from(
+        Local.with_ymd_and_hms(2023, 6, 1, 0, 0, 0).unwrap(),
+        Weekday::Fri,
+    );
+    assert_eq!(
+        d,
+        Local.with_ymd_and_hms(2023, 5, 26, 0, 0, 0).unwrap(),
+        "Should give day before"
+    );
 }
 
 #[test]
 fn test_parse_durations() {
-    assert_eq!(parse_worklog_durations(vec!["Mon:1,5h".to_string()]), vec![(chrono::Weekday::Mon, 1.5f32, "h".to_string())]);
-    assert_eq!(parse_worklog_durations(vec!["Tue:1,5h".to_string()]), vec![(chrono::Weekday::Tue, 1.5f32, "h".to_string())]);
-    assert_eq!(parse_worklog_durations(vec!["Wed:1,5h".to_string()]), vec![(chrono::Weekday::Wed, 1.5f32, "h".to_string())]);
-    assert_eq!(parse_worklog_durations(vec!["Thu:1.5h".to_string()]), vec![(chrono::Weekday::Thu, 1.5f32, "h".to_string())]);
-    assert_eq!(parse_worklog_durations(vec!["Fri:1,5h".to_string()]), vec![(chrono::Weekday::Fri, 1.5f32, "h".to_string())]);
-    assert_eq!(parse_worklog_durations(vec!["Sat:1,5h".to_string()]), vec![(chrono::Weekday::Sat, 1.5f32, "h".to_string())]);
-    assert_eq!(parse_worklog_durations(vec!["Sun:1,5h".to_string()]), vec![(chrono::Weekday::Sun, 1.5f32, "h".to_string())]);
+    assert_eq!(
+        parse_worklog_durations(vec!["Mon:1,5h".to_string()]),
+        vec![(chrono::Weekday::Mon, 1.5f32, "h".to_string())]
+    );
+    assert_eq!(
+        parse_worklog_durations(vec!["Tue:1,5h".to_string()]),
+        vec![(chrono::Weekday::Tue, 1.5f32, "h".to_string())]
+    );
+    assert_eq!(
+        parse_worklog_durations(vec!["Wed:1,5h".to_string()]),
+        vec![(chrono::Weekday::Wed, 1.5f32, "h".to_string())]
+    );
+    assert_eq!(
+        parse_worklog_durations(vec!["Thu:1.5h".to_string()]),
+        vec![(chrono::Weekday::Thu, 1.5f32, "h".to_string())]
+    );
+    assert_eq!(
+        parse_worklog_durations(vec!["Fri:1,5h".to_string()]),
+        vec![(chrono::Weekday::Fri, 1.5f32, "h".to_string())]
+    );
+    assert_eq!(
+        parse_worklog_durations(vec!["Sat:1,5h".to_string()]),
+        vec![(chrono::Weekday::Sat, 1.5f32, "h".to_string())]
+    );
+    assert_eq!(
+        parse_worklog_durations(vec!["Sun:1,5h".to_string()]),
+        vec![(chrono::Weekday::Sun, 1.5f32, "h".to_string())]
+    );
 }
 
 #[test]
 fn test_date_and_timezone_conversion() {
-
     let utc = chrono::Utc::now();
     println!("{}", utc);
 
@@ -335,7 +403,6 @@ fn test_date_and_timezone_conversion() {
     let hour = 45000 / 3600;
     let minutes = (45000 % 3600) / 60;
     println!("{}:{}", hour, minutes);
-
 }
 
 // This ought to be part of the Rust runtime :-)

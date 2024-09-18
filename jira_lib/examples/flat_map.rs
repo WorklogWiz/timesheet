@@ -1,4 +1,4 @@
-use tokio_postgres::types::ToSql;
+use postgres_types::ToSql;
 
 
 struct Person {
