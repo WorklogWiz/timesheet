@@ -6,7 +6,8 @@ use std::fmt;
 use std::fmt::Formatter;
 use std::process::exit;
 use std::time::Instant;
-
+use base64::prelude::*;
+use base64::Engine;
 use chrono::{DateTime, Days, Local, Months, NaiveDateTime, NaiveTime, TimeZone, Utc};
 use futures::StreamExt;
 use log::{debug, info};
@@ -21,6 +22,7 @@ use serde::Serialize;
 
 pub mod config;
 pub mod journal;
+pub mod date_util;
 
 pub const JIRA_URL: &str = "https://autostore.atlassian.net/rest/api/latest";
 const FUTURE_BUFFER_SIZE: usize = 20;
@@ -334,7 +336,7 @@ impl JiraClient {
         let mut s: String = String::from(user);
         s.push(':');
         s.push_str(token);
-        let b64 = base64::encode(s.as_bytes());
+        let b64 = BASE64_STANDARD.encode(s.as_bytes());
         let authorisation = format!("Basic {}", b64);
         debug!("Created this BASIC auth string: '{}'", authorisation);
         authorisation

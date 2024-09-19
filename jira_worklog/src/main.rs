@@ -1,6 +1,6 @@
 //! # The Jira worklog command line utility
 //!
-use crate::date_util::{
+use jira_lib::date_util::{
     calculate_started_time, date_of_last_weekday, DateTimeError, parse_worklog_durations,
     str_to_date_time, TimeSpent,
 };
@@ -11,7 +11,7 @@ use jira_lib::config::{
     ApplicationConfig, config_file_name, load_or_create_configuration, remove_configuration,
     save_configuration,
 };
-use jira_lib::{config, JiraClient, JiraIssue, JiraKey, TimeTrackingConfiguration, Worklog};
+use jira_lib::{config, date_util, JiraClient, JiraIssue, JiraKey, TimeTrackingConfiguration, Worklog};
 use jira_lib::journal::{add_worklog_entries_to_journal, JournalEntry};
 
 use log::{debug, info};
@@ -22,7 +22,6 @@ use std::fs::File;
 use std::process::exit;
 use std::{env, fmt};
 
-mod date_util;
 mod table_report;
 
 

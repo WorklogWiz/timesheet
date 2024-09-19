@@ -2,7 +2,7 @@ use jira_lib::{JiraIssue, JiraKey, Worklog};
 use std::collections::{BTreeMap, HashMap};
 use chrono::{Datelike, NaiveDate};
 use log::debug;
-use crate::date_util::{month_name, seconds_to_hour_and_min};
+use jira_lib::date_util::{month_name, seconds_to_hour_and_min};
 //
 // Prints a report with tables like this:
 //
