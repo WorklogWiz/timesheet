@@ -55,7 +55,7 @@ mod tests {
     #[test]
     fn test_create_or_open_worklog_journal() {
         let tmp_config_file = std::env::temp_dir().join("worklog.tmp");
-        let journal_result = create_or_open_worklog_journal(tmp_config_file.clone());
+        let journal_result = create_or_open_worklog_journal(&tmp_config_file.clone());
         assert!(journal_result.is_ok(), "Unable to create {:?}", &tmp_config_file.to_string_lossy());
 
         let mut journal = journal_result.unwrap();
