@@ -114,7 +114,7 @@ impl TimeSpent {
     ) -> Result<TimeSpent, DateTimeError> {
         let (dur, unit) = match Self::parse_to_unit_and_duration(s) {
             Ok(result) => result,
-            Err(err) => return Err(DateTimeError::InvalidInput(s.to_string())),
+            Err(_err) => return Err(DateTimeError::InvalidInput(s.to_string())),
         };
 
         let seconds = match unit.as_str() {

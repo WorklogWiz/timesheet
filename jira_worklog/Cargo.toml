@@ -17,13 +17,14 @@ regex = "1"
 lazy_static = "1"
 log = "0.4"
 
-env_logger = "0.10"
+env_logger = "0.11.5"
 
 jira_lib = { path = "../jira_lib" }
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { version = "0.12.7", features = ["json"] }
 tokio = { version = "1", features = ["full"] }
-toml = "0.7.4"
+toml = "0.8.19"
 dirs = "5.0.1"
 directories = "5.0.1"
 
 serde = "1"
+http = "1.1.0"

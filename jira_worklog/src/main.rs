@@ -12,7 +12,7 @@ use jira_lib::config::{
     save_configuration,
 };
 use jira_lib::{config, JiraClient, JiraIssue, JiraKey, TimeTrackingConfiguration, Worklog};
-use jira_lib::journal::add_journal;
+use jira_lib::journal::{add_worklog_entries_to_journal, JournalEntry};
 
 use log::{debug, info};
 use reqwest::StatusCode;
@@ -178,9 +178,12 @@ async fn main() {
                 add.durations.len(),
                 add.durations[0].chars().next().unwrap()
             );
+
+            let mut added_worklog_items: Vec<JournalEntry> = vec![];
+
             if add.durations.len() == 1 && add.durations[0].chars().next().unwrap() <= '9' {
                 println!("Adding single entry");
-                add_single_entry(
+                let result = add_single_entry(
                     &jira_client,
                     &time_tracking_options,
                     add.issue,
@@ -189,9 +192,10 @@ async fn main() {
                     add.comment,
                 )
                 .await;
+                added_worklog_items.push(result);
             } else if !add.durations.is_empty() && add.durations[0].chars().next().unwrap() >= 'A' {
                 debug!("Handling multiple entries");
-                add_multiple_entries(
+                added_worklog_items = add_multiple_entries(
                     jira_client,
                     time_tracking_options,
                     add.issue,
@@ -206,6 +210,8 @@ async fn main() {
                 );
                 exit(4);
             }
+            // Writes the added worklog items to our local journal
+            add_worklog_entries_to_journal(added_worklog_items);
         }
 
         SubCommand::Del(delete) => {
@@ -540,9 +546,11 @@ async fn add_multiple_entries(
     issue: String,
     durations: Vec<String>,
     comment: Option<String>,
-) {
+) -> Vec<JournalEntry> {
     // Parses the list of durations in the format XXXnn,nnU, i.e. Mon:1,5h into Weekday, duration and unit
     let durations: Vec<(Weekday, f32, String)> = parse_worklog_durations(durations);
+
+    let mut inserted_worklogs: Vec<JournalEntry> = vec![];
 
     for entry in durations.into_iter() {
         let weekday = entry.0;
@@ -561,7 +569,7 @@ async fn add_multiple_entries(
             "Adding {}, {}, {}, {:?}",
             issue, &duration, started, comment
         );
-        add_single_entry(
+        let result = add_single_entry(
             &jira_client,
             &time_tracking_options,
             issue.to_string(),
@@ -570,7 +578,9 @@ async fn add_multiple_entries(
             comment.clone(),
         )
         .await;
+        inserted_worklogs.push(result);
     }
+    inserted_worklogs
 }
 
 async fn add_single_entry(
@@ -580,7 +590,7 @@ async fn add_single_entry(
     duration: &str,
     started: Option<String>,
     comment: Option<String>,
-)  {
+) -> JournalEntry {
     debug!(
         "add_single_entry({}, {}, {:?}, {:?})",
         &issue, duration, started, comment
@@ -623,13 +633,13 @@ async fn add_single_entry(
             issue.as_str(),
             calculated_start,
             time_spent_seconds,
-            comment.unwrap_or("".to_string()).as_str(),
+            comment.as_deref().unwrap_or(""),
         )
         .await
     {
         Ok(result) => result,
         Err(e) => match e {
-            StatusCode::NOT_FOUND => {
+            http::status::StatusCode::NOT_FOUND => {
                 eprintln!("WARNING: Issue {} not found", issue);
                 exit(4);
             }
@@ -648,10 +658,17 @@ async fn add_single_entry(
         &result.id,
         &result.timeSpent,
         &result.timeSpentSeconds,
-        &result.comment.unwrap_or("".to_string())
+        &result.comment.as_deref().unwrap_or("")
     );
-    println!("To delete entry: jira_worklog del -i {} -w {}", issue, result.id);
+    println!("To delete entry: jira_worklog del -i {} -w {}", issue, &result.id);
 
+    JournalEntry {
+        issue_key: issue,
+        worklog_id: result.id,
+        started: calculated_start.with_timezone(&Local),
+        time_spent_seconds: result.timeSpentSeconds,
+        comment
+    }
 
 }
 
