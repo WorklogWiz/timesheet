@@ -49,13 +49,23 @@ pub fn table_report(
 
     let mut weekly_totals_per_jira_key: BTreeMap<JiraKey, i32> = BTreeMap::new();
     let mut current_week = 0;
-    let mut monthly_totals_per_week : BTreeMap<u32, BTreeMap<u32, i32>> = BTreeMap::new();
+    // year, {month, total}
+    let mut monthly_total: BTreeMap<i32,BTreeMap<u32, i32>> = BTreeMap::new();
+
     for (date, daily_total_per_jira_key) in daily_totals_for_all_jira_key.iter() {
+
+        let daily_total: i32 = daily_total_per_jira_key.values().sum();
+        monthly_total.entry(date.year())
+            .or_default()
+            .entry(date.month())
+            .and_modify(|current_month_total| *current_month_total += daily_total)
+            .or_insert(daily_total);
+
         if current_week == 0 {
             current_week = date.iso_week().week();
         }
 
-        // End of previous week, report Weekly total
+        // If this date is in the next week, summarize for current week
         if crate::date_util::is_new_week(current_week, date) {
             print_weekly_total_per_issue(
                 issue_keys_by_command_line_order,
@@ -63,26 +73,18 @@ pub fn table_report(
                 &mut current_week,
             );
 
-
-            let current_week_totals = weekly_totals_per_jira_key.values().sum();
+            let current_week_totals:i32 = weekly_totals_per_jira_key.values().sum();
             debug!("Total for CW {} is {}", current_week, current_week_totals);
-            // Add the weekly total to the totals per month and week
-            let month_entry = monthly_totals_per_week
-                .entry(date.month())// Get or create the monthly hashmap
-                .or_default()  // If it does not exist, insert a new hashmap
-                .entry(current_week)
-                .and_modify(|v| *v += current_week_totals)
-                .or_insert(current_week_totals);
-            debug!("Monthly totals so far {:?}", month_entry);
 
-            current_week = date.iso_week().week();
+            current_week = date.iso_week().week(); // Skips to week of current date
             weekly_totals_per_jira_key.clear(); // Remove all entries, prep for next week
             print_weekly_table_header(issue_keys_by_command_line_order); // Table header for next week
         }
 
         print_daily_entry(date,issue_keys_by_command_line_order, &mut weekly_totals_per_jira_key, daily_total_per_jira_key);
     }
-    // In case the last week is incomplete, we need to print those too
+
+    // In case the last week is incomplete, we also need to print those entries
     if !weekly_totals_per_jira_key.is_empty() {
         print_weekly_total_per_issue(
             issue_keys_by_command_line_order,
@@ -91,17 +93,11 @@ pub fn table_report(
         );
     }
 
-    // Print totals for each week and each month
-    for (month_no, weekly_total) in monthly_totals_per_week {
-        let mut monthly_total = 0;
-        for (cw, week_total) in weekly_total {
-            println!("CW {:<6}: {:>8}", cw, seconds_to_hour_and_min(&week_total));
-            monthly_total += week_total;
+    // Print totals for each (year) and month
+    for (_year, monthly_total) in monthly_total {
+        for (month_no, month_total) in monthly_total {
+            println!("{:<9}: {:>8}", month_name(month_no).name(), seconds_to_hour_and_min(&month_total));
         }
-        println!("{:-<19}", "");
-        println!("{:9}: {:>8}", month_name(month_no).name(), seconds_to_hour_and_min(&monthly_total));
-        println!("{:=<19}", "");
-        println!();
     }
 }
 
@@ -173,6 +169,7 @@ fn print_weekly_total_per_issue(
         print!(" {:>8}", hh_mm_string);
         week_grand_total += seconds;
     }
+    // Rightmost "Total" column for the entire week
     print!(" {:>8}", crate::date_util::seconds_to_hour_and_min(&week_grand_total));
     println!();
 

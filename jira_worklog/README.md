@@ -255,6 +255,34 @@ We all make mistakes every now then. To remove an entry you need to specify the
 jira_worklog del -i time-94 -w 216626
 `````
 
+### Listing all available time codes
+If you want a complete list of all the available time codes:
+```shell
+jira_worklog codes
+```
+Output:
+```text
+TIME-164 ASIO - Sustaining
+TIME-163 Service Vehicles - Sustaining
+TIME-162 Service Wall - Sustaining
+TIME-161 Amazon UWA6 - Customer Project
+TIME-160 Cloud Infrastructure & DevOps
+TIME-159 1214 Qubit Product Improvement 2024 
+TIME-158 1215 Robot Radio Wifi
+TIME-157 1213 Green Train Release Spring 2025 - Test & Validation
+TIME-156 1212 Green Train Release Spring 2025 - Cube Control Software
+TIME-155 Travel
+TIME-154 Product Management
+TIME-153 Product Safety 
+TIME-152 Scalability - Sustaining
+TIME-151 Log Analyzer - Sustaining
+TIME-150 Facility Management
+TIME-148 Training and Education
+TIME-147 Administration
+TIME-146 UX - Sustaining
+TIME-145 Port Software - Sustaining
+```
+
 ### Debug
 A log-file is created behind the scenes if you use the `--verbosity` option, which allows for debugging:
 ````shell

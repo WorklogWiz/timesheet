@@ -62,6 +62,7 @@ enum SubCommand {
     Status(Status),
     #[command(arg_required_else_help = true)]
     Config(Configuration),
+    /// Lists all time codes
     Codes,
 
 }
