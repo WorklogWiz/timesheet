@@ -20,6 +20,7 @@ Disclaimer: Network latency and the response time of Jira is the main culprit of
     * [Adding worklog entries](#adding-worklog-entries)
     * [Status of your worklog entries](#status-of-your-worklog-entries)
     * [Removing entries](#removing-entries)
+    * [Listing all available time codes](#listing-all-available-time-codes)
     * [Debug](#debug)
 <!-- TOC -->
 ````shell
