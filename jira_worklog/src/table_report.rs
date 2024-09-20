@@ -54,6 +54,7 @@ pub fn table_report(
         if current_week == 0 {
             current_week = date.iso_week().week();
         }
+
         // End of previous week, report Weekly total
         if crate::date_util::is_new_week(current_week, date) {
             print_weekly_total_per_issue(
@@ -62,11 +63,10 @@ pub fn table_report(
                 &mut current_week,
             );
 
-            current_week = date.iso_week().week();
 
             let current_week_totals = weekly_totals_per_jira_key.values().sum();
             debug!("Total for CW {} is {}", current_week, current_week_totals);
-
+            // Add the weekly total to the totals per month and week
             let month_entry = monthly_totals_per_week
                 .entry(date.month())// Get or create the monthly hashmap
                 .or_default()  // If it does not exist, insert a new hashmap
@@ -75,6 +75,7 @@ pub fn table_report(
                 .or_insert(current_week_totals);
             debug!("Monthly totals so far {:?}", month_entry);
 
+            current_week = date.iso_week().week();
             weekly_totals_per_jira_key.clear(); // Remove all entries, prep for next week
             print_weekly_table_header(issue_keys_by_command_line_order); // Table header for next week
         }

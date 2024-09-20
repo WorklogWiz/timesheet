@@ -32,7 +32,9 @@ jira_worklog status -i time-94 time-40
 See the detailed examples below for more details.
 
 ## Installation
-Once you have downloaded and installed `jira_worklog` in your path:
+Once you have downloaded and installed `jira_worklog` in your **path**. 
+Like, for instance, `$HOME/.local/bin`
+:
  1. Obtain a Jira API security token from:
     1. Log in to Jira
     2. Click on the picture of yourself in the upper right corner ("Your profile and settings")
@@ -53,6 +55,22 @@ curl --request GET \
   --user '<your email here>@autostoresystem.com:<paste your security token here>' \
   --header 'Accept: application/json'
 ````
+
+### Installing on MacOS
+There are some extra security built into the MacOS which prevents you from running potential malware. Consequently 
+you will see this error message if you attempt to run `jira_worklog`:
+
+![](images/macos_error_unidentified_dev.png)
+
+To fix this:
+```shell
+# Move to the directory where you installed 
+cd [to_the_directory_where_you_have_installed_jira_worklog]
+
+chmod a+rx ./jira_worklog && xattr -d com.apple.quarantine ./jira_worklog
+```
+
+This should solve the problem.
 
 ### Notes on security
 The configuration file is stored without encryption in a location, which depends on the operating system you are using.

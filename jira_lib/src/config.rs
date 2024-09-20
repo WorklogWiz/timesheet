@@ -14,19 +14,21 @@ pub struct ApplicationConfig {
     pub dbms: WorklogDBMS,
     /// This will ensure that the filename is created, even if the Toml file
     /// is an old version, which does not have an application_data section
-    #[serde(default="default_application_data_section")]
+    #[serde(default = "default_application_data_section")]
     pub application_data: ApplicationData,
 }
 
 /// Holds the configuration for the application_data section of the Toml file
-#[derive(Serialize,Deserialize,Debug,PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct ApplicationData {
     pub journal_data_file_name: String,
 }
 
 impl Default for ApplicationData {
     fn default() -> Self {
-        ApplicationData { journal_data_file_name: journal_data_file_name().to_string_lossy().to_string() }
+        ApplicationData {
+            journal_data_file_name: journal_data_file_name().to_string_lossy().to_string(),
+        }
     }
 }
 
@@ -87,6 +89,7 @@ fn project_dirs() -> ProjectDirs {
     project_dirs
 }
 
+/// Assumes there is a configuration file and loads it
 pub fn load_configuration() -> Result<ApplicationConfig, io::Error> {
     read_configuration(config_file_name().as_path())
 }
@@ -100,12 +103,15 @@ pub fn remove_configuration() -> std::io::Result<()> {
 }
 
 pub fn create_and_save_sample_configuration() -> Result<ApplicationConfig, io::Error> {
+    debug!("create_and_save_sample_configuration() :- entering ...");
     let application_config = ApplicationConfig::default();
     create_configuration_file(&application_config, &config_file_name());
     Ok(application_config)
 }
 
 pub fn load_or_create_configuration() -> Result<ApplicationConfig, io::Error> {
+    debug!("Loading or creating the config file");
+
     match is_configuration_file_available() {
         None => create_and_save_sample_configuration(),
         Some(app_config) => Ok(app_config),
@@ -119,7 +125,7 @@ pub fn is_configuration_file_available() -> Option<ApplicationConfig> {
             Ok(app_config) => Some(app_config),
             Err(e) => {
                 panic!(
-                    "Unable to load the configuration file from {}, reson: {}",
+                    "Unable to load the configuration file from {}, reason: {}",
                     config_file_name().to_string_lossy(),
                     e
                 )
@@ -133,7 +139,10 @@ pub fn is_configuration_file_available() -> Option<ApplicationConfig> {
 fn read_configuration(path: &Path) -> Result<ApplicationConfig, io::Error> {
     let mut file = match File::open(path) {
         Ok(f) => f,
-        Err(e) => return Err(e),
+        Err(e) => {
+            debug!("Unable to open {}, cause: {}", path.to_string_lossy(),e);
+            return Err(e)
+        },
     };
 
     let mut contents = String::new();
@@ -150,14 +159,14 @@ fn read_configuration(path: &Path) -> Result<ApplicationConfig, io::Error> {
 }
 
 fn create_configuration_file(application_config: &ApplicationConfig, path: &PathBuf) {
+    debug!("create_configuration_file({}) :- entering ..", path.to_string_lossy());
+
     let directory = path.parent().unwrap();
     match directory.try_exists() {
-        Ok(_) => {}
-        Err(_) => {
-            debug!(
-                "Some parts of {} does not exist",
-                directory.to_string_lossy()
-            );
+        Ok(true) => {
+            debug!("Path {} exists", directory.to_string_lossy());
+        }
+        Ok(false) => {
             match std::fs::create_dir_all(directory) {
                 Ok(_) => {
                     debug!("Created path {}", directory.to_string_lossy())
@@ -170,6 +179,11 @@ fn create_configuration_file(application_config: &ApplicationConfig, path: &Path
                     )
                 }
             }
+
+        }
+        Err(err) => {
+            eprintln!("Unable to determine existence of path {}, cause: {}", directory.to_string_lossy(), err);
+            exit(4);
         }
     }
 
@@ -251,10 +265,12 @@ mod tests {
         journal_data_file_name = "journal"
         "#;
 
-        let app_config:ApplicationConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(app_config.application_data.journal_data_file_name, "journal");
+        let app_config: ApplicationConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(
+            app_config.application_data.journal_data_file_name,
+            "journal"
+        );
     }
-
 
     /// Verifies that the journal_data_file_name is populated with a reasonable default even if it
     /// does not exist in the configuration file on disk
@@ -270,8 +286,11 @@ mod tests {
         connect = "some postgres gibberish"
         "#;
 
-        let app_config:ApplicationConfig = toml::from_str(toml_str).unwrap();
-        assert_eq!(app_config.application_data.journal_data_file_name, journal_data_file_name().to_string_lossy());
+        let app_config: ApplicationConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(
+            app_config.application_data.journal_data_file_name,
+            journal_data_file_name().to_string_lossy()
+        );
     }
 
     #[test]
@@ -283,7 +302,10 @@ mod tests {
 
         let application_config = ApplicationConfig::default();
         if cfg!(target_os = "macos") {
-            assert!(&application_config.application_data.journal_data_file_name.contains(MAC_OS_APP_DATA_DIR));
+            assert!(&application_config
+                .application_data
+                .journal_data_file_name
+                .contains(MAC_OS_APP_DATA_DIR));
         }
 
         create_configuration_file(&application_config, &tmp_config_file);
@@ -299,7 +321,10 @@ mod tests {
         let p = journal_data_file_name();
 
         if cfg!(target_os = "macos") {
-            assert!(p.to_string_lossy().to_string().contains("Application Support"));
+            assert!(p
+                .to_string_lossy()
+                .to_string()
+                .contains("Application Support"));
         }
 
         eprintln!("{:?}", p.to_string_lossy());

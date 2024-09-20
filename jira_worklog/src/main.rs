@@ -148,10 +148,10 @@ async fn main() {
 
     let opts: Opts = Opts::parse();
     configure_logging(&opts); // Handles the -v option
-    let app_config = get_app_config();
 
     match opts.subcmd {
         SubCommand::Add(mut add) => {
+            let app_config = get_app_config();
             let jira_client = get_jira_client(&app_config);
 
             let time_tracking_options = match jira_client.get_time_tracking_options().await {
@@ -214,6 +214,7 @@ async fn main() {
         }
 
         SubCommand::Del(delete) => {
+            let app_config = get_app_config();
             let jira_client = get_jira_client(&app_config);
 
             let current_user = jira_client.get_current_user().await;
@@ -261,6 +262,8 @@ async fn main() {
         }
 
         SubCommand::Status(status) => {
+            let app_config = get_app_config();
+
             let jira_client = get_jira_client(&app_config);
             // TODO: Convert started_after from String in ISO8601 form to DateTime<Local>
             let start_after = status.after.map(|s| str_to_date_time(&s).unwrap());
@@ -693,6 +696,8 @@ fn configure_logging(opts: &Opts) {
     )))
     .target(env_logger::Target::Pipe(target))
     .init();
+    debug!("Logging started");
+
 }
 
 #[allow(dead_code)]
