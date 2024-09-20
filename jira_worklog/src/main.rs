@@ -62,6 +62,8 @@ enum SubCommand {
     Status(Status),
     #[command(arg_required_else_help = true)]
     Config(Configuration),
+    Codes,
+
 }
 
 #[derive(Args)]
@@ -388,6 +390,14 @@ async fn main() {
                 }
             },
         }, // end Config
+        SubCommand::Codes => {
+            let app_config = get_app_config();
+            let jira_client = get_jira_client(&app_config);
+            let issues = jira_client.get_issues_for_single_project("TIME".to_string()).await;
+            for issue in issues {
+                println!("{} {}", issue.key, issue.fields.summary);
+            }
+        }
     }
 }
 
