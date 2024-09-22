@@ -11,7 +11,7 @@ use jira_lib::config::{
     ApplicationConfig, config_file_name, load_or_create_configuration, remove_configuration,
     save_configuration,
 };
-use jira_lib::{config, date_util, JiraClient, JiraIssue, JiraKey, TimeTrackingConfiguration, Worklog};
+use jira_lib::{config, date_util, JiraClient, JiraIssue, JiraKey, journal, TimeTrackingConfiguration, Worklog};
 use jira_lib::journal::{add_worklog_entries_to_journal, JournalEntry};
 
 use log::{debug, info};
@@ -21,6 +21,7 @@ use std::fmt::Formatter;
 use std::fs::File;
 use std::process::exit;
 use std::{env, fmt};
+use std::path::PathBuf;
 
 mod table_report;
 
@@ -262,6 +263,8 @@ async fn main() {
                     exit(4);
                 }
             }
+            journal::remove_entry_from_journal(&PathBuf::from(app_config.application_data.journal_data_file_name), delete.worklog_id.as_str());
+            println!("Removed entry {} from local journal", delete.worklog_id);
         }
 
         SubCommand::Status(status) => {
