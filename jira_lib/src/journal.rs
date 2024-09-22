@@ -1,4 +1,5 @@
 use std::{fs, io};
+use std::collections::HashSet;
 use std::fs::File;
 use std::path::{ PathBuf};
 use std::process::exit;
@@ -8,6 +9,8 @@ use log::debug;
 use serde::{Deserialize, Serialize, Serializer};
 use crate::{config, date_util, };
 
+
+/// Represents the columns in the journal file, which is CSV formatted
 #[derive(Serialize, Deserialize,PartialEq,Clone)]
 pub struct JournalEntry {
     pub issue_key: String,
@@ -21,6 +24,7 @@ pub struct JournalEntry {
 // If you add or remove any fields from the JournalEntry struct, update this:
 const NUM_JOURNAL_FIELDS: usize = 5;
 const CSV_DELIMITER: u8 = b';';
+
 fn serialize_datetime<S>(date: &DateTime<Local>, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
@@ -130,7 +134,7 @@ pub fn remove_entry_from_journal(path_buf: &PathBuf, worklog_id_to_remove: &str)
         });
 
         // In case the parsing of the record failed
-        if record.len() < 4 {
+        if record.len() < NUM_JOURNAL_FIELDS {
             if record.len() == 1 {
                 eprintln!("Only a single column in CSV entry: {}", &record[0]);
                 eprintln!("Invalid number of columns, did you remember the delimiter ';'?");
@@ -155,9 +159,33 @@ pub fn remove_entry_from_journal(path_buf: &PathBuf, worklog_id_to_remove: &str)
 }
 
 
+
+fn find_unique_keys(p0: &PathBuf) -> Vec<String> {
+    let file = File::open(p0).unwrap_or_else(|err| {
+        eprintln!("Unable to open {}, cause: {}", p0.to_string_lossy(), err);
+        exit(4);
+    });
+    let mut keys: HashSet<String>= HashSet::new();
+
+    let mut csv_reader = ReaderBuilder::new()
+        .has_headers(true)
+        .delimiter(CSV_DELIMITER)
+        .from_reader(file);
+
+    for result in csv_reader.records(){
+        let record = result.unwrap();
+        let key = record.get(0).unwrap();
+        keys.insert(key.to_string());
+    }
+    let mut result :Vec<String> = keys.into_iter().collect();
+    result.sort();
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::{BufRead,  Write};
+
     use super::*;
 
     #[test]
@@ -177,18 +205,7 @@ mod tests {
     /// and then check the file to ensure the record has been removed
     #[test]
     fn test_remove_entry() {
-        let sample_date = r#"key;w_id;started;time spent;comment
-TIME-147;314335;2024-09-19 20:21 +0200;02:00;jira_worklog
-TIME-148;315100;2024-09-20 11:57 +0200;01:00;Information meeting on time codes
-TIME-117;315377;2024-09-20 14:33 +0200;01:00;ASOS Product Roadmap
-TIME-147;315633;2024-09-20 18:48 +0200;05:00;Admin
-TIME-147;315634;2024-09-20 22:49 +0200;01:00;jira_worklog
-"#;
-        // Creates the temporary file
-        let path_buf = std::env::temp_dir().join("tmp_journal.csv");
-        let mut file = File::create(&path_buf).expect("Unable to create temporary file ");
-        let _result = file.write(sample_date.as_bytes());
-        drop(file); // Close the file
+        let path_buf = create_sample_journal();
 
         // Removes a single record identified by the worklog id
         let _result = remove_entry_from_journal(&path_buf, "315100");
@@ -207,5 +224,29 @@ TIME-147;315634;2024-09-20 22:49 +0200;01:00;jira_worklog
         }
         ).collect();
         assert!(result.is_empty(),"Entry not removed {:?}", result);
+    }
+
+    #[test]
+    fn test_unique_time_codes_from_journal() {
+        let file_name = create_sample_journal();
+        let unique_keys: Vec<String> = find_unique_keys(&file_name);
+        assert!(!unique_keys.is_empty());
+        assert_eq!(vec!["TIME-117", "TIME-147", "TIME-148"], unique_keys);
+    }
+
+    fn create_sample_journal() -> PathBuf {
+        let sample_date = r#"key;w_id;started;time spent;comment
+TIME-147;314335;2024-09-19 20:21 +0200;02:00;jira_worklog
+TIME-148;315100;2024-09-20 11:57 +0200;01:00;Information meeting on time codes
+TIME-117;315377;2024-09-20 14:33 +0200;01:00;ASOS Product Roadmap
+TIME-147;315633;2024-09-20 18:48 +0200;05:00;Admin
+TIME-147;315634;2024-09-20 22:49 +0200;01:00;jira_worklog
+"#;
+        // Creates the temporary file
+        let path_buf = std::env::temp_dir().join("tmp_journal.csv");
+        let mut file = File::create(&path_buf).expect("Unable to create temporary file ");
+        let _result = file.write(sample_date.as_bytes());
+        drop(file); // Close the file
+        path_buf
     }
 }

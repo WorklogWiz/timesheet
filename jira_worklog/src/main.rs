@@ -36,7 +36,7 @@ mod table_report;
 /// respectively.
 /// Duration may use either the period or the comma to separate the fractional part of a number.
 ///
-/// 7,5h or 7.5h both indicate 7 hours and 30 mins
+/// 7,5h or 7.5h both indicate 7 hours and 30 minutes
 /// 7:30 specifies 7 hours and 30 minutes
 ///
 ///
@@ -98,7 +98,6 @@ struct Del {
 struct Status {
     #[arg(short, long, num_args(1..), required = true)]
     issues: Vec<String>,
-    // Consider a vector here
     #[arg(short, long)]
     after: Option<String>,
 }
@@ -247,7 +246,7 @@ async fn main() {
                     "ERROR: You are not the owner of worklog with id {}",
                     &delete.worklog_id
                 );
-                std::process::exit(403);
+                exit(403);
             }
 
             match jira_client
@@ -257,7 +256,7 @@ async fn main() {
                 Ok(_) => println!("Jira work log id {} deleted", &delete.worklog_id),
                 Err(e) => {
                     println!(
-                        "An error occured, worklog entry probably not deleted: {}",
+                        "An error occurred, worklog entry probably not deleted: {}",
                         e
                     );
                     exit(4);
@@ -271,7 +270,6 @@ async fn main() {
             let app_config = get_app_config();
 
             let jira_client = get_jira_client(&app_config);
-            // TODO: Convert started_after from String in ISO8601 form to DateTime<Local>
             let start_after = status.after.map(|s| str_to_date_time(&s).unwrap());
 
             let mut worklog_entries: Vec<Worklog> = Vec::new();
@@ -407,7 +405,7 @@ async fn main() {
 
 fn get_jira_client(app_config: &ApplicationConfig) -> JiraClient {
 
-    match jira_lib::JiraClient::new(
+    match JiraClient::new(
         &app_config.jira.jira_url,
         &app_config.jira.user,
         &app_config.jira.token,
@@ -443,7 +441,7 @@ fn get_app_config() -> ApplicationConfig {
 fn list_config_and_exit() {
     println!(
         "Configuration file {}:\n",
-        config::config_file_name().to_string_lossy()
+        config_file_name().to_string_lossy()
     );
     match config::load_configuration() {
         Ok(config) => {
@@ -566,7 +564,7 @@ async fn add_multiple_entries(
     // Parses the list of durations in the format XXXnn,nnU, i.e. Mon:1,5h into Weekday, duration and unit
     let durations: Vec<(Weekday, f32, String)> = parse_worklog_durations(durations);
 
-    let mut inserted_worklogs: Vec<JournalEntry> = vec![];
+    let mut inserted_work_logs: Vec<JournalEntry> = vec![];
 
     for entry in durations.into_iter() {
         let weekday = entry.0;
@@ -575,7 +573,7 @@ async fn add_multiple_entries(
 
         let started = date_of_last_weekday(weekday);
         // Start all multi entries at 08:00
-        let started = chrono::Local
+        let started = Local
             .with_ymd_and_hms(started.year(), started.month(), started.day(), 8, 0, 0)
             .unwrap();
 
@@ -594,9 +592,9 @@ async fn add_multiple_entries(
             comment.clone(),
         )
         .await;
-        inserted_worklogs.push(result);
+        inserted_work_logs.push(result);
     }
-    inserted_worklogs
+    inserted_work_logs
 }
 
 async fn add_single_entry(
@@ -655,7 +653,7 @@ async fn add_single_entry(
     {
         Ok(result) => result,
         Err(e) => match e {
-            http::status::StatusCode::NOT_FOUND => {
+            StatusCode::NOT_FOUND => {
                 eprintln!("WARNING: Issue {} not found", issue);
                 exit(4);
             }
