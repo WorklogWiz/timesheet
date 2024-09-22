@@ -59,7 +59,6 @@ enum SubCommand {
     #[command(arg_required_else_help = true)]
     Del(Del),
     /// Get status of work log entries
-    #[command(arg_required_else_help = true)]
     Status(Status),
     #[command(arg_required_else_help = true)]
     Config(Configuration),
@@ -96,9 +95,13 @@ struct Del {
 
 #[derive(Parser)]
 struct Status {
-    #[arg(short, long, num_args(1..), required = true)]
-    issues: Vec<String>,
+    /// Issues to be reported on. If no issues are specified.
+    /// The unique Jira keys found in the local journal of entries is used.
+    /// You can specify a list of issue keys: -i time-147 time-148
+    #[arg(short, long, num_args(1..), required = false)]
+    issues: Option<Vec<String>>,
     #[arg(short, long)]
+    /// Retrieves all entries after the given date
     after: Option<String>,
 }
 
@@ -275,7 +278,19 @@ async fn main() {
             let mut worklog_entries: Vec<Worklog> = Vec::new();
             let mut issue_information: HashMap<String, JiraIssue> = HashMap::new();
 
-            for issue in status.issues.iter() {
+            let keys = if status.issues.is_none() {
+                journal::find_unique_keys(&PathBuf::from(app_config.application_data.journal_data_file_name))
+            } else {
+                status.issues.unwrap()
+            };
+            if keys.is_empty() {
+                eprintln!("No issues provided on command line and no issues found in local journal");
+                eprintln!("You want to use the -i option and specify issues");
+                exit(4);
+            }
+            eprintln!("Retrieving data for time codes: {}", &keys.join(", "));
+
+            for issue in keys.iter() {
                 let mut entries = match jira_client
                     .get_worklogs_for_current_user(issue, start_after)
                     .await
@@ -319,8 +334,7 @@ async fn main() {
             issue_and_entry_report(&mut worklog_entries, &mut issue_information);
             println!();
 
-            let issue_keys_by_command_line_order = status
-                .issues
+            let issue_keys_by_command_line_order = keys
                 .iter()
                 .map(|k| JiraKey(k.to_owned()))
                 .collect();

@@ -160,7 +160,7 @@ pub fn remove_entry_from_journal(path_buf: &PathBuf, worklog_id_to_remove: &str)
 
 
 
-fn find_unique_keys(p0: &PathBuf) -> Vec<String> {
+pub fn find_unique_keys(p0: &PathBuf) -> Vec<String> {
     let file = File::open(p0).unwrap_or_else(|err| {
         eprintln!("Unable to open {}, cause: {}", p0.to_string_lossy(), err);
         exit(4);
