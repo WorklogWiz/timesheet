@@ -12,7 +12,7 @@ Rust learning project to extract and update hours logged in Jira.
 ## How to build on Linux
 
 ```shell
-sudo apt instlal cargo
+sudo apt install cargo
 sudo apt install libssl-dev
 ./build_linux.sh
 ```

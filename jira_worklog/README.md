@@ -8,6 +8,12 @@ This utility will let you add your work log entries in less than 1s.
 A quick status report for the last 30 days typically executes in less than 2-3 seconds, unless 
 the Jira project contains thousands of entries. 
 
+All entries added to Jira will also be written to a local journal in CSV format.
+
+This journal is used for status reports if you omit the `--issues` option. 
+
+You may use Excel to read the CSV format, specifying ';' as the delimiter.
+
 Disclaimer: Network latency and the response time of Jira is the main culprit of any delays 
 
 <!-- TOC -->
@@ -19,6 +25,7 @@ Disclaimer: Network latency and the response time of Jira is the main culprit of
   * [Examples](#examples-)
     * [Adding worklog entries](#adding-worklog-entries)
     * [Status of your worklog entries](#status-of-your-worklog-entries)
+    * [Create a status report from most used time codes](#create-a-status-report-from-most-used-time-codes)
     * [Removing entries](#removing-entries)
     * [Listing all available time codes](#listing-all-available-time-codes)
     * [Debug](#debug)
@@ -42,7 +49,7 @@ Like, for instance, `$HOME/.local/bin`
     2. Click on the picture of yourself in the upper right corner ("Your profile and settings")
     3. Click "Manage account"
     4. Click "Security" ![](images/jira_security.png)
-    5. Choose "Create and manage API tokens" allmost at the bottom of the page
+    5. Choose "Create and manage API tokens" almost at the bottom of the page
     6. Click "Create your API token" and copy the token to your clip board
 2. Execute this command to create the configuration file:
     ````shell
@@ -59,8 +66,8 @@ curl --request GET \
 ````
 
 ### Installing on MacOS
-There are some extra security built into the MacOS which prevents you from running potential malware. Consequently 
-you will see this error message if you attempt to run `jira_worklog`:
+There are some extra security built into the macOS which prevents you from running potential malware. 
+Consequently, you will see this error message if you attempt to run `jira_worklog`:
 
 ![](images/macos_error_unidentified_dev.png)
 
@@ -82,11 +89,11 @@ If you think your machine has been compromised, go to Jira account ira and "Revo
 
 You can remove your local configuration file using the command: `jira_worklog config --remove`
 
-|Operating system | Config file location                                               |
-|-------|--------------------------------------------------------------------|
-|MacOs: | `/Users/steinar/Library/Preferences/com.autostore.jira_worklog`    |
-|Windows: | `C:\Users\Alice\AppData\Roaming\com.autostore\jira_worklog\config` |
-|Linux: | `/home/steinar/.config/jira_worklog`                               |
+| Operating system     | Config file location                                               |
+|----------------------|--------------------------------------------------------------------|
+| MacOs:               | `/Users/steinar/Library/Preferences/com.autostore.jira_worklog`    |
+| Windows:             | `C:\Users\Alice\AppData\Roaming\com.autostore\jira_worklog\config` |
+| Linux:               | `/home/steinar/.config/jira_worklog`                               |
 
 ## Examples 
 
@@ -135,12 +142,11 @@ Added work log entry Id: 217258 Time spent: 1d 5h 30m Time spent in seconds: 468
 ````shell
 #
 # Shows the status from a given date
-jira_worklog status -i time-94 -a 2023-05-01
+jira_worklog status -i time-40 time-147 time-117 -a 2023-05-01
 ````
 
 This would give you something like this:
 `````shell
-Version: 0.3.0
 Issue    IssueId Id      Weekday Started                Time spent Comment
 TIME-117 167111  304691  Mon     2024-08-19 14:42 +0200 00:30      
 TIME-117 167111  305981  Wed     2024-08-28 08:36 +0200 01:00      
@@ -236,25 +242,23 @@ Date       Day  time-40  time-147 time-117   Total
 ISO Week 36       00:00    37:00    07:30    44:30
 ============== ======== ======== ======== ========
 
-CW 33    :    37:30
-CW 34    :    42:30
-CW 35    :    42:00
--------------------
-August   :   122:00
-===================
-
-CW 36    :    41:00
--------------------
-September:    41:00
-===================
 `````
+
+### Create a status report from most used time codes
+If you omit the `--issue` option, a list of unique time codes will
+be obtained from the local journal on your machine.
+```shell
+jira_worklog status
+```
 ### Removing entries
 We all make mistakes every now then. To remove an entry you need to specify the 
 `issueId or key` and the `worklog id`:
 `````shell
-# Rmoves a work log entry for issue TIME-94 with worklog id of 216626
+# Removes a work log entry for issue TIME-94 with worklog id of 216626
 jira_worklog del -i time-94 -w 216626
 `````
+
+The entry will also be removed from the local journal.
 
 ### Listing all available time codes
 If you want a complete list of all the available time codes:
@@ -282,6 +286,7 @@ TIME-148 Training and Education
 TIME-147 Administration
 TIME-146 UX - Sustaining
 TIME-145 Port Software - Sustaining
+.... ......
 ```
 
 ### Debug
