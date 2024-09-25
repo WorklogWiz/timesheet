@@ -150,7 +150,9 @@ pub fn remove_entry_from_journal(path_buf: &PathBuf, worklog_id_to_remove: &str)
 
     // Rewrite filtered data back to the CSV file
     let file = File::create(path_buf).unwrap();
-    let mut csv_writer = WriterBuilder::new().has_headers(true).from_writer(file);
+    let mut csv_writer = WriterBuilder::new()
+        .delimiter(CSV_DELIMITER)
+        .has_headers(true).from_writer(file);
 
     for record in records_to_keep {
         csv_writer.write_record(&record).unwrap();
