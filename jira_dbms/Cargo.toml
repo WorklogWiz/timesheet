@@ -17,12 +17,6 @@ tokio-postgres = { version="0.7", features = ["with-chrono-0_4"]}
 
 log = "0.4"
 
-env_logger = "0.10"
 chrono = { version = "0.4", features = ["serde"]}
-reqwest = { version = "0.11", features = ["json"] }
-# Using version = "1" will download the latest version of major release 1.x
-serde = { version = "1", features = ["derive"] }
-# Version number needs to be compatible with serde
-serde_json = "1"
 
 base64 = { version = "0.13" }
