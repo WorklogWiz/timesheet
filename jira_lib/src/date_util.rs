@@ -6,7 +6,7 @@ use chrono::{
 use lazy_static::lazy_static;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-
+use std::process::exit;
 use regex::Regex;
 
 /// Parses a date, a time or a datetime, which has been supplied
@@ -99,6 +99,20 @@ impl Display for DateTimeError {
 
 impl Error for DateTimeError {}
 
+///
+/// Time Entry Formats
+/// Hours and minutes: Enter time as "Xh Ym" where X is the number of hours and Y is the number of minutes. For example:
+///  - "4h 30m" for 4 hours and 30 minutes
+///  - "2h 15m" for 2 hours and 15 minutes
+/// Decimal hours: Use a decimal point to indicate partial hours. For example:
+///  - "3.5h" for 3 hours and 30 minutes
+///  - "1.25h" for 1 hour and 15 minutes
+/// Minutes only: Simply enter the number of minutes followed by "m". For example:
+///  - "90m" for 1 hour and 30 minutes
+///  - "45m" for 45 minutes
+/// Hours only: Enter the number of hours followed by "h". For example:
+///  - "6h" for 6 hours
+///  - 0.5h for 30 minutes
 #[derive(Debug, PartialEq)]
 pub struct TimeSpent {
     pub time_spent: String,
@@ -118,14 +132,15 @@ impl TimeSpent {
         };
 
         let seconds = match unit.as_str() {
+            "m" | "M" => (dur * 60.0) as i32,
             "h" | "H" => (dur * 3600.0) as i32,
             "d" | "D" => (dur * work_hours_per_day * 3600.0) as i32,
             "w" | "W" => (dur * working_days_per_week * work_hours_per_day * 3600.0) as i32,
             _ => {
-                panic!(
-                    "Don't know how to handle units of '{}', expected 'h','d', or 'w'",
+                eprintln!("ERROR: Don't know how to handle units of '{}', expected 'm', 'h','d', or 'w'",
                     unit
-                )
+                );
+                exit(4);
             }
         };
 
@@ -272,9 +287,19 @@ fn test_calculate_starting_point() {
 
 pub fn parse_worklog_durations(entries: Vec<String>) -> Vec<(Weekday, f32, String)> {
     lazy_static! {
-        // Mon:1,5h
+        // Mon:1,5h or Mon:1.5h
         // Capturing regexp
-        static ref DURATION_EXPR: Regex = Regex::new(r"^(\w{3}):(\d+(?:[\.,]\d{1,2})?\w)$").unwrap();
+        static ref DURATION_EXPR: Regex = Regex::new(r"(?x)
+        ^(\w{3}) # Three letter day name (Mon, Tue, Wed, ...
+        :        # Followed by colon
+        (           # Capturing group
+            \d+     # digits
+            (?:     # Non capturing group
+                [\.,]   # Decimal separator US and Euro
+                \d{1,2} # 1-2 digits
+            )?\w    # single word char
+        )
+        $").unwrap();
     }
 
     let mut result: Vec<(Weekday, f32, String)> = Vec::new();

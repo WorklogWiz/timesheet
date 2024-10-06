@@ -187,6 +187,8 @@ async fn main() {
             let mut added_worklog_items: Vec<JournalEntry> = vec![];
 
             if add.durations.len() == 1 && add.durations[0].chars().next().unwrap() <= '9' {
+                // Single duration without a "day name" prefix
+                // like for instance --duration 7,5h
                 println!("Adding single entry");
                 let result = add_single_entry(
                     &jira_client,
@@ -199,6 +201,8 @@ async fn main() {
                 .await;
                 added_worklog_items.push(result);
             } else if !add.durations.is_empty() && add.durations[0].chars().next().unwrap() >= 'A' {
+                // One or more durations with day name prefix, like for instance:
+                // --duration mon:7,5h tue:1h wed:1d
                 debug!("Handling multiple entries");
                 added_worklog_items = add_multiple_entries(
                     jira_client,
@@ -568,6 +572,13 @@ fn issue_and_entry_report(
     }
 }
 
+///
+/// Handles list of durations specified with 3 letter abbreviations for the day name, followed by
+/// ':' and the numeric duration followed by the unit ('d'=day, 'h'=hour)
+/// Examples durations:
+///     mon:1d tue:3,5h wed:4.5h
+/// Note the decimal separator may be presented as either european format with comma (",") or US format
+/// with full stop (".")
 async fn add_multiple_entries(
     jira_client: JiraClient,
     time_tracking_options: TimeTrackingConfiguration,
@@ -575,7 +586,7 @@ async fn add_multiple_entries(
     durations: Vec<String>,
     comment: Option<String>,
 ) -> Vec<JournalEntry> {
-    // Parses the list of durations in the format XXXnn,nnU, i.e. Mon:1,5h into Weekday, duration and unit
+    // Parses the list of durations in the format XXX:nn,nnU, i.e. Mon:1,5h into Weekday, duration and unit
     let durations: Vec<(Weekday, f32, String)> = parse_worklog_durations(durations);
 
     let mut inserted_work_logs: Vec<JournalEntry> = vec![];
@@ -586,7 +597,7 @@ async fn add_multiple_entries(
         let unit = entry.2;
 
         let started = date_of_last_weekday(weekday);
-        // Start all multi entries at 08:00
+        // Starts all entries at 08:00
         let started = Local
             .with_ymd_and_hms(started.year(), started.month(), started.day(), 8, 0, 0)
             .unwrap();
