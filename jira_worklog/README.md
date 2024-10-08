@@ -22,6 +22,7 @@ Disclaimer: Network latency and the response time of Jira is the main culprit of
     * [Using `curl` to verify your security token](#using-curl-to-verify-your-security-token)
     * [Installing on MacOS](#installing-on-macos)
     * [Notes on security](#notes-on-security)
+  * [How to specify the duration](#how-to-specify-the-duration)
   * [Examples](#examples-)
     * [Adding worklog entries](#adding-worklog-entries)
     * [Status of your worklog entries](#status-of-your-worklog-entries)
