@@ -4,10 +4,9 @@ use chrono::{
     ParseResult, Weekday,
 };
 use lazy_static::lazy_static;
+use regex::{ Regex};
 use std::error::Error;
 use std::fmt::{Display, Formatter};
-use std::process::exit;
-use regex::Regex;
 
 /// Parses a date, a time or a datetime, which has been supplied
 /// as:
@@ -117,7 +116,6 @@ impl Error for DateTimeError {}
 pub struct TimeSpent {
     pub time_spent: String,
     pub time_spent_seconds: i32,
-    pub unit: String,
 }
 
 impl TimeSpent {
@@ -126,35 +124,65 @@ impl TimeSpent {
         work_hours_per_day: f32,
         working_days_per_week: f32,
     ) -> Result<TimeSpent, DateTimeError> {
-        let (dur, unit) = match Self::parse_to_unit_and_duration(s) {
-            Ok(result) => result,
-            Err(_err) => return Err(DateTimeError::InvalidInput(s.to_string())),
-        };
+        lazy_static! {
+            static ref TIME_SPEC: Regex =
+                Regex::new(r"\b(?:(\d+(?:[.,]\d{1,2})?)w)?(?:(\d+(?:[.,]\d{1,2})?)d)?(?:(\d+(?:[.,]\d{1,2})?)h)?(?:(\d+)m)?\b"
+            ).unwrap();
+        }
 
-        let seconds = match unit.as_str() {
-            "m" | "M" => (dur * 60.0) as i32,
-            "h" | "H" => (dur * 3600.0) as i32,
-            "d" | "D" => (dur * work_hours_per_day * 3600.0) as i32,
-            "w" | "W" => (dur * working_days_per_week * work_hours_per_day * 3600.0) as i32,
-            _ => {
-                eprintln!("ERROR: Don't know how to handle units of '{}', expected 'm', 'h','d', or 'w'",
-                    unit
+        match TIME_SPEC.captures(s.to_lowercase().as_str()) {
+            // There seems to be a bug with Captures(), even with no match, it returns Some()
+            Some(captures) if captures.get(0).unwrap().as_str().len() > 0 => {
+                let weeks = captures
+                    .get(1)
+                    .map_or(0.0, |m| m.as_str().parse::<f32>().unwrap_or(0.0));
+                let days = captures
+                    .get(2)
+                    .map_or(0.0, |m| m.as_str().parse::<f32>().unwrap_or(0.0));
+                let hours = captures
+                    .get(3)
+                    .map_or(0.0, |m| m.as_str().parse::<f32>().unwrap_or(0.0));
+                let minutes = captures
+                    .get(4)
+                    .map_or(0, |m| m.as_str().parse::<u32>().unwrap_or(0));
+
+                println!(
+                    "Parsed time: {} days, {} hours, {} minutes",
+                    days, hours, minutes
                 );
-                exit(4);
+                let seconds: f32 =
+                    weeks * working_days_per_week  * work_hours_per_day  * 3600.0
+                        + days * work_hours_per_day * 3600.0
+                        + hours * 3600.0
+                        + minutes as f32 * 60.0;
+                Ok(TimeSpent {
+                    time_spent: s.to_lowercase(),
+                    time_spent_seconds: seconds as i32,
+                })
             }
-        };
-
-        Ok(TimeSpent {
-            time_spent: s.to_string(),
-            time_spent_seconds: seconds,
-            unit,
-        })
+            _ => Err(DateTimeError::InvalidInput(format!(
+                "Could not obtain duration and unit from '{}'",
+                s
+            ))),
+        }
     }
 
     // Parses strings like 1,5h -> (1.5 'h')
     pub fn parse_to_unit_and_duration(s: &str) -> Result<(f32, String), DateTimeError> {
         lazy_static! {
-            static ref TIME_EXPR: Regex = Regex::new(r"^(\d+(?:[\.,]\d{1,2})?)(\w)$").unwrap();
+            static ref TIME_EXPR: Regex = Regex::new(
+                r"(?x)
+            ^
+            (\d+                # One ore more digits
+                (?:             # Non capture
+                    [\.,]       # Decimal separator
+                    \d{1,2}     # 1 or 2 digits after decimal sep
+                )?
+            )
+            (\w)                # Single word character
+            $"
+            )
+            .unwrap();
         }
         match TIME_EXPR.captures(s) {
             Some(caps) => {
@@ -187,13 +215,15 @@ fn test_parse_to_unit_and_duration() {
 
 #[test]
 fn test_time_spent() {
-    assert!(TimeSpent::from_str("1", 7.5, 5.0).is_err());
+    assert!(
+        TimeSpent::from_str("1", 7.5, 5.0).is_err(),
+        "The regexp should have failed"
+    );
 
     assert_eq!(
         TimeSpent {
             time_spent: "1.5h".to_string(),
             time_spent_seconds: 5400,
-            unit: "h".to_string(),
         },
         TimeSpent::from_str("1.5h", 7.5, 5.0).unwrap()
     );
@@ -202,7 +232,6 @@ fn test_time_spent() {
         TimeSpent {
             time_spent: "1.2d".to_string(),
             time_spent_seconds: 32400,
-            unit: "d".to_string(),
         },
         TimeSpent::from_str("1.2d", 7.5, 5.0).unwrap()
     );
@@ -211,12 +240,31 @@ fn test_time_spent() {
         TimeSpent {
             time_spent: "1.2w".to_string(),
             time_spent_seconds: 162000,
-            unit: "w".to_string(),
         },
         TimeSpent::from_str("1.2w", 7.5, 5.0).unwrap()
     );
+    assert_eq!(
+        TimeSpent {
+            time_spent: "7h30m".to_string(),
+            time_spent_seconds: 27000
+        },
+        TimeSpent::from_str("7h30m", 7.5, 5.0).unwrap());
+
+    assert_eq!(
+        TimeSpent {
+            time_spent: "1.5w0.5d7.5h30m".to_string(),
+            time_spent_seconds: 244800
+        },
+        TimeSpent::from_str("1.5w0.5d7.5h30m", 7.5, 5.0).unwrap());
+
 }
 
+#[test]
+fn test_captures_bug() {
+    let r = Regex::new(r"\b\d+\b");
+    // If this suddenly starts returning a "Some" value, the bug in Regex has been fixed
+    assert!(r.unwrap().captures("rubbish").is_none(), "Seems they have fixed the bug in regex captures()");
+}
 #[allow(dead_code)]
 pub fn to_jira_timestamp(datetime: &DateTime<Local>) -> String {
     datetime.format("%Y-%m-%dT%H:%M:%S.000%z").to_string()

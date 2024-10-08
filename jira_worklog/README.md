@@ -95,6 +95,24 @@ You can remove your local configuration file using the command: `jira_worklog co
 | Windows:             | `C:\Users\Alice\AppData\Roaming\com.autostore\jira_worklog\config` |
 | Linux:               | `/home/steinar/.config/jira_worklog`                               |
 
+## How to specify the duration
+You can specify the duration of your work using weeks, days, hours and minutes.
+
+The syntax is pretty straight forward, you simply specify a number followed by the unit.
+To combine units, simply concatenate them. The formal syntax is described below.
+Note that `<number>` represents any positive number using either `,` or `.` as the decimal separator.
+However, you may not specify fractions of minutes (for obvious reasons) :
+
+````shell
+<number>w<number>d<number>h<integer number>m
+````
+Here is an example using all the options possible
+````shell
+# Specify a duration of 1 week, 2 days, 5 hours and 30min like this
+jira_worklog add -i time-158 -d 1,5w2,5d5,25h30min
+````
+
+
 ## Examples 
 
 Here are some examples on how to use the utility.
