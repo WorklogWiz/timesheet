@@ -3,7 +3,7 @@ name = "jira_worklog"
 description = "Add, delete and get statistics about Jira worklog entries"
 readme = "README.md"
 authors= ["Steinar Overbeck Cook <steinar.cook@autostoresystem.com>"]
-version = "0.8.1"
+version.workspace = true
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -19,4 +19,4 @@ env_logger = "0.11.5"
 
 jira_lib = { path = "../jira_lib" }
 reqwest = { version = "0.12.7", features = ["json"] }
-tokio = { version = "1", features = ["full"] }
+tokio = { workspace = true, features = ["full"] }
