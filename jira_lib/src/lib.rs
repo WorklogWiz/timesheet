@@ -1,3 +1,10 @@
+//!
+//! `jira_lib` is a collection of useful functions when interacting with
+//! Jira using the official REST interface.
+//!
+//! Many of the types have been declared specifically for the purpose of work log management,
+//! and are hence not generic.
+//!
 extern crate core;
 
 use std::cmp::Ordering;
@@ -24,9 +31,11 @@ pub mod config;
 pub mod journal;
 pub mod date_util;
 
+/// Holds the ULR of the Jira API to use
 pub const JIRA_URL: &str = "https://autostore.atlassian.net/rest/api/latest";
 const FUTURE_BUFFER_SIZE: usize = 20;
 
+/// Represents the global Jira settings
 #[derive(Debug, Serialize, Deserialize)]
 #[allow(non_snake_case)]
 pub struct GlobalSettings {
@@ -40,12 +49,17 @@ pub struct GlobalSettings {
     timeTrackingConfiguration: TimeTrackingConfiguration,
 }
 
+/// Represents the time tracking configuration settings retrieved from Jira
 #[derive(Debug, Serialize, Deserialize)]
 #[allow(non_snake_case)]
 pub struct TimeTrackingConfiguration {
+    /// Holds the number of work hours per day, typically 7.5 in Norway
     pub workingHoursPerDay: f32,
+    /// Number of work days per week, typically 5.0
     pub workingDaysPerWeek: f32,
+    /// What time format is used
     pub timeFormat: String,
+    /// What is the default unit
     pub defaultUnit: String,
 }
 
@@ -74,6 +88,7 @@ pub struct Worklog {
     pub comment: Option<String>,
 }
 
+/// Represents the author (user) of a worklog item
 #[derive(Debug, Deserialize, Serialize, PartialOrd, PartialEq, Eq, Hash, Clone)]
 #[allow(non_snake_case)]
 pub struct Author {
@@ -95,19 +110,22 @@ pub struct JiraProjectsPage {
 
 #[derive(Debug, Deserialize, Serialize, Default)]
 pub struct JiraProject {
+    /// Unique numeric identity of a jira project
     pub id: String,
-    // numeric value
+    /// The jira project key, typically a short upper-case abbreviation
     pub key: String,
-    // e.g. "TIME", "RGA", etc.
+    /// The name of the jira project
     pub name: String,
     #[serde(alias = "self")]
     pub url: String,
     #[serde(alias = "isPrivate")]
     pub is_private: bool,
     #[serde(skip)] // Added after Deserializing
+    /// Collection of issues belonging to the jira project
     pub issues: Vec<JiraIssue>,
 }
 
+/// Represents a page of Jira issues retrieved from Jira
 #[derive(Debug, Deserialize, Serialize)]
 #[allow(non_snake_case)]
 pub struct JiraIssuesPage {
@@ -119,6 +137,7 @@ pub struct JiraIssuesPage {
     pub isLast: Option<bool>,
     pub issues: Vec<JiraIssue>,
 }
+/// Represents a Jira issue key like for instance `TIME-148`
 #[derive(Debug, Deserialize, Serialize, Default, Eq, PartialEq, Clone)]
 pub struct JiraKey(pub String);
 
@@ -171,18 +190,23 @@ impl PartialOrd for JiraKey {
     }
 }
 
+/// Represents a jira issue
 #[derive(Debug, Deserialize, Serialize, Default)]
 pub struct JiraIssue {
+    /// Numeric id of the jira issue
     pub id: String, // Numeric id
     #[serde(alias = "self")]
     pub self_url: String,
+    /// The key of the jira issue, typically used and referenced by the user.
     pub key: JiraKey,
 
+    /// Holds the work logs after deserializing them from Jira
     #[serde(skip)] // Added after deserializing
     pub worklogs: Vec<Worklog>,
     pub fields: JiraFields,
 }
 
+/// Holds the Jira custom field `customfield_10904`
 #[derive(Debug, Deserialize, Serialize, Default)]
 #[allow(non_snake_case)]
 pub struct JiraFields {

@@ -1,4 +1,4 @@
-//! # The Jira worklog command line utility
+//! The Jira worklog command line utility
 //!
 use jira_lib::date_util::{
     calculate_started_time, date_of_last_weekday, DateTimeError, parse_worklog_durations,
@@ -157,196 +157,15 @@ async fn main() {
 
     match opts.subcmd {
         SubCommand::Add(mut add) => {
-            let app_config = get_app_config();
-            let jira_client = get_jira_client(&app_config);
-
-            let time_tracking_options = match jira_client.get_time_tracking_options().await {
-                Ok(t) => t,
-                Err(e) => {
-                    eprintln!("Failed to create the Jira client. Http status code {}", e);
-                    exit(4);
-                }
-            };
-
-            info!("Global Jira options: {:?}", &time_tracking_options);
-
-            if add.durations.is_empty() {
-                eprintln!("Must specify a duration with --duration");
-                exit(4);
-            }
-
-            add.issue = add.issue.to_uppercase(); // Ensure the issue id is always uppercase
-
-            // If there is only a single duration which does starts with a numeric
-            debug!(
-                "Length: {} and durations[0]: {}",
-                add.durations.len(),
-                add.durations[0].chars().next().unwrap()
-            );
-
-            let mut added_worklog_items: Vec<JournalEntry> = vec![];
-
-            if add.durations.len() == 1 && add.durations[0].chars().next().unwrap() <= '9' {
-                // Single duration without a "day name" prefix
-                // like for instance --duration 7,5h
-                println!("Adding single entry");
-                let result = add_single_entry(
-                    &jira_client,
-                    &time_tracking_options,
-                    add.issue,
-                    &add.durations[0],
-                    add.started,
-                    add.comment,
-                )
-                .await;
-                added_worklog_items.push(result);
-            } else if !add.durations.is_empty() && add.durations[0].chars().next().unwrap() >= 'A' {
-                // One or more durations with day name prefix, like for instance:
-                // --duration mon:7,5h tue:1h wed:1d
-                debug!("Handling multiple entries");
-                added_worklog_items = add_multiple_entries(
-                    jira_client,
-                    time_tracking_options,
-                    add.issue,
-                    add.durations,
-                    add.comment,
-                )
-                .await;
-            } else {
-                eprintln!(
-                    "Internal error, unable to parse the durations. Did not understand: {}",
-                    add.durations[0]
-                );
-                exit(4);
-            }
-            // Writes the added worklog items to our local journal
-            add_worklog_entries_to_journal(added_worklog_items);
+            add_subcommand(&mut add).await;
         }
 
         SubCommand::Del(delete) => {
-            let app_config = get_app_config();
-            let jira_client = get_jira_client(&app_config);
-
-            let current_user = jira_client.get_current_user().await;
-            let worklog_entry = match jira_client
-                .get_worklog(&delete.issue_id, &delete.worklog_id)
-                .await
-            {
-                Ok(result) => result,
-                Err(e) => match e {
-                    StatusCode::NOT_FOUND => {
-                        eprintln!(
-                            "Worklog {} for issue '{}' not found",
-                            &delete.worklog_id, &delete.issue_id
-                        );
-                        exit(4);
-                    }
-                    other => {
-                        eprintln!("ERROR: unknown http status code: {}", other);
-                        exit(16)
-                    }
-                },
-            };
-
-            if worklog_entry.author.accountId != current_user.account_id {
-                eprintln!(
-                    "ERROR: You are not the owner of worklog with id {}",
-                    &delete.worklog_id
-                );
-                exit(403);
-            }
-
-            match jira_client
-                .delete_worklog(delete.issue_id, delete.worklog_id.to_owned())
-                .await
-            {
-                Ok(_) => println!("Jira work log id {} deleted", &delete.worklog_id),
-                Err(e) => {
-                    println!(
-                        "An error occurred, worklog entry probably not deleted: {}",
-                        e
-                    );
-                    exit(4);
-                }
-            }
-            journal::remove_entry_from_journal(&PathBuf::from(app_config.application_data.journal_data_file_name), delete.worklog_id.as_str());
-            println!("Removed entry {} from local journal", delete.worklog_id);
+            delete_subcommand(&delete).await;
         }
 
         SubCommand::Status(status) => {
-            let app_config = get_app_config();
-
-            let jira_client = get_jira_client(&app_config);
-            let start_after = status.after.map(|s| str_to_date_time(&s).unwrap());
-
-            let mut worklog_entries: Vec<Worklog> = Vec::new();
-            let mut issue_information: HashMap<String, JiraIssue> = HashMap::new();
-
-            let keys = if status.issues.is_none() {
-                journal::find_unique_keys(&PathBuf::from(app_config.application_data.journal_data_file_name))
-            } else {
-                status.issues.unwrap()
-            };
-            if keys.is_empty() {
-                eprintln!("No issues provided on command line and no issues found in local journal");
-                eprintln!("You want to use the -i option and specify issues");
-                exit(4);
-            }
-            eprintln!("Retrieving data for time codes: {}", &keys.join(", "));
-
-            for issue in keys.iter() {
-                let mut entries = match jira_client
-                    .get_worklogs_for_current_user(issue, start_after)
-                    .await
-                {
-                    Ok(result) => result,
-                    Err(e) => match e {
-                        StatusCode::NOT_FOUND => {
-                            eprintln!("Issue {} not found", issue);
-                            exit(4);
-                        }
-                        other => {
-                            eprintln!(
-                                "ERROR: Unknown http status code {} for issue {}",
-                                other, issue
-                            );
-                            exit(16);
-                        }
-                    },
-                };
-                worklog_entries.append(&mut entries);
-                let issue_info = match jira_client.get_issue_by_id_or_key(issue).await {
-                    Ok(r) => r,
-                    Err(e) => match e {
-                        StatusCode::NOT_FOUND => {
-                            eprintln!("Issue {} not found", issue);
-                            exit(4);
-                        }
-                        other => {
-                            eprintln!(
-                                "ERROR: Unknown http status code {} for issue {}",
-                                other, issue
-                            );
-                            exit(4);
-                        }
-                    },
-                };
-                // Allows us to look up the issue by numeric id to augment the report
-                issue_information.insert(issue_info.id.to_string(), issue_info);
-            }
-
-            issue_and_entry_report(&mut worklog_entries, &mut issue_information);
-            println!();
-
-            let issue_keys_by_command_line_order = keys
-                .iter()
-                .map(|k| JiraKey(k.to_owned()))
-                .collect();
-            table_report::table_report(
-                &mut worklog_entries,
-                &issue_keys_by_command_line_order,
-                &issue_information,
-            );
+            status_subcommand(status).await;
         }
 
         SubCommand::Config(config) => match config {
@@ -419,6 +238,199 @@ async fn main() {
             }
         }
     }
+}
+
+async fn delete_subcommand(delete: &Del) {
+    let app_config = get_app_config();
+    let jira_client = get_jira_client(&app_config);
+
+    let current_user = jira_client.get_current_user().await;
+    let worklog_entry = match jira_client
+        .get_worklog(&delete.issue_id, &delete.worklog_id)
+        .await
+    {
+        Ok(result) => result,
+        Err(e) => match e {
+            StatusCode::NOT_FOUND => {
+                eprintln!(
+                    "Worklog {} for issue '{}' not found",
+                    &delete.worklog_id, &delete.issue_id
+                );
+                exit(4);
+            }
+            other => {
+                eprintln!("ERROR: unknown http status code: {}", other);
+                exit(16)
+            }
+        },
+    };
+
+    if worklog_entry.author.accountId != current_user.account_id {
+        eprintln!(
+            "ERROR: You are not the owner of worklog with id {}",
+            &delete.worklog_id
+        );
+        exit(403);
+    }
+
+    match jira_client
+        .delete_worklog(delete.issue_id.clone(), delete.worklog_id.to_owned())
+        .await
+    {
+        Ok(_) => println!("Jira work log id {} deleted", &delete.worklog_id),
+        Err(e) => {
+            println!(
+                "An error occurred, worklog entry probably not deleted: {}",
+                e
+            );
+            exit(4);
+        }
+    }
+    journal::remove_entry_from_journal(&PathBuf::from(app_config.application_data.journal_data_file_name), delete.worklog_id.as_str());
+    println!("Removed entry {} from local journal", delete.worklog_id);
+}
+
+async fn status_subcommand(status: Status) {
+    let app_config = get_app_config();
+
+    let jira_client = get_jira_client(&app_config);
+    let start_after = status.after.map(|s| str_to_date_time(&s).unwrap());
+
+    let mut worklog_entries: Vec<Worklog> = Vec::new();
+    let mut issue_information: HashMap<String, JiraIssue> = HashMap::new();
+
+    let keys = if status.issues.is_none() {
+        journal::find_unique_keys(&PathBuf::from(app_config.application_data.journal_data_file_name))
+    } else {
+        status.issues.unwrap()
+    };
+    if keys.is_empty() {
+        eprintln!("No issues provided on command line and no issues found in local journal");
+        eprintln!("You want to use the -i option and specify issues");
+        exit(4);
+    }
+    eprintln!("Retrieving data for time codes: {}", &keys.join(", "));
+
+    for issue in keys.iter() {
+        let mut entries = match jira_client
+            .get_worklogs_for_current_user(issue, start_after)
+            .await
+        {
+            Ok(result) => result,
+            Err(e) => match e {
+                StatusCode::NOT_FOUND => {
+                    eprintln!("Issue {} not found", issue);
+                    exit(4);
+                }
+                other => {
+                    eprintln!(
+                        "ERROR: Unknown http status code {} for issue {}",
+                        other, issue
+                    );
+                    exit(16);
+                }
+            },
+        };
+        worklog_entries.append(&mut entries);
+        let issue_info = match jira_client.get_issue_by_id_or_key(issue).await {
+            Ok(r) => r,
+            Err(e) => match e {
+                StatusCode::NOT_FOUND => {
+                    eprintln!("Issue {} not found", issue);
+                    exit(4);
+                }
+                other => {
+                    eprintln!(
+                        "ERROR: Unknown http status code {} for issue {}",
+                        other, issue
+                    );
+                    exit(4);
+                }
+            },
+        };
+        // Allows us to look up the issue by numeric id to augment the report
+        issue_information.insert(issue_info.id.to_string(), issue_info);
+    }
+
+    issue_and_entry_report(&mut worklog_entries, &mut issue_information);
+    println!();
+
+    let issue_keys_by_command_line_order = keys
+        .iter()
+        .map(|k| JiraKey(k.to_owned()))
+        .collect();
+    table_report::table_report(
+        &mut worklog_entries,
+        &issue_keys_by_command_line_order,
+        &issue_information,
+    );
+}
+
+async fn add_subcommand(add: &mut Add) {
+    let app_config = get_app_config();
+    let jira_client = get_jira_client(&app_config);
+
+    let time_tracking_options = match jira_client.get_time_tracking_options().await {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("Failed to create the Jira client. Http status code {}", e);
+            exit(4);
+        }
+    };
+
+    info!("Global Jira options: {:?}", &time_tracking_options);
+
+    if add.durations.is_empty() {
+        eprintln!("Must specify a duration with --duration");
+        exit(4);
+    }
+
+    add.issue = add.issue.to_uppercase(); // Ensure the issue id is always uppercase
+
+    // If there is only a single duration which does starts with a numeric
+    debug!(
+                "Length: {} and durations[0]: {}",
+                add.durations.len(),
+                add.durations[0].chars().next().unwrap()
+            );
+
+    let mut added_worklog_items: Vec<JournalEntry> = vec![];
+
+    if add.durations.len() == 1 && add.durations[0].chars().next().unwrap() <= '9' {
+        // Single duration without a "day name" prefix
+        // like for instance --duration 7,5h
+        println!("Adding single entry");
+        let result = add_single_entry(
+            &jira_client,
+            &time_tracking_options,
+            add.issue.clone(),
+            &add.durations[0],
+            add.started.clone(),
+            add.comment.clone(),
+        )
+            .await;
+        added_worklog_items.push(result);
+    } else if !add.durations.is_empty() && add.durations[0].chars().next().unwrap() >= 'A' {
+        // One or more durations with day name prefix, like for instance:
+        // --duration mon:7,5h tue:1h wed:1d
+        debug!("Handling multiple entries");
+        added_worklog_items = add_multiple_entries(
+            jira_client,
+            time_tracking_options,
+            add.issue.clone(),
+            add.durations.clone(),
+            add.comment.clone(),
+        )
+            .await;
+    } else {
+        eprintln!(
+            "Internal error, unable to parse the durations. Did not understand: {}",
+            add.durations[0]
+        );
+        exit(4);
+    }
+    // Writes the added worklog items to our local journal
+    add_worklog_entries_to_journal(added_worklog_items);
 }
 
 fn get_jira_client(app_config: &ApplicationConfig) -> JiraClient {
