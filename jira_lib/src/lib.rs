@@ -4,7 +4,6 @@
 //!
 //! Many of the types have been declared specifically for the purpose of work log management,
 //! and are hence not generic.
-//!
 extern crate core;
 
 use std::cmp::Ordering;
@@ -34,6 +33,17 @@ pub mod date_util;
 /// Holds the ULR of the Jira API to use
 pub const JIRA_URL: &str = "https://autostore.atlassian.net/rest/api/latest";
 const FUTURE_BUFFER_SIZE: usize = 20;
+#[cfg_attr(doc, aquamarine::aquamarine)]
+
+///
+/// ```mermaid
+/// graph LR
+///     s([Source]) --> a[[aquamarine]]
+///      r[[rustdoc]] --> f([Docs w/ Mermaid!])
+///      subgraph rustc[Rust Compiler]
+///      a -. inject mermaid.js .-> r
+///      end
+/// ```
 
 /// Represents the global Jira settings
 #[derive(Debug, Serialize, Deserialize)]
