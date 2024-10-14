@@ -41,13 +41,9 @@ async fn get_timesheet() -> Json<Timesheet> {
             String::from("TIME-148"),
         ],
         hours: vec![
-            vec![4, 2, 3], // Monday: Hours for Project A, Project B, Project C
-            vec![5, 1, 0], // Tuesday
-            vec![0, 4, 6], // Wednesday
-            vec![8, 0, 0], // Thursday
-            vec![7, 3, 2], // Friday
-            vec![3, 1, 5], // Saturday
-            vec![2, 4, 3], // Sunday
+            vec![4, 5, 0, 8, 7, 3, 2], // TIME-117 Monday through Sunday
+            vec![5, 1, 4, 0, 3, 1, 4], // TIME-147
+            vec![0, 4, 6, 0, 2, 5, 3], // TIME-148
         ],
     };
 
