@@ -56,7 +56,8 @@ pub async fn insert_project(dbms: &mut tokio_postgres::Client, project: &JiraPro
         .await
     {
         Ok(_) => {}
-        Err(e) => panic!("Unable to insert project {project:?}, cause: {e}"),
+        #[allow(unused_variables)]  // Stop Clippy from complaining
+        Err(err) => panic!("Unable to insert project {project:?}, cause: {err}"),
     }
 }
 
@@ -112,6 +113,7 @@ pub async fn insert_author(dbms: &mut tokio_postgres::Client, author: &Author) -
         .await
     {
         Ok(row) => row.get(0),
+        #[allow(unused_variables)]  // Stop Clippy from complaining
         Err(dbms_err) => panic!(
             "Unable to insert new jira.author, using sql: {stmt}, \nreason: {dbms_err:?}"
         ),
@@ -124,6 +126,7 @@ pub async fn batch_insert_authors(dbms: &mut tokio_postgres::Client, authors: &[
         let (sql, params) = compose_batch_insert_authors_sql(authors);
         match dbms.execute(sql.as_str(), &params[..]).await {
             Ok(_) => {}
+            #[allow(unused_variables)]  // Stop Clippy from complaining
             Err(err) => panic!("Unable to insert authors. Cause: {err:?}"),
         }
         info!("Upserted {} authors", authors_chunk.len());
@@ -185,6 +188,7 @@ pub async fn insert_worklog(dbms: &mut tokio_postgres::Client, worklog: &Worklog
         .await
     {
         Ok(_) => (),
+        #[allow(unused_variables)]  // Stop Clippy from complaining
         Err(err) => panic!("Unable to upsert new worklog entry: {err:?}"),
     }
 }
@@ -196,6 +200,7 @@ pub async fn batch_insert_worklogs(dbms: &mut tokio_postgres::Client, worklogs: 
         let (sql, params) = compose_batch_insert_worklog_sql(worklog_chunk);
         match dbms.execute(sql.as_str(), &params[..]).await {
             Ok(_) => {}
+            #[allow(unused_variables)]  // Stop Clippy from complaining
             Err(e) => panic!("Failed to insert worklogs, reason {e:?}"),
         };
     }
@@ -364,6 +369,7 @@ pub async fn insert_assets(dbms: &mut tokio_postgres::Client, assets: &[String])
 
         match dbms.execute(&sql, &params[..]).await {
             Ok(_) => {}
+            #[allow(unused_variables)]  // Stop Clippy from complaining
             Err(e) => {
                 panic!("Failed to insert authors, SQL: {sql} \n cause: {e:?}")
             }
