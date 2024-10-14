@@ -36,6 +36,7 @@ pub fn dbms_init(connect: &str) -> Result<Client, Error> {
 #[deprecated()]
 #[must_use]
 pub fn connect_str() -> &'static str {
+    // TODO: hardcoded DBMS url and password is bad, fix it!
     "host=postgres.testenv.autostoresystem.com user=postgres password=uU7DP6WatYtUhEeNpKfq"
 }
 

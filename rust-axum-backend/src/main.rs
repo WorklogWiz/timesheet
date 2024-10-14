@@ -5,7 +5,6 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
-use tokio;
 use tower_http::cors::{CorsLayer, Any};
 
 #[derive(Serialize)]
@@ -64,7 +63,7 @@ use axum::routing::post;
 async fn post_timesheet(Json(payload): Json<Timesheet>) -> impl IntoResponse {
     // Here you can process the timesheet data, such as saving it to a database
     // For now, we will just print the received data
-    println!("Received timesheet data: {:?}", payload);
+    println!("Received timesheet data: {payload:?}");
 
     // Return a success message
     (
@@ -91,7 +90,7 @@ async fn main() {
         .layer(cors);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 4000));
-    println!("Server running on {}", addr);
+    println!("Server running on {addr}");
 
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
