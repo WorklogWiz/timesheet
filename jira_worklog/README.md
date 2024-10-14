@@ -5,16 +5,16 @@ as possible from the command line.
 
 This utility will let you add your work log entries in less than 1s.
 
-A quick status report for the last 30 days typically executes in less than 2-3 seconds, unless 
-the Jira project contains thousands of entries. 
+A quick status report for the last 30 days typically executes in less than 2-3 seconds, unless
+the Jira project contains thousands of entries.
 
 All entries added to Jira will also be written to a local journal in CSV format.
 
-This journal is used for status reports if you omit the `--issues` option. 
+This journal is used for status reports if you omit the `--issues` option.
 
 You may use Excel to read the CSV format, specifying ';' as the delimiter.
 
-Disclaimer: Network latency and the response time of Jira is the main culprit of any delays 
+Disclaimer: Network latency and the response time of Jira is the main culprit of any delays
 
 <!-- TOC -->
 * [The Jira worklog utility](#the-jira-worklog-utility)
@@ -31,6 +31,7 @@ Disclaimer: Network latency and the response time of Jira is the main culprit of
     * [Listing all available time codes](#listing-all-available-time-codes)
     * [Debug](#debug)
 <!-- TOC -->
+
 ````shell
 # Add one day of work to Jira issue TIME-94
 jira_worklog add -i time-94 -d 1d
@@ -42,23 +43,29 @@ jira_worklog status -i time-94 time-40
 See the detailed examples below for more details.
 
 ## Installation
-Once you have downloaded and installed `jira_worklog` in your **path**. 
-Like, for instance, `$HOME/.local/bin`
-:
- 1. Obtain a Jira API security token from:
+
+Once you have downloaded and installed `jira_worklog` in your **path**.
+Like, for instance, `$HOME/.local/bin`:
+
+1. Obtain a Jira API security token from:
+
     1. Log in to Jira
-    2. Click on the picture of yourself in the upper right corner ("Your profile and settings")
-    3. Click "Manage account"
-    4. Click "Security" ![](images/jira_security.png)
-    5. Choose "Create and manage API tokens" almost at the bottom of the page
-    6. Click "Create your API token" and copy the token to your clip board
+    1. Click on the picture of yourself in the upper right corner ("Your profile and settings")
+    1. Click "Manage account"
+    1. Click "Security" ![](images/jira_security.png)
+    1. Choose "Create and manage API tokens" almost at the bottom of the page
+    1. Click "Create your API token" and copy the token to your clip board
 2. Execute this command to create the configuration file:
+
     ````shell
    # Creates the configuration file and stores your credentials in it
     jira_worklog config --user steinar.cook@autostoresystem.com --token vbF**************E3
     ````
+
 ### Using `curl` to verify your security token
+
 Here is how you can retrieve data from Jira using the `curl` utility from the command line:
+
 ````shell
 curl --request GET \
   --url 'https://autostore.atlassian.net/rest/api/2/myself' \
@@ -67,14 +74,16 @@ curl --request GET \
 ````
 
 ### Installing on MacOS
-There are some extra security built into the macOS which prevents you from running potential malware. 
+
+There are some extra security built into the macOS which prevents you from running potential malware.
 Consequently, you will see this error message if you attempt to run `jira_worklog`:
 
 ![](images/macos_error_unidentified_dev.png)
 
 To fix this:
+
 ```shell
-# Move to the directory where you installed 
+# Move to the directory where you installed
 cd [to_the_directory_where_you_have_installed_jira_worklog]
 
 chmod a+rx ./jira_worklog && xattr -d com.apple.quarantine ./jira_worklog
@@ -83,6 +92,7 @@ chmod a+rx ./jira_worklog && xattr -d com.apple.quarantine ./jira_worklog
 This should solve the problem.
 
 ### Notes on security
+
 The configuration file is stored without encryption in a location, which depends on the operating system you are using.
 See the table below for details.
 
@@ -97,6 +107,7 @@ You can remove your local configuration file using the command: `jira_worklog co
 | Linux:               | `/home/steinar/.config/jira_worklog`                               |
 
 ## How to specify the duration
+
 You can specify the duration of your work using weeks, days, hours and minutes.
 
 The syntax is pretty straight forward, you simply specify a number followed by the unit.
@@ -107,14 +118,15 @@ However, you may not specify fractions of minutes (for obvious reasons) :
 ````shell
 <number>w<number>d<number>h<integer number>m
 ````
+
 Here is an example using all the options possible
+
 ````shell
 # Specify a duration of 1 week, 2 days, 5 hours and 30min like this
 jira_worklog add -i time-158 -d 1,5w2,5d5,25h30min
 ````
 
-
-## Examples 
+## Examples
 
 Here are some examples on how to use the utility.
 
@@ -127,25 +139,28 @@ jira_worklog add -i time-94 -d 1h -c "I did some great work for AutoStore"
 
 
 # Registers 1 hour of work on TIME-94 at 11:00 today without a comment
-jira_worklog add -i time-94 -d 1h -s 11:00 
+jira_worklog add -i time-94 -d 1h -s 11:00
 
 # Registers 1 day of work (7.5h) on TIME-94, starting at 08:00 today, no comments
 jira_worklog add -i time-94 -d 1d
 
 # Registers 1 day (7.5 hours) of work starting at 08:00 today with no comment
-jira_worklog add -i time-94 -d 1d 
+jira_worklog add -i time-94 -d 1d
 
 #
-# Add 1d of work last friday, 1d of work on last thursday, 4h of work 
+# Add 1d of work last friday, 1d of work on last thursday, 4h of work
 # last Wednesday and 1,5h on last Tuesday
 jira_worklog add -i time-94 -d Fri:1d Thu:1d Wed:4h Tue:1,5h
 ````
 
 Given this command:
+
 `````shell
 jira_worklog add -i time-94 -d 13h -c "Meetings and managerial work"
 `````
+
 You will get a receipt looking something like this:
+
 `````shell
 Adding single entry
 Using these parameters as input:
@@ -165,41 +180,42 @@ jira_worklog status -i time-40 time-147 time-117 -a 2023-05-01
 ````
 
 This would give you something like this:
+
 `````shell
 Issue    IssueId Id      Weekday Started                Time spent Comment
-TIME-117 167111  304691  Mon     2024-08-19 14:42 +0200 00:30      
-TIME-117 167111  305981  Wed     2024-08-28 08:36 +0200 01:00      
-TIME-117 167111  306255  Wed     2024-08-28 11:22 +0200 03:00      
+TIME-117 167111  304691  Mon     2024-08-19 14:42 +0200 00:30
+TIME-117 167111  305981  Wed     2024-08-28 08:36 +0200 01:00
+TIME-117 167111  306255  Wed     2024-08-28 11:22 +0200 03:00
 TIME-117 167111  309851  Tue     2024-09-03 08:00 +0200 07:30      Multi grid workshop in Haugesund
-TIME-147 211874  309901  Mon     2024-09-02 08:00 +0200 07:30      
+TIME-147 211874  309901  Mon     2024-09-02 08:00 +0200 07:30
 TIME-147 211874  309995  Wed     2024-09-04 08:00 +0200 07:30      PO role desc, DT architecture, time logging
-TIME-147 211874  310089  Thu     2024-09-06 01:21 +0200 07:30      
+TIME-147 211874  310089  Thu     2024-09-06 01:21 +0200 07:30
 TIME-147 211874  310499  Fri     2024-09-06 08:00 +0200 07:30      Admin work, DT migration planning
 TIME-147 211874  310500  Fri     2024-09-06 08:00 +0200 03:00      jira_worklog
 TIME-147 211874  310501  Sat     2024-09-07 08:00 +0200 03:00      jira_worklog
 TIME-147 211874  310535  Sun     2024-09-08 07:43 +0200 01:00      Added monthly summary to worklog
-TIME-40  85002   304588  Mon     2024-08-05 08:00 +0200 07:30      
-TIME-40  85002   304589  Tue     2024-08-06 08:00 +0200 07:30      
-TIME-40  85002   304590  Wed     2024-08-07 08:00 +0200 07:30      
-TIME-40  85002   304591  Thu     2024-08-08 08:00 +0200 07:30      
-TIME-40  85002   304592  Fri     2024-08-09 08:00 +0200 07:30      
-TIME-40  85002   303933  Mon     2024-08-12 09:00 +0200 10:00      
-TIME-40  85002   304329  Tue     2024-08-13 08:00 +0200 08:00      
-TIME-40  85002   304330  Wed     2024-08-14 08:00 +0200 10:00      
-TIME-40  85002   304331  Thu     2024-08-15 08:00 +0200 07:30      
-TIME-40  85002   304431  Fri     2024-08-16 08:00 +0200 06:00      
-TIME-40  85002   304593  Sun     2024-08-18 16:00 +0200 01:00      
-TIME-40  85002   305844  Mon     2024-08-19 08:00 +0200 07:30      
-TIME-40  85002   305845  Tue     2024-08-20 08:00 +0200 07:30      
-TIME-40  85002   305846  Wed     2024-08-21 08:00 +0200 07:30      
-TIME-40  85002   305847  Thu     2024-08-22 08:00 +0200 07:30      
-TIME-40  85002   305848  Fri     2024-08-23 08:00 +0200 07:30      
-TIME-40  85002   305849  Sun     2024-08-25 08:00 +0200 04:00      
-TIME-40  85002   305850  Mon     2024-08-26 08:00 +0200 07:30      
+TIME-40  85002   304588  Mon     2024-08-05 08:00 +0200 07:30
+TIME-40  85002   304589  Tue     2024-08-06 08:00 +0200 07:30
+TIME-40  85002   304590  Wed     2024-08-07 08:00 +0200 07:30
+TIME-40  85002   304591  Thu     2024-08-08 08:00 +0200 07:30
+TIME-40  85002   304592  Fri     2024-08-09 08:00 +0200 07:30
+TIME-40  85002   303933  Mon     2024-08-12 09:00 +0200 10:00
+TIME-40  85002   304329  Tue     2024-08-13 08:00 +0200 08:00
+TIME-40  85002   304330  Wed     2024-08-14 08:00 +0200 10:00
+TIME-40  85002   304331  Thu     2024-08-15 08:00 +0200 07:30
+TIME-40  85002   304431  Fri     2024-08-16 08:00 +0200 06:00
+TIME-40  85002   304593  Sun     2024-08-18 16:00 +0200 01:00
+TIME-40  85002   305844  Mon     2024-08-19 08:00 +0200 07:30
+TIME-40  85002   305845  Tue     2024-08-20 08:00 +0200 07:30
+TIME-40  85002   305846  Wed     2024-08-21 08:00 +0200 07:30
+TIME-40  85002   305847  Thu     2024-08-22 08:00 +0200 07:30
+TIME-40  85002   305848  Fri     2024-08-23 08:00 +0200 07:30
+TIME-40  85002   305849  Sun     2024-08-25 08:00 +0200 04:00
+TIME-40  85002   305850  Mon     2024-08-26 08:00 +0200 07:30
 TIME-40  85002   305852  Tue     2024-08-27 08:00 +0200 07:30      Strategy workshop
-TIME-40  85002   305853  Tue     2024-08-27 08:00 +0200 03:00      Workshop part2 
+TIME-40  85002   305853  Tue     2024-08-27 08:00 +0200 03:00      Workshop part2
 TIME-40  85002   306261  Wed     2024-08-28 10:26 +0200 04:00      Meetings about admin
-TIME-40  85002   309850  Thu     2024-08-29 08:00 +0200 07:30      
+TIME-40  85002   309850  Thu     2024-08-29 08:00 +0200 07:30
 TIME-40  85002   307325  Fri     2024-08-30 08:20 +0200 07:30      Walk and talk and product ownership
 
 Date       Day  time-40  time-147 time-117   Total
@@ -264,14 +280,19 @@ ISO Week 36       00:00    37:00    07:30    44:30
 `````
 
 ### Create a status report from most used time codes
+
 If you omit the `--issue` option, a list of unique time codes will
 be obtained from the local journal on your machine.
+
 ```shell
 jira_worklog status
 ```
+
 ### Removing entries
-We all make mistakes every now then. To remove an entry you need to specify the 
+
+We all make mistakes every now then. To remove an entry you need to specify the
 `issueId or key` and the `worklog id`:
+
 `````shell
 # Removes a work log entry for issue TIME-94 with worklog id of 216626
 jira_worklog del -i time-94 -w 216626
@@ -280,24 +301,28 @@ jira_worklog del -i time-94 -w 216626
 The entry will also be removed from the local journal.
 
 ### Listing all available time codes
+
 If you want a complete list of all the available time codes:
+
 ```shell
 jira_worklog codes
 ```
+
 Output:
+
 ```text
 TIME-164 ASIO - Sustaining
 TIME-163 Service Vehicles - Sustaining
 TIME-162 Service Wall - Sustaining
 TIME-161 Amazon UWA6 - Customer Project
 TIME-160 Cloud Infrastructure & DevOps
-TIME-159 1214 Qubit Product Improvement 2024 
+TIME-159 1214 Qubit Product Improvement 2024
 TIME-158 1215 Robot Radio Wifi
 TIME-157 1213 Green Train Release Spring 2025 - Test & Validation
 TIME-156 1212 Green Train Release Spring 2025 - Cube Control Software
 TIME-155 Travel
 TIME-154 Product Management
-TIME-153 Product Safety 
+TIME-153 Product Safety
 TIME-152 Scalability - Sustaining
 TIME-151 Log Analyzer - Sustaining
 TIME-150 Facility Management
@@ -309,19 +334,22 @@ TIME-145 Port Software - Sustaining
 ```
 
 ### Debug
+
 A log-file is created behind the scenes if you use the `--verbosity` option, which allows for debugging:
+
 ````shell
 jira_worklog status -i time-40 -v debug
 ````
 
 Output would look something like this:
+
 ````shell
 jira_worklog status -i TIME-40 -v debug
 Version: 0.2.7
 Logging to /var/folders/ll/ywcp72091yv33vkts306qs0r0000gn/T/jira_worklog.log
 Issue    IssueId      Id         Weekday Started                      Time spent
-TIME-40  85002        304588     Mon     2024-08-05 08:00 +0200       07:30 
-TIME-40  85002        304589     Tue     2024-08-06 08:00 +0200       07:30 
+TIME-40  85002        304588     Mon     2024-08-05 08:00 +0200       07:30
+TIME-40  85002        304589     Tue     2024-08-06 08:00 +0200       07:30
 ...... lots of data .....
 ````
 
