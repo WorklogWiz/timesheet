@@ -1,5 +1,5 @@
 use std::io;
-use jira_lib::{Author};
+use jira_lib::Author;
 
 fn main() {
     let mut csv_writer = csv::WriterBuilder::new()

@@ -8,11 +8,11 @@ use chrono::{Datelike, Local, NaiveDate, TimeZone, Weekday};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use env_logger::Env;
 use jira_lib::config::{
-    ApplicationConfig, config_file_name, load_or_create_configuration, remove_configuration,
+    file_name, load_or_create_configuration, remove_configuration,
     save_configuration,
 };
 use jira_lib::{config, date_util, JiraClient, JiraIssue, JiraKey, journal, TimeTrackingConfiguration, Worklog};
-use jira_lib::journal::{add_worklog_entries_to_journal, JournalEntry};
+use jira_lib::journal::{add_worklog_entries, Entry};
 
 use log::{debug, info};
 use reqwest::StatusCode;
@@ -448,18 +448,15 @@ fn get_jira_client(app_config: &ApplicationConfig) -> JiraClient {
     }
 }
 
-fn get_app_config() -> ApplicationConfig {
-    let app_config = match config::load_configuration() {
-        Ok(c) => c,
-        Err(_) => {
-            println!(
-                "Config file {} not found.",
-                config_file_name().to_string_lossy()
-            );
-            println!("Create it with: jira_worklog config --user <EMAIL> --token <JIRA_TOKEN>");
-            println!("See 'config' subcommand for more details");
-            exit(4);
-        }
+fn get_app_config() -> config::Application {
+    let Ok(app_config) = config::load_configuration() else {
+        println!(
+            "Config file {} not found.",
+            file_name().to_string_lossy()
+        );
+        println!("Create it with: jira_worklog config --user <EMAIL> --token <JIRA_TOKEN>");
+        println!("See 'config' subcommand for more details");
+        exit(4);
     };
 
     debug!("jira_url: '{}'", app_config.jira.jira_url);
@@ -597,11 +594,11 @@ async fn add_multiple_entries(
     issue: String,
     durations: Vec<String>,
     comment: Option<String>,
-) -> Vec<JournalEntry> {
+) -> Vec<Entry> {
     // Parses the list of durations in the format XXX:nn,nnU, i.e. Mon:1,5h into Weekday, duration and unit
     let durations: Vec<(Weekday, f32, String)> = parse_worklog_durations(durations);
 
-    let mut inserted_work_logs: Vec<JournalEntry> = vec![];
+    let mut inserted_work_logs: Vec<Entry> = vec![];
 
     for entry in durations.into_iter() {
         let weekday = entry.0;
@@ -641,7 +638,7 @@ async fn add_single_entry(
     duration: &str,
     started: Option<String>,
     comment: Option<String>,
-) -> JournalEntry {
+) -> Entry {
     debug!(
         "add_single_entry({}, {}, {:?}, {:?})",
         &issue, duration, started, comment
@@ -654,7 +651,7 @@ async fn add_single_entry(
     ) {
         Ok(time_spent) => time_spent.time_spent_seconds,
         Err(e) => {
-            eprintln!("Unable to figure out the duration of your worklog entry from '{}', error message is: {}", duration, e);
+            eprintln!("Unable to figure out the duration of your worklog entry from '{duration}', error message is: {e}");
             exit(4);
         }
     };
@@ -665,7 +662,7 @@ async fn add_single_entry(
     // Optionally calculates the starting point after which it is verified
     let calculated_start = calculate_started_time(starting_point, time_spent_seconds)
         .unwrap_or_else(|err: DateTimeError| {
-            eprintln!("{}", err);
+            eprintln!("{err}");
             exit(4);
         });
 
@@ -676,7 +673,7 @@ async fn add_single_entry(
         calculated_start.to_rfc3339(),
         started.map_or("computed", |_| "computed from command line")
     );
-    println!("\tDuration: {}s", time_spent_seconds);
+    println!("\tDuration: {time_spent_seconds}s");
     println!("\tComment: {}", comment.as_deref().unwrap_or("None"));
 
     let result = match jira_client
@@ -691,14 +688,11 @@ async fn add_single_entry(
         Ok(result) => result,
         Err(e) => match e {
             StatusCode::NOT_FOUND => {
-                eprintln!("WARNING: Issue {} not found", issue);
+                eprintln!("WARNING: Issue {issue} not found");
                 exit(4);
             }
             other => {
-                eprintln!(
-                    "ERROR: Unable to insert worklog entry for issue {}, http error code {}",
-                    issue, other
-                );
+                eprintln!("ERROR: Unable to insert worklog entry for issue {issue}, http error code {other}");
                 exit(4);
             }
         },
@@ -713,7 +707,7 @@ async fn add_single_entry(
     );
     println!("To delete entry: jira_worklog del -i {} -w {}", issue, &result.id);
 
-    JournalEntry {
+    Entry {
         issue_key: issue,
         worklog_id: result.id,
         started: calculated_start.with_timezone(&Local),

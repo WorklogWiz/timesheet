@@ -1,6 +1,5 @@
 use std::fs::File;
 use jira_lib::config;
-use csv;
 
 fn main() {
     let configuration = config::load_configuration().unwrap();
@@ -21,6 +20,6 @@ fn main() {
     }).collect::<Result<Vec<_>, _>>().unwrap();
 
     for record in vec {
-        println!("{:?}", record);
+        println!("{record:?}");
     }
 }

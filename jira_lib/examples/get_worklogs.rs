@@ -1,5 +1,3 @@
-use tokio;
-
 use jira_lib::{JiraClient, midnight_a_month_ago_in};
 
 #[tokio::main]

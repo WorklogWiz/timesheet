@@ -1,7 +1,7 @@
 use std::{fs, io};
 use std::collections::HashSet;
 use std::fs::File;
-use std::path::{ PathBuf};
+use std::path::PathBuf;
 use std::process::exit;
 use chrono::{DateTime, Local, };
 use csv::{ReaderBuilder, WriterBuilder};
@@ -12,7 +12,7 @@ use crate::{config, date_util, };
 
 /// Represents the columns in the journal file, which is CSV formatted
 #[derive(Serialize, Deserialize,PartialEq,Clone)]
-pub struct JournalEntry {
+pub struct Entry {
     pub issue_key: String,
     pub worklog_id: String,
     #[serde(serialize_with = "serialize_datetime")]
@@ -33,18 +33,19 @@ where
     serializer.serialize_str(&formatted_date)
 }
 
+#[allow(clippy::trivially_copy_pass_by_ref)]
 fn serialize_seconds<S>(seconds: &i32, serializer: S) -> Result<S::Ok, S::Error>
 where
     S: Serializer,
 {
-    let formatted_duration = date_util::seconds_to_hour_and_min(&seconds);
+    let formatted_duration = date_util::seconds_to_hour_and_min(seconds);
     serializer.serialize_str(&formatted_duration)
 }
 
-pub fn add_worklog_entries_to_journal(worklog: Vec<JournalEntry>) {
+pub fn add_worklog_entries(worklog: Vec<Entry>) {
 
     let file_name = config::journal_data_file_name();
-    match create_or_open_worklog_journal(&file_name){
+    match create_or_open(&file_name){
         Ok(file) => {
             let mut csv_writer = WriterBuilder::new ()
                 .delimiter(CSV_DELIMITER)
@@ -53,16 +54,16 @@ pub fn add_worklog_entries_to_journal(worklog: Vec<JournalEntry>) {
 
             for entry in worklog {
                 match csv_writer.serialize(entry){
-                    Ok(_) => {}
-                    Err(err) => { eprintln!("Error writing journal entry {}", err);
+                    Ok(()) => {}
+                    Err(err) => { eprintln!("Error writing journal entry {err}");
                         exit(4);
                     }
                 }
             }
             match csv_writer.flush() {
-                Ok(_) => {}
+                Ok(()) => {}
                 Err(err) => {
-                    eprintln!("Unable to flush the journal entries: {}", err);
+                    eprintln!("Unable to flush the journal entries: {err}");
                     exit(4);
                 }
             }
@@ -76,7 +77,8 @@ pub fn add_worklog_entries_to_journal(worklog: Vec<JournalEntry>) {
 
 }
 
-pub fn create_or_open_worklog_journal(path_to_file: &PathBuf) -> io::Result<File>{
+#[allow(clippy::missing_panics_doc, clippy::missing_errors_doc)]
+pub fn create_or_open(path_to_file: &PathBuf) -> io::Result<File>{
     if let Some(parent_dir) = path_to_file.parent() {
         if !parent_dir.exists() {
             debug!("Creating all intermittent directories for {}", path_to_file.to_string_lossy());
@@ -85,7 +87,9 @@ pub fn create_or_open_worklog_journal(path_to_file: &PathBuf) -> io::Result<File
     }
 
     // Creates the CSV header if the file is being created.
-    if !path_to_file.try_exists()? {
+    if path_to_file.try_exists()? {
+        debug!("File {} seems to exist, great!", path_to_file.to_string_lossy());
+    } else {
         debug!("File {} does not exist, creating it", path_to_file.to_string_lossy());
 
         match File::create_new(path_to_file) {
@@ -94,7 +98,7 @@ pub fn create_or_open_worklog_journal(path_to_file: &PathBuf) -> io::Result<File
                     .delimiter(CSV_DELIMITER)
                     .from_writer(journal_file);
                 debug!("Writing the CSV header");
-                csv_writer.write_record(&["key", "w_id", "started", "time spent", "comment"])?;
+                csv_writer.write_record(["key", "w_id", "started", "time spent", "comment"])?;
                 csv_writer.flush()?;
             }
             Err(err) => {
@@ -102,8 +106,6 @@ pub fn create_or_open_worklog_journal(path_to_file: &PathBuf) -> io::Result<File
                 exit(4);
             }
         }
-    } else {
-        debug!("File {} seems to exist, great!", path_to_file.to_string_lossy());
     }
     if !path_to_file.is_file() {
         eprintln!("Unable to create the journal file {}", path_to_file.to_string_lossy());
@@ -114,10 +116,11 @@ pub fn create_or_open_worklog_journal(path_to_file: &PathBuf) -> io::Result<File
     fs::OpenOptions::new().append(true).create(true).open(path_to_file)
 }
 
-pub fn remove_entry_from_journal(path_buf: &PathBuf, worklog_id_to_remove: &str) {
+#[allow(clippy::missing_panics_doc)]
+pub fn remove_entry(path_buf: &PathBuf, worklog_id_to_remove: &str) {
     debug!("Removing key {} from file {}", worklog_id_to_remove, path_buf.to_string_lossy());
 
-    let file = File::open(&path_buf).unwrap_or_else(|err| {
+    let file = File::open(path_buf).unwrap_or_else(|err| {
         eprintln!("Unable to open file {}, cause: {}", path_buf.to_string_lossy(), err);
         exit(4);
     });
@@ -129,18 +132,17 @@ pub fn remove_entry_from_journal(path_buf: &PathBuf, worklog_id_to_remove: &str)
 
     for result in rd.records(){
         let record = result.unwrap_or_else(|err| {
-            eprintln!("Unable to unwrap CSV record: {}", err);
+            eprintln!("Unable to unwrap CSV record: {err}");
             exit(4);
         });
 
         // In case the parsing of the record failed
-        if record.len() < NUM_JOURNAL_FIELDS {
-            if record.len() == 1 {
-                eprintln!("Only a single column in CSV entry: {}", &record[0]);
-                eprintln!("Invalid number of columns, did you remember the delimiter ';'?");
-                exit(4);
-            }
+        if record.len() < NUM_JOURNAL_FIELDS && record.len() == 1 {
+            eprintln!("Only a single column in CSV entry: {}", &record[0]);
+            eprintln!("Invalid number of columns, did you remember the delimiter ';'?");
+            exit(4);
         }
+
         // Worklog id is in the second column 0,1,2,3
         let key = &record[1];
         if key != worklog_id_to_remove {
@@ -160,8 +162,8 @@ pub fn remove_entry_from_journal(path_buf: &PathBuf, worklog_id_to_remove: &str)
     csv_writer.flush().unwrap();
 }
 
-
-
+#[allow(clippy::missing_panics_doc)]
+#[must_use]
 pub fn find_unique_keys(p0: &PathBuf) -> Vec<String> {
     let file = File::open(p0).unwrap_or_else(|err| {
         eprintln!("Unable to open {}, cause: {}", p0.to_string_lossy(), err);
@@ -193,7 +195,7 @@ mod tests {
     #[test]
     fn test_create_or_open_worklog_journal() {
         let tmp_config_file = std::env::temp_dir().join("worklog.tmp");
-        let journal_result = create_or_open_worklog_journal(&tmp_config_file.clone());
+        let journal_result = create_or_open(&tmp_config_file.clone());
         assert!(journal_result.is_ok(), "Unable to create {:?}", &tmp_config_file.to_string_lossy());
 
         let mut journal = journal_result.unwrap();
@@ -210,7 +212,7 @@ mod tests {
         let path_buf = create_sample_journal();
 
         // Removes a single record identified by the worklog id
-        let _result = remove_entry_from_journal(&path_buf, "315100");
+        remove_entry(&path_buf, "315100");
         eprintln!("Rewrote {}", path_buf.to_string_lossy());
 
         // Opens the journal file again and verifies the removal of the record
@@ -225,7 +227,7 @@ mod tests {
             }
         }
         ).collect();
-        assert!(result.is_empty(),"Entry not removed {:?}", result);
+        assert!(result.is_empty(), "Entry not removed {result:?}");
     }
 
     #[test]
@@ -236,6 +238,8 @@ mod tests {
         assert_eq!(vec!["TIME-117", "TIME-147", "TIME-148"], unique_keys);
     }
 
+    // The hashes around the string are NOT needless!
+    #[allow(clippy::needless_raw_string_hashes)]
     fn create_sample_journal() -> PathBuf {
         let sample_date = r#"key;w_id;started;time spent;comment
 TIME-147;314335;2024-09-19 20:21 +0200;02:00;jira_worklog
