@@ -1,4 +1,4 @@
-use chrono::{NaiveDateTime};
+use chrono::NaiveDateTime;
 use jira_lib::{ JiraClient,  midnight_a_month_ago_in};
 use log::info;
 use clap::Parser;
@@ -48,22 +48,22 @@ async fn main() {
 
     let configuration = match jira_lib::config::load_configuration() {
         Ok(c) => c,
-        Err(e) => panic!("Unable to load configuration from {}, cause:{}", jira_lib::config::config_file_name().to_string_lossy(),e)
+        Err(e) => panic!("Unable to load configuration from {}, cause:{}", jira_lib::config::file_name().to_string_lossy(),e)
     };
 
     let jira_client = match jira_lib::JiraClient::new(&configuration.jira.jira_url, &configuration.jira.user, &configuration.jira.token){
         Ok(c) => c,
-        Err(e) => panic!("Unable to create Jira http client: {}", e)
+        Err(e) => panic!("Unable to create Jira http client: {e}")
     };
 
     let mut dbms_client: tokio_postgres::Client  =  match jira_dbms::dbms_async_init(&configuration.dbms.connect).await {
         Ok(dbms) => dbms,
-        Err(e) => panic!("Unable to connect to the database: {}. \nHave you started VPN?", e)
+        Err(e) => panic!("Unable to connect to the database: {e}. \nHave you started VPN?")
     };
 
     for row in dbms_client.query("select version()",&[]).await.unwrap(){
         let s: String = row.get(0);
-        println!("DBMS is {}", s);
+        println!("DBMS is {s}");
     }
 
     let started_after = match args.after.as_deref() {
@@ -75,7 +75,7 @@ async fn main() {
         }
     };
 
-    println!("Retrieving worklogs after {}", started_after);
+    println!("Retrieving worklogs after {started_after}");
 
     match args {
         Cli { projects: None, issues: None,users,..} => process_all_projects(&jira_client, &mut dbms_client, users, started_after).await,
@@ -94,8 +94,8 @@ async fn process_project_worklogs_filtered(jira_client: &JiraClient,  dbms_clien
     etl_issues_worklogs_and_persist(jira_client, dbms_client, projects, None, started_after).await;
 }
 
-async fn process_all_projects(jira_client: &JiraClient, dbms_client: &mut tokio_postgres::Client, _users: Option<Vec<String>>, started_after: NaiveDateTime) {
-    println!("Extracting all projects, filtering on users {:?}", _users);
+async fn process_all_projects(jira_client: &JiraClient, dbms_client: &mut tokio_postgres::Client, users: Option<Vec<String>>, started_after: NaiveDateTime) {
+    println!("Extracting all projects, filtering on users {users:?}");
 
     let projects = jira_client.get_all_projects(vec![]).await;
 
@@ -105,5 +105,5 @@ async fn process_all_projects(jira_client: &JiraClient, dbms_client: &mut tokio_
 #[test]
 fn verify_cli() {
     use clap::CommandFactory;
-    Cli::command().debug_assert()
+    Cli::command().debug_assert();
 }
