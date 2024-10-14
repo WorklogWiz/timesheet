@@ -1,7 +1,7 @@
 use futures::{stream, Future, Stream, StreamExt};
 use lazy_static::lazy_static;
 use reqwest::Client;
-use tokio::time::{ Instant};
+use tokio::time::Instant;
 use jira_lib::{JiraProject,  JiraProjectsPage};
 
 lazy_static! {
@@ -51,7 +51,7 @@ async fn get_projects_from_page(http_client: &Client, url: String) -> Vec<JiraPr
             // Transforms JSON in body to type safe struct
             match response.json::<JiraProjectsPage>().await {
                 Ok(jira_projects_page) => jira_projects_page.values, // Everything OK, return the Worklogs struct
-                Err(err) => panic!("EROR Obtaining response in JSON format: {:?}", err),
+                Err(err) => panic!("ERROR Obtaining response in JSON format: {err:?}"),
             }
         }
         reqwest::StatusCode::UNAUTHORIZED => panic!("Not authorized, API key has probably changed"),

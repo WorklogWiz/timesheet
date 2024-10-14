@@ -1,6 +1,5 @@
 
-use futures::{ StreamExt};
-use tokio;
+use futures::StreamExt;
 
 use jira_lib::WorklogsPage;
 
@@ -18,9 +17,9 @@ async fn main() {
             tokio::spawn(
                 async move {
 
-                let resource = format!("/issue/{}/worklog", issue);
+                let resource = format!("/issue/{issue}/worklog");
                 let url = format!("{}{}", jira_lib::JIRA_URL, resource);
-                println!("http get {}", url);
+                println!("http get {url}");
                 let response = client
                     .get(url)
                     .send()
@@ -33,12 +32,12 @@ async fn main() {
                         // Transforms JSON in body to type safe struct
                         match response.json::<WorklogsPage>().await {
                             Ok(wl) => wl, // Everything OK, return the Worklogs struct
-                            Err(err) => panic!("EROR Obtaining response in JSON format: {:?}", err)
+                            Err(err) => panic!("ERROR Obtaining response in JSON format: {err:?}")
                         }
                     }
                     reqwest::StatusCode::UNAUTHORIZED => panic!("Not authorized, API key has probably changed"),
                     other => {
-                        panic!("Something unexpected happened {:?}", other);
+                        panic!("Something unexpected happened {other:?}");
                     }
                 };
                 typed_result
@@ -47,8 +46,8 @@ async fn main() {
 
     bodies.for_each(|b| async {
         match b {
-            Ok(w) => println!("-- {:?}", w),
-            Err(e) => eprintln!("Ouch, a real error {:?}",e),
+            Ok(w) => println!("-- {w:?}"),
+            Err(e) => eprintln!("Ouch, a real error {e:?}"),
         }
     })
         .await;

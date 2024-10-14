@@ -11,6 +11,7 @@ lazy_static! {
 }
 
 #[tokio::main]
+#[allow(clippy::too_many_lines)]
 async fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("debug")).init();
 
@@ -321,18 +322,18 @@ async fn main() {
     print!("Buffered retrieval took {}ms", start.elapsed().as_millis());
 }
 
-async fn _loop_wait(urls: &Vec<&str>, http_client: &Client) -> Duration {
+async fn _loop_wait(urls: &[&str], http_client: &Client) -> Duration {
     let start = Instant::now();
-    for url in urls.iter().cloned().take(50) {
+    for url in urls.iter().copied().take(50) {
         let response = http_client.get(url).send().await.unwrap();
         let _issue = response.json::<JiraIssuesPage>().await.unwrap();
     }
-    let elapsed = start.elapsed();
-    elapsed
+
+    start.elapsed()
 }
 
-async fn buffered_get_pages(http_client: &Client, urls: &Vec<&str>) -> Vec<JiraIssuesPage> {
-    let futures_result: Vec<JiraIssuesPage> = stream::iter(urls.iter().cloned().take(50))
+async fn buffered_get_pages(http_client: &Client, urls: &[&str]) -> Vec<JiraIssuesPage> {
+    let futures_result: Vec<JiraIssuesPage> = stream::iter(urls.iter().copied().take(50))
         .map(|url| async move {
             let response = http_client.get(url).send().await.unwrap();
             response.json::<JiraIssuesPage>().await.unwrap()

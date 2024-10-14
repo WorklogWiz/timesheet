@@ -18,7 +18,7 @@ async fn get_n_pages(n: usize) -> Vec<Vec<usize>> {
 }
 
 fn get_pages() -> impl Stream<Item = Vec<usize>> {
-    stream::iter(0..).then(|i| get_page(i))
+    stream::iter(0..).then(get_page)
 }
 
 async fn get_page(i: usize) -> Vec<usize> {

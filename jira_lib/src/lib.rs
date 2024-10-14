@@ -29,6 +29,7 @@ const FUTURE_BUFFER_SIZE: usize = 20;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[allow(non_snake_case)]
+#[allow(clippy::struct_excessive_bools)]
 pub struct GlobalSettings {
     votingEnabled: bool,
     watchingEnabled: bool,
@@ -146,11 +147,12 @@ impl ToSql for JiraKey {
         if Self::accepts(ty) {
             self.to_sql(ty, out)
         } else {
-            Err(format!("Type {:?} not accepted for JiraKey", ty).into())
+            Err(format!("Type {ty:?} not accepted for JiraKey").into())
         }
     }
 }
 impl JiraKey {
+    #[must_use]
     pub fn value(&self) -> &str {
         &self.0
     }
@@ -234,17 +236,15 @@ impl fmt::Display for JiraError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             JiraError::RequiredParameter(param_name) => {
-                write!(f, "Parameter '{}' must contain a a value", param_name)
+                write!(f, "Parameter '{param_name}' must contain a a value")
             }
             JiraError::DeleteFailed(sc) => {
-                write!(f, "Failed to delete: {}", sc)
+                write!(f, "Failed to delete: {sc}")
             }
             JiraError::WorklogNotFound(issue, worklog_id) => {
                 write!(
                     f,
-                    "Worklog entry with issue_key: {} and worklog_id: {} not found",
-                    issue, worklog_id
-                )
+                    "Worklog entry with issue_key: {issue} and worklog_id: {worklog_id} not found")
             }
             JiraError::ReqwestError(e) => {
                 write!(
@@ -267,8 +267,10 @@ impl Error for JiraError {
     }
 }
 
-/// Convenience method to create a JiraClient instance. It will load parameters
+/// Convenience method to create a `JiraClient` instance. It will load parameters
 /// from the .toml file on disk and set up everything for you.
+#[must_use]
+#[allow(clippy::missing_panics_doc)]
 pub fn create_jira_client() -> JiraClient {
     // Creates HTTP client with all the required credentials
     let config = config::load_configuration().unwrap();
@@ -282,6 +284,7 @@ pub struct JiraClient {
 }
 
 impl JiraClient {
+    #[allow(clippy::missing_errors_doc)]
     pub fn new(jira_url: &str, user_name: &str, token: &str) -> Result<JiraClient, JiraError> {
         if jira_url.is_empty() {
             return Err(JiraError::RequiredParameter("jira_url".to_string()));
@@ -337,11 +340,12 @@ impl JiraClient {
         s.push(':');
         s.push_str(token);
         let b64 = BASE64_STANDARD.encode(s.as_bytes());
-        let authorisation = format!("Basic {}", b64);
+        let authorisation = format!("Basic {b64}");
         debug!("Created this BASIC auth string: '{}'", authorisation);
         authorisation
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn get_time_tracking_options(
         &self,
     ) -> Result<TimeTrackingConfiguration, reqwest::StatusCode> {
@@ -366,8 +370,9 @@ impl JiraClient {
         self.get_all_projects(filter).await
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn get_issue_by_id_or_key(&self, id: &str) -> Result<JiraIssue, reqwest::StatusCode> {
-        let resource = format!("/issue/{}", id);
+        let resource = format!("/issue/{id}");
         match Self::get_jira_resource::<JiraIssue>(
             &self.http_client,
             &resource,
@@ -381,6 +386,7 @@ impl JiraClient {
     }
 
     /// Retrieves all Jira projects, filtering out the private ones
+    #[allow(clippy::missing_panics_doc)]
     pub async fn get_all_projects(&self, project_keys: Vec<String>) -> Vec<JiraProject> {
         let start_at = 0;
 
@@ -437,11 +443,12 @@ impl JiraClient {
     // the only way I can get away from the dreaded compiler error:
     //     | |__________________`self` escapes the associated function body here
     //     |                    argument requires that `'1` must outlive `'static`
+    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
     async fn static_get_issues_for_single_project(
         http_client: &Client,
         project_key: String,
     ) -> Vec<JiraIssue> {
-        let mut resource = Self::compose_resource_and_params(project_key.to_owned(), 0, 1024);
+        let mut resource = Self::compose_resource_and_params(&project_key, 0, 1024);
 
         let mut issues = Vec::<JiraIssue>::new();
         loop {
@@ -455,10 +462,10 @@ impl JiraClient {
                 Ok(p) => p,
                 Err(e) => match e {
                     reqwest::StatusCode::NOT_FOUND => {
-                        panic!("Project {} not found", project_key);
+                        panic!("Project {project_key} not found");
                     }
                     other => {
-                        panic!("Unexpected http status code {} for {}", other, resource)
+                        panic!("Unexpected http status code {other} for {resource}")
                     }
                 },
             };
@@ -467,7 +474,7 @@ impl JiraClient {
             let is_last_page = issue_page.issues.len() < issue_page.max_results as usize;
             if !is_last_page {
                 resource = Self::compose_resource_and_params(
-                    project_key.to_owned(),
+                    &project_key,
                     issue_page.start_at + issue_page.issues.len() as i32,
                     issue_page.max_results,
                 );
@@ -480,6 +487,8 @@ impl JiraClient {
         issues
     }
 
+    #[allow(clippy::missing_errors_doc)]
+    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
     pub async fn get_worklogs_for(
         http_client: &Client,
         issue_key: String,
@@ -522,7 +531,7 @@ impl JiraClient {
     // Static methods
     fn project_search_resource(start_at: i32, project_keys: Vec<String>) -> String {
         // Seems 50 is the max value of maxResults
-        let mut resource = format!("/project/search?maxResults=50&startAt={}", start_at);
+        let mut resource = format!("/project/search?maxResults=50&startAt={start_at}");
         if !project_keys.is_empty() {
             for key in project_keys {
                 resource.push_str("&keys=");
@@ -547,8 +556,8 @@ impl JiraClient {
         )
     }
 
-    fn compose_resource_and_params(project_key: String, start_at: i32, max_results: i32) -> String {
-        let jql = format!("project=\"{}\" and resolution=Unresolved", project_key);
+    fn compose_resource_and_params(project_key: &str, start_at: i32, max_results: i32) -> String {
+        let jql = format!("project=\"{project_key}\" and resolution=Unresolved");
         let jql_encoded = urlencoding::encode(&jql);
 
         // Custom field customfield_10904 is the project asset custom field
@@ -564,7 +573,7 @@ impl JiraClient {
         rest_resource: &str,
         code: StatusCode,
     ) -> Result<T, reqwest::StatusCode> {
-        let url = format!("{}{}", JIRA_URL, rest_resource);
+        let url = format!("{JIRA_URL}{rest_resource}");
 
         Self::get_jira_data_from_url::<T>(http_client, url, code).await
     }
@@ -589,7 +598,7 @@ impl JiraClient {
                     debug!("Elapsed time for parsing {}", start.elapsed().as_millis());
                     return Ok(wl);
                 } // Everything OK, return the Worklogs struct
-                Err(err) => panic!("EROR Obtaining response in JSON format: {:?}", err),
+                Err(err) => panic!("ERROR Obtaining response in JSON format: {err:?}"),
             }
         }
         Err(response.status())
@@ -604,7 +613,7 @@ impl JiraClient {
                 let client = http_client.clone();
                 tokio::spawn(async move {
                     let issues =
-                        Self::static_get_issues_for_single_project(&client, project.key.to_owned())
+                        Self::static_get_issues_for_single_project(&client, project.key.clone())
                             .await;
                     let _old = std::mem::replace(&mut project.issues, issues);
                     project
@@ -619,13 +628,14 @@ impl JiraClient {
                     debug!("OK {}", jp.key);
                     result.push(jp);
                 }
-                Err(e) => eprintln!("Error: {:?}", e),
+                Err(e) => eprintln!("Error: {e:?}"),
             }
         }
         result
     }
 
     // todo: clean up and make simpler!
+    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub async fn get_issues_and_worklogs(
         &self,
         projects: Vec<JiraProject>,
@@ -640,10 +650,10 @@ impl JiraClient {
                     &project.key, issues_filter
                 );
 
-                let filter = issues_filter.to_vec(); // Clones the vector to allow async move
+                let filter = issues_filter.clone(); // Clones the vector to allow async move
                 tokio::spawn(async move {
                     let issues =
-                        Self::static_get_issues_for_single_project(&client, project.key.to_owned())
+                        Self::static_get_issues_for_single_project(&client, project.key.clone())
                             .await;
                     debug!(
                         "Extracted {} issues. Applying filter {:?}",
@@ -685,12 +695,13 @@ impl JiraClient {
                     info!("Data retrieved from Jira for project {}", jp.key);
                     result.push(jp);
                 }
-                Err(e) => eprintln!("Error: {:?}", e),
+                Err(e) => eprintln!("Error: {e:?}"),
             }
         }
         Ok(result)
     }
 
+    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub async fn insert_worklog(
         &self,
         issue_id: &str,
@@ -716,6 +727,7 @@ impl JiraClient {
         Self::post_jira_data::<Worklog>(&self.http_client, url, json, StatusCode::CREATED).await
     }
 
+    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub async fn delete_worklog(
         &self,
         issue_id: String,
@@ -753,13 +765,13 @@ impl JiraClient {
             match response.json::<T>().await {
                 Ok(worklog) => Ok(worklog),
                 Err(e) => {
-                    eprintln!("ERROR: posting to {}", url);
-                    eprintln!("ERROR: Unable to deserialize the json body {:?}", e);
+                    eprintln!("ERROR: posting to {url}");
+                    eprintln!("ERROR: Unable to deserialize the json body {e:?}");
                     exit(4);
                 }
             }
         } else {
-            eprintln!("HTTP Post to {}\n failed: {:?}", url, response);
+            eprintln!("HTTP Post to {url}\n failed: {response:?}");
             Err(response.status())
         }
     }
@@ -775,34 +787,34 @@ impl JiraClient {
         {
             Ok(ju) => ju,
             Err(StatusCode::UNAUTHORIZED) => {
-                eprintln!("{} \nNot authorized (401) check your credentials", resource);
+                eprintln!("{resource} \nNot authorized (401) check your credentials");
                 exit(4)
             }
             Err(e) => {
-                eprintln!("ERROR: http status code {} for {}", e, resource);
+                eprintln!("ERROR: http status code {e} for {resource}");
                 exit(4);
             }
         }
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn get_worklog(
         &self,
         issue_id: &str,
         worklog_id: &str,
     ) -> Result<Worklog, StatusCode> {
-        let resource = format!("/issue/{}/worklog/{}", issue_id, worklog_id);
+        let resource = format!("/issue/{issue_id}/worklog/{worklog_id}");
         Self::get_jira_resource::<Worklog>(&self.http_client, &resource, reqwest::StatusCode::OK)
             .await
     }
 
+    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub async fn get_worklogs_for_current_user(
         &self,
         issue_key: &str,
         started_after: Option<DateTime<Local>>,
     ) -> Result<Vec<Worklog>, StatusCode> {
-        if issue_key.is_empty() {
-            panic!("Must specify an issue key");
-        }
+        assert!(!issue_key.is_empty(), "Must specify an issue key");
         let current_user = self.get_current_user().await;
         let date_time = started_after.unwrap_or_else(|| {
             // Defaults to a month (approx)
@@ -818,7 +830,7 @@ impl JiraClient {
                 Ok(r) => r,
                 Err(e) => match e {
                     StatusCode::NOT_FOUND => return Err(e),
-                    other => panic!("Unexpected http code {} for issue {} ", other, issue_key),
+                    other => panic!("Unexpected http code {other} for issue {issue_key}"),
                 },
             };
         debug!("Work logs retrieved, filtering them for current user ....");
@@ -829,6 +841,8 @@ impl JiraClient {
     }
 }
 
+#[must_use]
+#[allow(clippy::missing_panics_doc)]
 pub fn midnight_a_month_ago_in() -> NaiveDateTime {
     let today = chrono::offset::Local::now();
     let a_month_ago = today.checked_sub_months(Months::new(1)).unwrap();

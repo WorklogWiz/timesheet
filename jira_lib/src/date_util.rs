@@ -4,9 +4,10 @@ use chrono::{
     ParseResult, Weekday,
 };
 use lazy_static::lazy_static;
-use regex::{ Regex};
+use regex::Regex;
 use std::error::Error;
 use std::fmt::{Display, Formatter};
+use num_traits::cast::FromPrimitive;
 
 /// Parses a date, a time or a datetime, which has been supplied
 /// as:
@@ -14,6 +15,7 @@ use std::fmt::{Display, Formatter};
 /// `2023-05-26` implicitly indicating 08:00 on that date
 /// `2023-05-26T09:00` exact specification
 ///
+#[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 pub fn str_to_date_time(s: &str) -> ParseResult<DateTime<Local>> {
     lazy_static! {
         static ref DATE_EXPR: Regex = Regex::new(r"^\d{4}-\d{2}-\d{2}$").unwrap();
@@ -34,7 +36,7 @@ pub fn str_to_date_time(s: &str) -> ParseResult<DateTime<Local>> {
         let dt = NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M").unwrap();
         Ok(Local.from_local_datetime(&dt).unwrap())
     } else {
-        panic!("Unable to parse {} into a DateTime<Local>", s);
+        panic!("Unable to parse {s} into a DateTime<Local>");
     }
 }
 
@@ -76,7 +78,7 @@ impl Display for DateTimeError {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             DateTimeError::InvalidInput(s) => {
-                write!(f, "Invalid input {}", s)
+                write!(f, "Invalid input {s}")
             }
             DateTimeError::StartAndDurationExceedsNow {
                 start,
@@ -103,12 +105,15 @@ impl Error for DateTimeError {}
 /// Hours and minutes: Enter time as "Xh Ym" where X is the number of hours and Y is the number of minutes. For example:
 ///  - "4h 30m" for 4 hours and 30 minutes
 ///  - "2h 15m" for 2 hours and 15 minutes
+///
 /// Decimal hours: Use a decimal point to indicate partial hours. For example:
 ///  - "3.5h" for 3 hours and 30 minutes
 ///  - "1.25h" for 1 hour and 15 minutes
+///
 /// Minutes only: Simply enter the number of minutes followed by "m". For example:
 ///  - "90m" for 1 hour and 30 minutes
 ///  - "45m" for 45 minutes
+///
 /// Hours only: Enter the number of hours followed by "h". For example:
 ///  - "6h" for 6 hours
 ///  - 0.5h for 30 minutes
@@ -119,6 +124,12 @@ pub struct TimeSpent {
 }
 
 impl TimeSpent {
+    #[allow(
+        clippy::missing_errors_doc,
+        clippy::missing_panics_doc,
+        clippy::cast_precision_loss,
+        clippy::cast_possible_truncation
+    )]
     pub fn from_str(
         s: &str,
         work_hours_per_day: f32,
@@ -132,7 +143,7 @@ impl TimeSpent {
 
         match TIME_SPEC.captures(s.to_lowercase().as_str()) {
             // There seems to be a bug with Captures(), even with no match, it returns Some()
-            Some(captures) if captures.get(0).unwrap().as_str().len() > 0 => {
+            Some(captures) if !captures.get(0).unwrap().as_str().is_empty() => {
                 let weeks = captures
                     .get(1)
                     .map_or(0.0, |m| m.as_str().parse::<f32>().unwrap_or(0.0));
@@ -146,10 +157,7 @@ impl TimeSpent {
                     .get(4)
                     .map_or(0, |m| m.as_str().parse::<u32>().unwrap_or(0));
 
-                println!(
-                    "Parsed time: {} days, {} hours, {} minutes",
-                    days, hours, minutes
-                );
+                println!("Parsed time: {days} days, {hours} hours, {minutes} minutes");
                 let seconds: f32 =
                     weeks * working_days_per_week  * work_hours_per_day  * 3600.0
                         + days * work_hours_per_day * 3600.0
@@ -160,14 +168,12 @@ impl TimeSpent {
                     time_spent_seconds: seconds as i32,
                 })
             }
-            _ => Err(DateTimeError::InvalidInput(format!(
-                "Could not obtain duration and unit from '{}'",
-                s
-            ))),
+            _ => Err(DateTimeError::InvalidInput(format!("Could not obtain duration and unit from '{s}'"))),
         }
     }
 
     // Parses strings like 1,5h -> (1.5 'h')
+    #[allow(clippy::missing_errors_doc)]
     pub fn parse_to_unit_and_duration(s: &str) -> Result<(f32, String), DateTimeError> {
         lazy_static! {
             static ref TIME_EXPR: Regex = Regex::new(
@@ -193,16 +199,10 @@ impl TimeSpent {
                         let unit = String::from(&caps[2]);
                         Ok((d, unit))
                     }
-                    Err(_) => Err(DateTimeError::InvalidInput(format!(
-                        "Could not parse '{}'",
-                        duration
-                    ))),
+                    Err(_) => Err(DateTimeError::InvalidInput(format!("Could not parse '{duration}'"))),
                 }
             }
-            None => Err(DateTimeError::InvalidInput(format!(
-                "Could not obtain duration and unit from '{}'",
-                s
-            ))),
+            None => Err(DateTimeError::InvalidInput(format!("Could not obtain duration and unit from '{s}'"))),
         }
     }
 }
@@ -239,7 +239,7 @@ fn test_time_spent() {
     assert_eq!(
         TimeSpent {
             time_spent: "1.2w".to_string(),
-            time_spent_seconds: 162000,
+            time_spent_seconds: 162_000,
         },
         TimeSpent::from_str("1.2w", 7.5, 5.0).unwrap()
     );
@@ -253,7 +253,7 @@ fn test_time_spent() {
     assert_eq!(
         TimeSpent {
             time_spent: "1.5w0.5d7.5h30m".to_string(),
-            time_spent_seconds: 244800
+            time_spent_seconds: 244_800
         },
         TimeSpent::from_str("1.5w0.5d7.5h30m", 7.5, 5.0).unwrap());
 
@@ -265,14 +265,16 @@ fn test_captures_bug() {
     // If this suddenly starts returning a "Some" value, the bug in Regex has been fixed
     assert!(r.unwrap().captures("rubbish").is_none(), "Seems they have fixed the bug in regex captures()");
 }
+
 #[allow(dead_code)]
+#[must_use]
 pub fn to_jira_timestamp(datetime: &DateTime<Local>) -> String {
     datetime.format("%Y-%m-%dT%H:%M:%S.000%z").to_string()
 }
 
 #[test]
 fn test_to_jira_timestamp() {
-    to_jira_timestamp(&str_to_date_time("2023-05-25").unwrap());
+    _ = to_jira_timestamp(&str_to_date_time("2023-05-25").unwrap());
 }
 
 /// Calculates and verifies the starting point. If no starting point is given,
@@ -280,12 +282,13 @@ fn test_to_jira_timestamp() {
 /// point was supplied, we use that as-is.
 /// Finally, we ensure that the starting point with the addition of `duration_seconds` does
 /// not go past the current time.
+#[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 pub fn calculate_started_time(
     starting_point: Option<DateTime<Local>>,
     duration_seconds: i32,
 ) -> Result<DateTime<Local>, DateTimeError> {
     let now = Local::now();
-    let duration = Duration::seconds(duration_seconds as i64);
+    let duration = Duration::seconds(duration_seconds.into());
 
     // Subtracts duration from current time to find the start time
     let proposed_starting_point =
@@ -333,6 +336,8 @@ fn test_calculate_starting_point() {
     assert!(t.is_err());
 }
 
+#[must_use]
+#[allow(clippy::missing_panics_doc)]
 pub fn parse_worklog_durations(entries: Vec<String>) -> Vec<(Weekday, f32, String)> {
     lazy_static! {
         // Mon:1,5h or Mon:1.5h
@@ -353,7 +358,7 @@ pub fn parse_worklog_durations(entries: Vec<String>) -> Vec<(Weekday, f32, Strin
     let mut result: Vec<(Weekday, f32, String)> = Vec::new();
 
     // Iterates the pattern and extracts tuples of Weekday names and duration
-    for s in entries.into_iter() {
+    for s in entries {
         match DURATION_EXPR.captures(&s) {
             Some(captured) => {
                 // Parses 3 character weekday abbreviation to Weekday enumerator
@@ -364,12 +369,13 @@ pub fn parse_worklog_durations(entries: Vec<String>) -> Vec<(Weekday, f32, Strin
 
                 result.push((week_day, duration, unit));
             }
-            None => panic!("Could not parse {} into weekday, duration and unit", s),
+            None => panic!("Could not parse {s} into weekday, duration and unit"),
         }
     }
     result
 }
 
+#[must_use]
 pub fn date_of_last_weekday(weekday: Weekday) -> DateTime<Local> {
     last_weekday_from(Local::now(), weekday)
 }
@@ -377,6 +383,8 @@ pub fn date_of_last_weekday(weekday: Weekday) -> DateTime<Local> {
 /// Given a Weekday, like for instance Friday, find the first Friday in the past given the
 /// supplied starting point
 /// Will return today's date if you supply today's weekday
+#[must_use]
+#[allow(clippy::missing_panics_doc)]
 pub fn last_weekday_from(starting_date: DateTime<Local>, weekday: Weekday) -> DateTime<Local> {
     let mut current_date: DateTime<Local> = starting_date;
     let one_day = Days::new(1);
@@ -463,10 +471,10 @@ fn test_parse_durations() {
 #[test]
 fn test_date_and_timezone_conversion() {
     let utc = chrono::Utc::now();
-    println!("{}", utc);
+    println!("{utc}");
 
     let converted: DateTime<Local> = DateTime::from(utc);
-    println!("{}", converted);
+    println!("{converted}");
 
     let c = utc.with_timezone(&Local);
     println!("{} {}", c, c.with_timezone(&Local));
@@ -474,12 +482,15 @@ fn test_date_and_timezone_conversion() {
 
     let hour = 45000 / 3600;
     let minutes = (45000 % 3600) / 60;
-    println!("{}:{}", hour, minutes);
+    println!("{hour}:{minutes}");
 }
 
 // This ought to be part of the Rust runtime :-)
-#[allow(dead_code)]
+#[allow(dead_code, clippy::missing_panics_doc)]
+#[must_use]
 pub fn month_name(n: u32) -> Month {
+    Month::from_u32(n).unwrap()
+    /*
     match n {
         1 => Month::January,
         2 => Month::February,
@@ -493,17 +504,20 @@ pub fn month_name(n: u32) -> Month {
         10 => Month::October,
         11 => Month::November,
         12 => Month::December,
-        _ => panic!("Invalid month number {}", n),
+        _ => panic!("Invalid month number {n}"),
     }
+     */
 }
 
+#[must_use]
 pub fn is_new_week(current_week: u32, dt: &NaiveDate) -> bool {
     dt.iso_week().week() > current_week
 }
 
+#[must_use]
 pub fn seconds_to_hour_and_min(accum: &i32) -> String {
     let hour = *accum / 3600;
     let min = *accum % 3600 / 60;
-    let duration = format!("{:02}:{:02}", hour, min);
+    let duration = format!("{hour:02}:{min:02}");
     duration
 }

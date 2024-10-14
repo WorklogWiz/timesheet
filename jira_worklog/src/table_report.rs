@@ -52,7 +52,7 @@ pub fn table_report(
     // year, {month, total}
     let mut monthly_total: BTreeMap<i32,BTreeMap<u32, i32>> = BTreeMap::new();
 
-    for (date, daily_total_per_jira_key) in daily_totals_for_all_jira_key.iter() {
+    for (date, daily_total_per_jira_key) in daily_totals_for_all_jira_key {
 
         let daily_total: i32 = daily_total_per_jira_key.values().sum();
         monthly_total.entry(date.year())
@@ -66,7 +66,7 @@ pub fn table_report(
         }
 
         // If this date is in the next week, summarize for current week
-        if crate::date_util::is_new_week(current_week, date) {
+        if crate::date_util::is_new_week(current_week, &date) {
             print_weekly_total_per_issue(
                 issue_keys_by_command_line_order,
                 &mut weekly_totals_per_jira_key,
@@ -81,7 +81,7 @@ pub fn table_report(
             print_weekly_table_header(issue_keys_by_command_line_order); // Table header for next week
         }
 
-        print_daily_entry(date,issue_keys_by_command_line_order, &mut weekly_totals_per_jira_key, daily_total_per_jira_key);
+        print_daily_entry(date,issue_keys_by_command_line_order, &mut weekly_totals_per_jira_key, &daily_total_per_jira_key);
     }
 
     // In case the last week is incomplete, we also need to print those entries
@@ -101,7 +101,7 @@ pub fn table_report(
     }
 }
 
-fn print_daily_entry(date: &NaiveDate,issue_keys_by_command_line_order: &[JiraKey], weekly_totals_per_jira_key: &mut BTreeMap<JiraKey, i32>,  daily_total_per_jira_key: &BTreeMap<JiraKey, i32>) {
+fn print_daily_entry(date: NaiveDate,issue_keys_by_command_line_order: &[JiraKey], weekly_totals_per_jira_key: &mut BTreeMap<JiraKey, i32>,  daily_total_per_jira_key: &BTreeMap<JiraKey, i32>) {
     let default_value = 0;
 
     print!("{:10} {:3}", date, date.weekday());
@@ -110,7 +110,7 @@ fn print_daily_entry(date: &NaiveDate,issue_keys_by_command_line_order: &[JiraKe
 
     // Accumulates the number of seconds per jira_issue_key for the given date
     // Prints the daily totals
-    for jira_key in issue_keys_by_command_line_order.iter() {
+    for jira_key in issue_keys_by_command_line_order {
         let seconds = daily_total_per_jira_key
             .get(jira_key)
             .unwrap_or(&default_value);
@@ -125,11 +125,11 @@ fn print_daily_entry(date: &NaiveDate,issue_keys_by_command_line_order: &[JiraKe
         );
 
         // Add the daily totals to the weekly totals
-        let _s = weekly_totals_per_jira_key
+        let s = weekly_totals_per_jira_key
             .entry(jira_key.to_owned())
             .and_modify(|v| *v += seconds)
             .or_insert(*seconds);
-        debug!("Weekly total for {} {:?}", jira_key, _s);
+        debug!("Weekly total for {jira_key} {s:?}");
     }
     print!(" {:>8}", crate::date_util::seconds_to_hour_and_min(&daily_total));
 
@@ -147,9 +147,6 @@ fn print_weekly_table_header(issue_keys_by_command_line_order: &Vec<JiraKey>) {
     print_single_dashed_line(issue_keys_by_command_line_order);
 }
 
-#[cfg(test)]
-mod tests {}
-
 fn print_weekly_total_per_issue(
     issue_keys_by_command_line_order: &[JiraKey],
     sum_per_week_per_jira_key: &mut BTreeMap<JiraKey, i32>,
@@ -163,10 +160,10 @@ fn print_weekly_total_per_issue(
 
     let default = 0;
     let mut week_grand_total = 0;
-    for issue_key in issue_keys_by_command_line_order.iter() {
+    for issue_key in issue_keys_by_command_line_order {
         let seconds = sum_per_week_per_jira_key.get(issue_key).unwrap_or(&default);
         let hh_mm_string = crate::date_util::seconds_to_hour_and_min(seconds);
-        print!(" {:>8}", hh_mm_string);
+        print!(" {hh_mm_string:>8}");
         week_grand_total += seconds;
     }
     // Rightmost "Total" column for the entire week
@@ -201,3 +198,5 @@ fn print_single_dashed_line(issue_keys_by_command_line_order: &[JiraKey]) {
     println!();
 }
 
+#[cfg(test)]
+mod tests {}

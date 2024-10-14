@@ -10,6 +10,7 @@ use tokio_postgres::{Error, NoTls};
 
 const DBMS_CHUNK_SIZE: usize = 1000;
 
+#[allow(clippy::missing_errors_doc)]
 pub async fn dbms_async_init(connect: &str) -> Result<tokio_postgres::Client, Error> {
     debug!("Connecting with {}", connect);
 
@@ -18,7 +19,7 @@ pub async fn dbms_async_init(connect: &str) -> Result<tokio_postgres::Client, Er
         Ok((client, connection)) => {
             tokio::spawn(async move {
                 if let Err(e) = connection.await {
-                    eprintln!("connection error: {}", e);
+                    eprintln!("connection error: {e}");
                 }
             });
             Ok(client)
@@ -27,21 +28,24 @@ pub async fn dbms_async_init(connect: &str) -> Result<tokio_postgres::Client, Er
     }
 }
 
+#[allow(clippy::missing_errors_doc)]
 pub fn dbms_init(connect: &str) -> Result<Client, Error> {
     Client::connect(connect, NoTls)
 }
 
 #[deprecated()]
+#[must_use]
 pub fn connect_str() -> &'static str {
     "host=postgres.testenv.autostoresystem.com user=postgres password=uU7DP6WatYtUhEeNpKfq"
 }
 
+#[allow(clippy::missing_panics_doc)]
 pub async fn insert_project(dbms: &mut tokio_postgres::Client, project: &JiraProject) {
-    let stmt = r#"insert into
+    let stmt = r"insert into
     jira.project  (id, key, name, url)
     values ($1, $2, $3, $4)
     on conflict (id) do nothing
-    "#;
+    ";
 
     match dbms
         .execute(
@@ -51,12 +55,13 @@ pub async fn insert_project(dbms: &mut tokio_postgres::Client, project: &JiraPro
         .await
     {
         Ok(_) => {}
-        Err(e) => panic!("Unable to insert project {:?}, cause: {}", project, e),
+        Err(e) => panic!("Unable to insert project {project:?}, cause: {e}"),
     }
 }
 
+#[allow(clippy::missing_panics_doc)]
 pub async fn insert_issue(dbms: &mut tokio_postgres::Client, project_id: &str, issue: &JiraIssue) {
-    let stmt = r#"
+    let stmt = r"
     with data(id, key, project_id, summary, asset_name) AS (
         values
             ($1, $2, $3, $4, $5)
@@ -66,7 +71,7 @@ pub async fn insert_issue(dbms: &mut tokio_postgres::Client, project_id: &str, i
             from data left outer join jira.asset on data.asset_name = jira.asset.asset_name
         on conflict
         do nothing
-        "#;
+        ";
     let asset_name = issue.fields.asset.as_ref().map(|a| a.value.to_string());
 
     match dbms
@@ -87,15 +92,16 @@ pub async fn insert_issue(dbms: &mut tokio_postgres::Client, project_id: &str, i
     }
 }
 
+#[allow(clippy::missing_panics_doc)]
 pub async fn insert_author(dbms: &mut tokio_postgres::Client, author: &Author) -> String {
-    let stmt = r#"insert into jira.author (account_id, email_address, display_name)
+    let stmt = r"insert into jira.author (account_id, email_address, display_name)
         values ($1,$2,$3)
         on conflict (account_id)
         do
             update
                 set account_id = excluded.account_id
         returning account_id
-        "#;
+        ";
 
     match dbms
         .query_one(
@@ -106,34 +112,34 @@ pub async fn insert_author(dbms: &mut tokio_postgres::Client, author: &Author) -
     {
         Ok(row) => row.get(0),
         Err(dbms_err) => panic!(
-            "Unable to insert new jira.author, using sql: {}, \nreason: {:?}",
-            stmt, dbms_err
+            "Unable to insert new jira.author, using sql: {stmt}, \nreason: {dbms_err:?}"
         ),
     }
 }
 
+#[allow(clippy::missing_panics_doc)]
 pub async fn batch_insert_authors(dbms: &mut tokio_postgres::Client, authors: &[Author]) {
     for authors_chunk in authors.chunks(DBMS_CHUNK_SIZE) {
         let (sql, params) = compose_batch_insert_authors_sql(authors);
         match dbms.execute(sql.as_str(), &params[..]).await {
             Ok(_) => {}
-            Err(err) => panic!("Unable to insert authors. Cause: {:?}", err),
+            Err(err) => panic!("Unable to insert authors. Cause: {err:?}"),
         }
         info!("Upserted {} authors", authors_chunk.len());
     }
 }
 
 fn compose_batch_insert_authors_sql(
-    authors_chucnk: &[Author],
+    authors_chunk: &[Author],
 ) -> (String, Vec<&(dyn ToSql + Sync)>) {
-    let mut insert_stmt = r#"insert into
+    let mut insert_stmt = r"insert into
     jira.author (account_id, email_address, display_name)
         values
-    "#
+    "
         .to_string();
     let on_conflict = "on conflict (account_id) do nothing";
     let mut params = Vec::<&(dyn ToSql + Sync)>::new();
-    for (i, author) in authors_chucnk.iter().enumerate() {
+    for (i, author) in authors_chunk.iter().enumerate() {
         if i > 0 {
             write!(insert_stmt, ",").unwrap();
         }
@@ -147,19 +153,20 @@ fn compose_batch_insert_authors_sql(
         params.push(&author.emailAddress);
         params.push(&author.displayName);
     }
-    write!(insert_stmt, " \n{}", on_conflict).unwrap();
+    write!(insert_stmt, " \n{on_conflict}").unwrap();
 
     (insert_stmt, params)
 }
 
+#[allow(clippy::missing_panics_doc)]
 pub async fn insert_worklog(dbms: &mut tokio_postgres::Client, worklog: &Worklog) {
-    let stmt = r#"insert into jira.worklog (id, account_id, created,
+    let stmt = r"insert into jira.worklog (id, account_id, created,
             updated, started, timespent, timespentseconds, issueid)
         values ($1,$2,$3, $4, $5, $6, $7, $8)
         on conflict (id)
         do
             nothing
-    "#;
+    ";
     match dbms
         .execute(
             stmt,
@@ -177,26 +184,27 @@ pub async fn insert_worklog(dbms: &mut tokio_postgres::Client, worklog: &Worklog
         .await
     {
         Ok(_) => (),
-        Err(err) => panic!("Unable to upsert new worklog entry: {:?}", err),
+        Err(err) => panic!("Unable to upsert new worklog entry: {err:?}"),
     }
 }
 
+#[allow(clippy::missing_panics_doc)]
 pub async fn batch_insert_worklogs(dbms: &mut tokio_postgres::Client, worklogs: &[Worklog]) {
     // Splits the insert statement into chunks of PostgresSQL limit of 1000 entries
-    for worklog_chunck in worklogs.chunks(DBMS_CHUNK_SIZE) {
-        let (sql, params) = compose_batch_insert_worklog_sql(worklog_chunck);
+    for worklog_chunk in worklogs.chunks(DBMS_CHUNK_SIZE) {
+        let (sql, params) = compose_batch_insert_worklog_sql(worklog_chunk);
         match dbms.execute(sql.as_str(), &params[..]).await {
             Ok(_) => {}
-            Err(e) => panic!("Failed to insert worklogs, reason {:?}", e),
+            Err(e) => panic!("Failed to insert worklogs, reason {e:?}"),
         };
     }
 }
 
 /// Dynamically composes the SQL and the list of parameters to insert a batch of Worklog items
 fn compose_batch_insert_worklog_sql(
-    worklog_chunck: &[Worklog],
+    worklog_chunk: &[Worklog],
 ) -> (String, Vec<&(dyn ToSql + Sync)>) {
-    let mut insert_stmt = r#"
+    let mut insert_stmt = r"
     insert into jira.worklog (
             id,
             account_id,
@@ -207,12 +215,12 @@ fn compose_batch_insert_worklog_sql(
             timespentseconds,
             issueid
            ) values
-           "#
+           "
         .to_string();
     let on_conflict_part = String::from(" on conflict (id) do nothing ");
 
     let mut params = Vec::<&(dyn ToSql + Sync)>::new();
-    for (i, worklog_entry) in worklog_chunck.iter().enumerate() {
+    for (i, worklog_entry) in worklog_chunk.iter().enumerate() {
         if i > 0 {
             write!(insert_stmt, ",").unwrap();
         }
@@ -242,7 +250,7 @@ fn compose_batch_insert_worklog_sql(
         params.push(&worklog_entry.timeSpentSeconds);
         params.push(&worklog_entry.issueId);
     }
-    write!(insert_stmt, " \n{}", on_conflict_part).unwrap();
+    write!(insert_stmt, " \n{on_conflict_part}").unwrap();
 
     (insert_stmt, params)
 }
@@ -277,7 +285,7 @@ pub async fn etl_issues_worklogs_and_persist(
         Ok(r) => r,
         Err(e) => {
             {
-                eprintln!("get_issues_and_worklogs() failed with http code {}", e);
+                eprintln!("get_issues_and_worklogs() failed with http code {e}");
                 exit(4);
             }
         }
@@ -336,9 +344,10 @@ fn extract_assets_from_time_issues(projects: &[JiraProject]) -> Vec<String> {
         .collect()
 }
 
+#[allow(clippy::missing_panics_doc)]
 pub async fn insert_assets(dbms: &mut tokio_postgres::Client, assets: &[String]) {
     for asset_chunk in assets.chunks(DBMS_CHUNK_SIZE) {
-        let mut sql = r#"insert into jira.asset (asset_name) values "#.to_string();
+        let mut sql = r"insert into jira.asset (asset_name) values ".to_string();
         let sql_on_conflict = "on conflict (asset_name) do nothing ";
 
         let mut params = Vec::<&(dyn ToSql + Sync)>::new();
@@ -349,13 +358,13 @@ pub async fn insert_assets(dbms: &mut tokio_postgres::Client, assets: &[String])
             write!(sql, "\n{}", format_args!("( ${} ) ", i + 1)).unwrap();
             params.push(asset);
         }
-        write!(sql, " {}", sql_on_conflict).unwrap();
+        write!(sql, " {sql_on_conflict}").unwrap();
         debug!("Executing {}", sql);
 
         match dbms.execute(&sql, &params[..]).await {
             Ok(_) => {}
             Err(e) => {
-                panic!("Failed to insert authors, SQL: {} \n cause: {:?}", sql, e)
+                panic!("Failed to insert authors, SQL: {sql} \n cause: {e:?}")
             }
         }
     }
@@ -369,8 +378,7 @@ mod tests {
     async fn load_config_and_get_dbms_connection() -> tokio_postgres::Client {
         let config = jira_lib::config::load_configuration().unwrap();
 
-        let client = dbms_async_init(&config.dbms.connect).await.unwrap();
-        client
+        dbms_async_init(&config.dbms.connect).await.unwrap()
     }
 
     #[tokio::test]
@@ -383,11 +391,11 @@ mod tests {
         };
         let account_id = insert_author(&mut client, &author).await;
         assert!(
-            account_id.len() > 0,
+            !account_id.is_empty(),
             "No value returned when inserting author"
         );
         let account_id = insert_author(&mut client, &author).await;
-        assert!(account_id.len() > 0, "No value returned from second insert");
+        assert!(!account_id.is_empty(), "No value returned from second insert");
 
         client
             .execute(
@@ -404,12 +412,12 @@ mod tests {
 
         let json = r#"{"startAt":0,"maxResults":1,"total":8884,"worklogs":[{"self":"https://autostore.atlassian.net/rest/api/2/issue/85002/worklog/129875","author":{"self":"https://autostore.atlassian.net/rest/api/2/user?accountId=557058%3A189520f0-d1fb-4a0d-b555-bc44ec1f4ebc","accountId":"557058:189520f0-d1fb-4a0d-b555-bc44ec1f4ebc","emailAddress":"borge.bekken@autostoresystem.com","avatarUrls":{"48x48":"https://secure.gravatar.com/avatar/0c67157f18660008baae96b0a2e40a61?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FBB-1.png","24x24":"https://secure.gravatar.com/avatar/0c67157f18660008baae96b0a2e40a61?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FBB-1.png","16x16":"https://secure.gravatar.com/avatar/0c67157f18660008baae96b0a2e40a61?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FBB-1.png","32x32":"https://secure.gravatar.com/avatar/0c67157f18660008baae96b0a2e40a61?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FBB-1.png"},"displayName":"Børge Bekken","active":true,"timeZone":"Europe/Oslo","accountType":"atlassian"},"updateAuthor":{"self":"https://autostore.atlassian.net/rest/api/2/user?accountId=557058%3A189520f0-d1fb-4a0d-b555-bc44ec1f4ebc","accountId":"557058:189520f0-d1fb-4a0d-b555-bc44ec1f4ebc","emailAddress":"borge.bekken@autostoresystem.com","avatarUrls":{"48x48":"https://secure.gravatar.com/avatar/0c67157f18660008baae96b0a2e40a61?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FBB-1.png","24x24":"https://secure.gravatar.com/avatar/0c67157f18660008baae96b0a2e40a61?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FBB-1.png","16x16":"https://secure.gravatar.com/avatar/0c67157f18660008baae96b0a2e40a61?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FBB-1.png","32x32":"https://secure.gravatar.com/avatar/0c67157f18660008baae96b0a2e40a61?d=https%3A%2F%2Favatar-management--avatars.us-west-2.prod.public.atl-paas.net%2Finitials%2FBB-1.png"},"displayName":"Børge Bekken","active":true,"timeZone":"Europe/Oslo","accountType":"atlassian"},"created":"2022-02-04T16:22:28.554+0100","updated":"2022-02-04T16:22:44.384+0100","started":"2022-01-24T09:00:00.000+0100","timeSpent":"1d","timeSpentSeconds":27000,"id":"129875","issueId":"85002"}]}"#;
 
-        let result = serde_json::from_str::<WorklogsPage>(&json).unwrap();
+        let result = serde_json::from_str::<WorklogsPage>(json).unwrap();
         let w = &result.worklogs[0];
         let a = &w.author;
-        let _author_id = insert_author(&mut client, &a).await;
+        let _author_id = insert_author(&mut client, a).await;
 
-        insert_worklog(&mut client, &w).await;
+        insert_worklog(&mut client, w).await;
 
         // client.execute("delete from jira.worklog where id=$1", &[&w.id]);
     }
@@ -424,7 +432,7 @@ mod tests {
             .unwrap()
             .worklogs;
         let (sql, _params) = compose_batch_insert_worklog_sql(&worklogs[0..13]);
-        println!("SQL: {}", sql);
+        println!("SQL: {sql}");
     }
 
     #[tokio::test]
@@ -455,7 +463,7 @@ mod tests {
             .await
         {
             Ok(row) => row.get(0),
-            Err(err) => panic!("Unable to retrieve a prject id from DBMS {:?}", err),
+            Err(err) => panic!("Unable to retrieve a project id from DBMS {err:?}"),
         };
         let asset_id: i32 = match dbms
             .query_one(
@@ -465,7 +473,7 @@ mod tests {
             .await
         {
             Ok(row) => row.get(0),
-            Err(err) => panic!("Unable to retrive asset_id, cause: {:?}", err),
+            Err(err) => panic!("Unable to retrieve asset_id, cause: {err:?}"),
         };
 
         let issue = JiraIssue {
@@ -493,8 +501,7 @@ mod tests {
         {
             Ok(row) => row.get(0),
             Err(err) => panic!(
-                "Unable to retrieve the asset_id from inserted issue. Cause: {:?}",
-                err
+                "Unable to retrieve the asset_id from inserted issue. Cause: {err:?}"
             ),
         };
         assert!(
@@ -507,7 +514,7 @@ mod tests {
             .await
         {
             Ok(rows) => rows,
-            Err(err) => panic!("Unable to remove inserted test data {:?}", err),
+            Err(err) => panic!("Unable to remove inserted test data {err:?}"),
         };
         assert_eq!(result, 1);
     }
