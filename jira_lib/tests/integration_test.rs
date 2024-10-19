@@ -1,7 +1,8 @@
 use std::string::ToString;
 use chrono::{Days, Local, Utc};
 
-#[tokio::test]
+#[ignore]
+#[tokio::test] // Requires a valid user token in configuration
 async fn test_get_time_tracking_options() {
     let jira_client = jira_lib::create_jira_client();
     let current_user = jira_client.get_current_user().await;
@@ -10,7 +11,8 @@ async fn test_get_time_tracking_options() {
 
 const TEST_ISSUE: &str = "TIME-147";
 
-#[tokio::test]
+#[ignore]
+#[tokio::test] // Requires a valid user token in configuration
 async fn test_get_worklog_entries_for_current_user(){
     let jira_client = jira_lib::create_jira_client();
 

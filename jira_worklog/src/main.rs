@@ -1,19 +1,13 @@
 //! The Jira worklog command line utility
 //!
-use jira_lib::date_util::{
-    calculate_started_time, date_of_last_weekday, DateTimeError, parse_worklog_durations,
-    str_to_date_time, TimeSpent,
-};
-use chrono::{Datelike, Local, NaiveDate, TimeZone, Weekday};
+use chrono::{Datelike, Local, TimeZone, Weekday};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use env_logger::Env;
-use jira_lib::config::{Application, file_name, load_or_create_configuration, remove_configuration, save_configuration};
-use jira_lib::{config, date_util, JiraClient, JiraIssue, JiraKey, journal, TimeTrackingConfiguration, Worklog};
-use jira_lib::journal::{add_worklog_entries, Entry};
+use jira_lib::{config, date, JiraClient, JiraIssue, JiraKey, journal, TimeTrackingConfiguration, Worklog};
 
 use log::{debug, info};
 use reqwest::StatusCode;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::fmt::Formatter;
 use std::fs::File;
 use std::process::exit;
@@ -183,12 +177,12 @@ async fn main() {
                 list: false,
                 remove: false,
             } => {
-                let mut app_config = match load_or_create_configuration() {
+                let mut app_config = match config::load_or_create() {
                     Ok(ac) => ac,
                     Err(e) => {
                         eprintln!(
                             "ERROR: Unable to load or create configuration file {}, reason:{}",
-                            file_name().to_string_lossy(),
+                            config::file_name().to_string_lossy(),
                             e
                         );
                         exit(4);
@@ -203,24 +197,24 @@ async fn main() {
                 if let Some(jira_url) = jira_url {
                     app_config.jira.jira_url = jira_url.to_string();
                 }
-                save_configuration(&app_config).expect("Unable to save the application config");
+                config::save(&app_config).expect("Unable to save the application config");
                 println!(
                     "Configuration saved to {}",
-                    file_name().to_string_lossy()
+                    config::file_name().to_string_lossy()
                 );
                 exit(0);
             }
-            Configuration { remove: true, .. } => match remove_configuration() {
+            Configuration { remove: true, .. } => match config::remove() {
                 Ok(()) => {
                     println!(
                         "Configuration file {} removed",
-                        file_name().to_string_lossy()
+                        config::file_name().to_string_lossy()
                     );
                 }
                 Err(e) => {
                     println!(
                         "ERROR:Unable to remove configuration file {} : {}",
-                        file_name().to_string_lossy(),
+                        config::file_name().to_string_lossy(),
                         e
                     );
                 }
@@ -282,7 +276,9 @@ async fn delete_subcommand(delete: &Del) {
             exit(4);
         }
     }
-    journal::remove_entry(&PathBuf::from(app_config.application_data.journal_data_file_name), delete.worklog_id.as_str());
+    journal::remove_entry(&PathBuf::from(
+        app_config.application_data.journal_data_file_name),
+        delete.worklog_id.as_str()).unwrap();
     println!("Removed entry {} from local journal", delete.worklog_id);
 }
 
@@ -290,13 +286,19 @@ async fn status_subcommand(status: Status) {
     let app_config = get_app_config();
 
     let jira_client = get_jira_client(&app_config);
-    let start_after = status.after.map(|s| str_to_date_time(&s).unwrap());
+    let start_after = status.after.map(|s| date::str_to_date_time(&s).unwrap());
 
     let mut worklog_entries: Vec<Worklog> = Vec::new();
     let mut issue_information: HashMap<String, JiraIssue> = HashMap::new();
 
     let keys = if status.issues.is_none() {
-        journal::find_unique_keys(&PathBuf::from(app_config.application_data.journal_data_file_name))
+        match journal::find_unique_keys(&PathBuf::from(app_config.application_data.journal_data_file_name)) {
+            Ok(issues) => issues,
+            Err(e) => {
+                eprintln!("Failed to find issues: {e}");
+                exit(4);
+            }
+        }
     } else {
         status.issues.unwrap()
     };
@@ -406,7 +408,7 @@ async fn add_subcommand(add: &mut Add) {
                 add.durations[0].chars().next().unwrap()
             );
 
-    let mut added_worklog_items: Vec<Entry> = vec![];
+    let mut added_worklog_items: Vec<journal::Entry> = vec![];
 
     if add.durations.len() == 1 && add.durations[0].chars().next().unwrap() <= '9' {
         // Single duration without a "day name" prefix
@@ -442,10 +444,13 @@ async fn add_subcommand(add: &mut Add) {
         exit(4);
     }
     // Writes the added worklog items to our local journal
-    add_worklog_entries(added_worklog_items);
+    if let Err(e) = journal::add_worklog_entries(added_worklog_items) {
+        eprintln!("Failed to add worklog entries: {e}");
+        exit(4);
+    }
 }
 
-fn get_jira_client(app_config: &Application) -> JiraClient {
+fn get_jira_client(app_config: &config::Application) -> JiraClient {
 
     match JiraClient::new(
         &app_config.jira.jira_url,
@@ -461,30 +466,28 @@ fn get_jira_client(app_config: &Application) -> JiraClient {
 }
 
 fn get_app_config() -> config::Application {
-    let Ok(app_config) = config::load_configuration() else {
+    let Ok(app_config) = config::load() else {
         println!(
             "Config file {} not found.",
-            file_name().to_string_lossy()
+            config::file_name().to_string_lossy()
         );
         println!("Create it with: jira_worklog config --user <EMAIL> --token <JIRA_TOKEN>");
         println!("See 'config' subcommand for more details");
         exit(4);
     };
 
-    debug!("jira_url: '{}'", app_config.jira.jira_url);
-    debug!("user: '{}'", app_config.jira.user);
-    debug!("token: '{}'", app_config.jira.token);
+    debug!("configuration: '{app_config:?}'");
     app_config
 }
 
 fn list_config_and_exit() {
     println!(
         "Configuration file {}:\n",
-        file_name().to_string_lossy()
+        config::file_name().to_string_lossy()
     );
-    match config::load_configuration() {
+    match config::load() {
         Ok(config) => {
-            let toml_as_string = config::application_config_to_string(&config);
+            let toml_as_string = config::application_config_to_string(&config).unwrap();
             println!("{toml_as_string}");
         }
         Err(_) => {
@@ -492,70 +495,6 @@ fn list_config_and_exit() {
         }
     }
     exit(0);
-}
-
-
-#[allow(dead_code, deprecated)]
-fn old_weekly_summary_report(worklog_entries: &mut [Worklog]) {
-    // Accumulates the total amount of hours per day
-    let mut daily_sum: BTreeMap<NaiveDate, i32> = BTreeMap::new();
-    for worklog_entry in worklog_entries.iter() {
-        let local_date = worklog_entry.started.with_timezone(&Local).date_naive();
-        let _accumulated = match daily_sum.get(&local_date) {
-            None => daily_sum.insert(local_date, worklog_entry.timeSpentSeconds),
-            Some(accumulated) => {
-                daily_sum.insert(local_date, accumulated + worklog_entry.timeSpentSeconds)
-            }
-        };
-    }
-
-    let mut sum_per_week = 0;
-    let mut current_week = 0;
-    let mut sum_per_month = 0;
-    let mut current_month = 0;
-    let mut monthly_totals: BTreeMap<u32, i32> = BTreeMap::new();
-
-    println!("CW {:10} {:3} {:8} ", "Date", "Day", "Duration");
-    for (dt, accum_per_day) in &daily_sum {
-        if current_week == 0 {
-            current_week = dt.iso_week().week();
-        }
-        if current_month == 0 {
-            current_month = dt.month();
-        }
-
-        if date_util::is_new_week(current_week, dt) {
-            print_sum_per_week(&mut sum_per_week, dt.iso_week().week() - 1);
-            current_week = dt.iso_week().week();
-            sum_per_week = 0;
-        }
-        // Excludes current month
-        if dt.month() > current_month {
-            monthly_totals.insert(current_month, sum_per_month);
-            current_month = dt.month();
-            sum_per_month = 0;
-        }
-        let duration_this_day = date_util::seconds_to_hour_and_min(accum_per_day);
-        println!(
-            "{:2} {:10} {:3} {:8}",
-            dt.iso_week().week(),
-            dt,
-            dt.weekday(),
-            duration_this_day
-        );
-        sum_per_week += accum_per_day;
-        sum_per_month += accum_per_day;
-    }
-    print_sum_per_week(&mut sum_per_week, Local::now().iso_week().week());
-
-    println!();
-    for (month, total) in monthly_totals {
-        println!(
-            "{:9} {}",
-            date_util::month_name(month).name(),
-            date_util::seconds_to_hour_and_min(&total)
-        );
-    }
 }
 
 fn issue_and_entry_report(
@@ -587,7 +526,7 @@ fn issue_and_entry_report(
                 "{}",
                 e.started.with_timezone(&Local).format("%Y-%m-%d %H:%M %z")
             ),
-            date_util::seconds_to_hour_and_min(&e.timeSpentSeconds),
+            date::seconds_to_hour_and_min(&e.timeSpentSeconds),
             e.comment.as_deref().unwrap_or("")
         );
     }
@@ -606,18 +545,18 @@ async fn add_multiple_entries(
     issue: String,
     durations: Vec<String>,
     comment: Option<String>,
-) -> Vec<Entry> {
+) -> Vec<journal::Entry> {
     // Parses the list of durations in the format XXX:nn,nnU, i.e. Mon:1,5h into Weekday, duration and unit
-    let durations: Vec<(Weekday, f32, String)> = parse_worklog_durations(durations);
+    let durations: Vec<(Weekday, f32, String)> = date::parse_worklog_durations(durations);
 
-    let mut inserted_work_logs: Vec<Entry> = vec![];
+    let mut inserted_work_logs: Vec<journal::Entry> = vec![];
 
     for entry in durations {
         let weekday = entry.0;
         let duration = entry.1;
         let unit = entry.2;
 
-        let started = date_of_last_weekday(weekday);
+        let started = date::last_weekday(weekday);
         // Starts all entries at 08:00
         let started = Local
             .with_ymd_and_hms(started.year(), started.month(), started.day(), 8, 0, 0)
@@ -650,13 +589,13 @@ async fn add_single_entry(
     duration: &str,
     started: Option<String>,
     comment: Option<String>,
-) -> Entry {
+) -> journal::Entry {
     debug!(
         "add_single_entry({}, {}, {:?}, {:?})",
         &issue, duration, started, comment
     );
     // Transforms strings like "1h", "1d", "1w" into number of seconds. Decimal point and full stop supported
-    let time_spent_seconds = match TimeSpent::from_str(
+    let time_spent_seconds = match date::TimeSpent::from_str(
         duration,
         time_tracking_options.workingHoursPerDay,
         time_tracking_options.workingDaysPerWeek,
@@ -670,10 +609,10 @@ async fn add_single_entry(
     debug!("time spent in seconds: {}_", time_spent_seconds);
 
     // If a starting point was given, transform it from string to a full DateTime<Local>
-    let starting_point = started.as_ref().map(|dt| str_to_date_time(dt).unwrap());
+    let starting_point = started.as_ref().map(|dt| date::str_to_date_time(dt).unwrap());
     // Optionally calculates the starting point after which it is verified
-    let calculated_start = calculate_started_time(starting_point, time_spent_seconds)
-        .unwrap_or_else(|err: DateTimeError| {
+    let calculated_start = date::calculate_started_time(starting_point, time_spent_seconds)
+        .unwrap_or_else(|err: date::Error| {
             eprintln!("{err}");
             exit(4);
         });
@@ -719,7 +658,7 @@ async fn add_single_entry(
     );
     println!("To delete entry: jira_worklog del -i {} -w {}", issue, &result.id);
 
-    Entry {
+    journal::Entry {
         issue_key: issue,
         worklog_id: result.id,
         started: calculated_start.with_timezone(&Local),
@@ -761,7 +700,7 @@ pub fn print_sum_per_week(sum_per_week: &mut i32, week: u32) {
     println!(
         "ISO week {}, sum: {} ",
         week,
-        date_util::seconds_to_hour_and_min(sum_per_week)
+        date::seconds_to_hour_and_min(sum_per_week)
     );
     println!("{:=<23}", "");
     println!();
