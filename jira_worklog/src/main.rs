@@ -305,7 +305,16 @@ async fn status_subcommand(status: Status) {
         eprintln!("You want to use the -i option and specify issues");
         exit(4);
     }
+
     eprintln!("Retrieving data for time codes: {}", &keys.join(", "));
+
+    let keys_clone = keys.clone();
+    tokio::spawn( async move {
+        let conf = get_app_config();
+        let client = get_jira_client(&conf);
+        time_codes_info(&client, &keys_clone).await;
+    }
+    );
 
     for issue in &keys {
         let mut entries = match jira_client
@@ -358,6 +367,15 @@ async fn status_subcommand(status: Status) {
         &issue_keys_by_command_line_order,
         &issue_information,
     );
+}
+
+async fn time_codes_info(jira_client: &JiraClient, keys: &Vec<String>) {
+    for key in keys {
+        match jira_client.get_issue_by_id_or_key(key).await {
+            Ok(issue) => { println!("{key} {}", issue.fields.summary); }
+            Err(err) => { println!("{key} {err:?}"); }
+        }
+    }
 }
 
 async fn add_subcommand(add: &mut Add) {

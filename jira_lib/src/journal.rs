@@ -235,7 +235,7 @@ mod tests {
         let file_name = create_sample_journal();
         let unique_keys: Vec<String> = find_unique_keys(&file_name);
         assert!(!unique_keys.is_empty());
-        assert_eq!(vec!["TIME-117", "TIME-147", "TIME-148"], unique_keys);
+        assert_eq!(vec!["TIME-117", "TIME-147", "TIME-148"], unique_keys, "Incorrect number of unique time codes in {}",file_name.to_string_lossy());
     }
 
     // The hashes around the string are NOT needless!

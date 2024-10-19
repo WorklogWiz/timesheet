@@ -1,15 +1,14 @@
 
 [workspace]
 members = [
-    "jira_worklog_etl",
     "jira_lib",
-    "jira_worklog", "rust-axum-backend",
+    "jira_worklog", "rust-axum-backend", "secure_credentials",
 ]
 # Set the resolver to "2" to match the 2021 edition
 resolver = "2"
 
 [workspace.package]
-version = "0.8.1"
+version = "0.9.0"
 
 [workspace.dependencies]
 tokio = { version = "1.*" }

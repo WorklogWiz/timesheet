@@ -93,10 +93,13 @@ This should solve the problem.
 
 ### Notes on security
 
-The configuration file is stored without encryption in a location, which depends on the operating system you are using.
+The configuration file is stored without encryption in a location, 
+which depends on the operating system you are using.
 See the table below for details.
 
 If you think your machine has been compromised, go to Jira account ira and "Revoke" the API key.
+
+On MacOS, the Jira Security Access Token is stored in the built-in KeyChain.
 
 You can remove your local configuration file using the command: `jira_worklog config --remove`
 
