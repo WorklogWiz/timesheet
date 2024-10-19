@@ -6,7 +6,7 @@ fn main() {
     let token = "my_secure_token";
 
     match store_secure_token(service, account, token) {
-        Ok(_) => println!("Secure token stored successfully."),
-        Err(e) => eprintln!("Failed to store secure token: {}", e),
+        Ok(()) => println!("Secure token stored successfully."),
+        Err(e) => eprintln!("Failed to store secure token: {e}"),
     }
 }

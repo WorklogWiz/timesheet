@@ -1,6 +1,7 @@
 {
     "cSpell.words": [
         "authorisation",
+        "autosstoresystem",
         "autostore",
         "autostoresystem",
         "Bekken",
@@ -8,10 +9,12 @@
         "chrono",
         "datetime",
         "issueid",
+        "keychain",
         "Overbeck",
         "reqwest",
         "serde",
         "Steinar",
+        "tempfile",
         "testenv",
         "timespent",
         "timespentseconds",

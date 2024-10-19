@@ -54,7 +54,7 @@ Like, for instance, `$HOME/.local/bin`:
     1. Log in to Jira
     1. Click on the picture of yourself in the upper right corner ("Your profile and settings")
     1. Click "Manage account"
-    1. Click "Security" ![](images/jira_security.png)
+    1. Click "Security" ![Jira Security Screenshot](images/jira_security.png)
     1. Choose "Create and manage API tokens" almost at the bottom of the page
     1. Click "Create your API token" and copy the token to your clip board
 2. Execute this command to create the configuration file:
@@ -80,7 +80,7 @@ curl --request GET \
 There are some extra security built into the macOS which prevents you from running potential malware.
 Consequently, you will see this error message if you attempt to run `jira_worklog`:
 
-![](images/macos_error_unidentified_dev.png)
+![MacOS Unidentified Developer Screenshot](images/macos_error_unidentified_dev.png)
 
 To fix this:
 

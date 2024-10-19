@@ -2,7 +2,7 @@ use jira_lib::{JiraIssue, JiraKey, Worklog};
 use std::collections::{BTreeMap, HashMap};
 use chrono::{Datelike, NaiveDate};
 use log::debug;
-use jira_lib::date_util::{month_name, seconds_to_hour_and_min};
+use jira_lib::date;
 //
 // Prints a report with tables like this:
 //
@@ -66,7 +66,7 @@ pub fn table_report(
         }
 
         // If this date is in the next week, summarize for current week
-        if crate::date_util::is_new_week(current_week, &date) {
+        if crate::date::is_new_week(current_week, &date) {
             print_weekly_total_per_issue(
                 issue_keys_by_command_line_order,
                 &mut weekly_totals_per_jira_key,
@@ -96,7 +96,7 @@ pub fn table_report(
     // Print totals for each (year) and month
     for (_year, monthly_total) in monthly_total {
         for (month_no, month_total) in monthly_total {
-            println!("{:<9}: {:>8}", month_name(month_no).name(), seconds_to_hour_and_min(&month_total));
+            println!("{:<9}: {:>8}", date::month_name(month_no).name(), date::seconds_to_hour_and_min(&month_total));
         }
     }
 }
@@ -114,7 +114,7 @@ fn print_daily_entry(date: NaiveDate,issue_keys_by_command_line_order: &[JiraKey
         let seconds = daily_total_per_jira_key
             .get(jira_key)
             .unwrap_or(&default_value);
-        let hh_mm_string = crate::date_util::seconds_to_hour_and_min(seconds);
+        let hh_mm_string = crate::date::seconds_to_hour_and_min(seconds);
         print!(
             " {:>8}",
             if *seconds == 0 {
@@ -131,7 +131,7 @@ fn print_daily_entry(date: NaiveDate,issue_keys_by_command_line_order: &[JiraKey
             .or_insert(*seconds);
         debug!("Weekly total for {jira_key} {s:?}");
     }
-    print!(" {:>8}", crate::date_util::seconds_to_hour_and_min(&daily_total));
+    print!(" {:>8}", crate::date::seconds_to_hour_and_min(&daily_total));
 
     println!();
 }
@@ -162,12 +162,12 @@ fn print_weekly_total_per_issue(
     let mut week_grand_total = 0;
     for issue_key in issue_keys_by_command_line_order {
         let seconds = sum_per_week_per_jira_key.get(issue_key).unwrap_or(&default);
-        let hh_mm_string = crate::date_util::seconds_to_hour_and_min(seconds);
+        let hh_mm_string = date::seconds_to_hour_and_min(seconds);
         print!(" {hh_mm_string:>8}");
         week_grand_total += seconds;
     }
     // Rightmost "Total" column for the entire week
-    print!(" {:>8}", crate::date_util::seconds_to_hour_and_min(&week_grand_total));
+    print!(" {:>8}", date::seconds_to_hour_and_min(&week_grand_total));
     println!();
 
     // prints the ================= below the totals

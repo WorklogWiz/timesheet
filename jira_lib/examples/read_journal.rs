@@ -2,7 +2,7 @@ use std::fs::File;
 use jira_lib::config;
 
 fn main() {
-    let configuration = config::load_configuration().unwrap();
+    let configuration = config::load().unwrap();
 
     let file = File::open(configuration.application_data.journal_data_file_name).unwrap();
     let mut rdr = csv::ReaderBuilder::new()

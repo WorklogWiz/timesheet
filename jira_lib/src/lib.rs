@@ -15,10 +15,9 @@ use std::time::Instant;
 use base64::prelude::*;
 use base64::Engine;
 use chrono::{DateTime, Days, Local, Months, NaiveDateTime, NaiveTime, TimeZone, Utc};
+use config::Application;
 use futures::StreamExt;
 use log::{debug, info};
-use postgres_types::private::BytesMut;
-use postgres_types::{IsNull, ToSql, Type};
 use reqwest::header::HeaderMap;
 use reqwest::header::HeaderValue;
 use reqwest::{Client, StatusCode};
@@ -28,7 +27,7 @@ use serde::Serialize;
 
 pub mod config;
 pub mod journal;
-pub mod date_util;
+pub mod date;
 
 /// Holds the ULR of the Jira API to use
 pub const JIRA_URL: &str = "https://autostore.atlassian.net/rest/api/latest";
@@ -152,34 +151,6 @@ pub struct JiraIssuesPage {
 #[derive(Debug, Deserialize, Serialize, Default, Eq, PartialEq, Clone)]
 pub struct JiraKey(pub String);
 
-impl ToSql for JiraKey {
-    fn to_sql(&self, _ty: &Type, out: &mut BytesMut) -> Result<IsNull, Box<dyn Error + Sync + Send>>
-    where
-        Self: Sized,
-    {
-        out.extend_from_slice(self.0.as_bytes());
-        Ok(IsNull::No)
-    }
-
-    fn accepts(ty: &Type) -> bool
-    where
-        Self: Sized,
-    {
-        ty == &Type::TEXT
-    }
-
-    fn to_sql_checked(
-        &self,
-        ty: &Type,
-        out: &mut BytesMut,
-    ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
-        if Self::accepts(ty) {
-            self.to_sql(ty, out)
-        } else {
-            Err(format!("Type {ty:?} not accepted for JiraKey").into())
-        }
-    }
-}
 impl JiraKey {
     #[must_use]
     pub fn value(&self) -> &str {
@@ -307,8 +278,8 @@ impl Error for JiraError {
 #[allow(clippy::missing_panics_doc)]
 pub fn create_jira_client() -> JiraClient {
     // Creates HTTP client with all the required credentials
-    let config = config::load_configuration().unwrap();
-    JiraClient::new(&config.jira.jira_url, &config.jira.user, &config.jira.token).unwrap()
+    let config = config::load().unwrap();
+    JiraClient::from(&config).unwrap()
 }
 
 pub struct JiraClient {
@@ -340,6 +311,11 @@ impl JiraClient {
             user_name: user_name.to_string(),
             http_client,
         })
+    }
+
+    #[allow(clippy::missing_errors_doc)]
+    pub fn from(cfg: &Application) -> Result<JiraClient, JiraError> {
+        JiraClient::new(&cfg.jira.jira_url,&cfg.jira.user, &cfg.jira.token)
     }
 
     fn create_http_client(user_name: &str, token: &str) -> Result<reqwest::Client, reqwest::Error> {
