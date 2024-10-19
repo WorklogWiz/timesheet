@@ -490,23 +490,6 @@ fn test_date_and_timezone_conversion() {
 #[must_use]
 pub fn month_name(n: u32) -> Month {
     Month::from_u32(n).unwrap()
-    /*
-    match n {
-        1 => Month::January,
-        2 => Month::February,
-        3 => Month::March,
-        4 => Month::April,
-        5 => Month::May,
-        6 => Month::June,
-        7 => Month::July,
-        8 => Month::August,
-        9 => Month::September,
-        10 => Month::October,
-        11 => Month::November,
-        12 => Month::December,
-        _ => panic!("Invalid month number {n}"),
-    }
-     */
 }
 
 #[must_use]

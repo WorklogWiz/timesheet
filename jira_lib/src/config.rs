@@ -1,17 +1,21 @@
-use directories;
-use directories::ProjectDirs;
-use log::debug;
-use serde::{Deserialize, Serialize};
 use std::fs::{create_dir_all, File};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::{fs, io};
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Default)]
+use directories;
+use directories::ProjectDirs;
+use log::{debug,  warn};
+use serde::{Deserialize, Serialize};
+
+const KEYCHAIN_SERVICE: &str = "com.autostoresystem.jira_worklog";
+/// Application configuration struct
+/// Holds the data we need to connect to Jira, write to the local journal and so on
+#[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
 pub struct Application {
+    /// Holds the URL to the Jira instance we are running agains.
     pub jira: Jira,
-    pub dbms: WorklogDBMS,
     /// This will ensure that the filename is created, even if the Toml file
     /// is an old version, which does not have an `application_data` section
     #[serde(default = "default_application_data_section")]
@@ -19,7 +23,7 @@ pub struct Application {
 }
 
 /// Holds the configuration for the `application_data` section of the Toml file
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct ApplicationData {
     pub journal_data_file_name: String,
 }
@@ -36,23 +40,7 @@ fn default_application_data_section() -> ApplicationData {
     ApplicationData::default()
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
-pub struct WorklogDBMS {
-    // host=.... user=.... password=.... (note space as delimiter between key/values
-    pub connect: String, // Connect string
-}
-
-impl Default for WorklogDBMS {
-    fn default() -> Self {
-        WorklogDBMS {
-            connect:
-                "host=postgres.testenv.autostoresystem.com user=postgres password=***************"
-                    .to_string(),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct Jira {
     pub jira_url: String,
     pub user: String,
@@ -64,8 +52,18 @@ impl Default for Jira {
         Jira {
             jira_url: "https://autostore.atlassian.net/rest/api/latest".to_string(),
             user: "user.name@autostoresystem.com".to_string(),
-            token: "< your secrete Jira token goes here>".to_string(),
+            token: "<your secret Jira token goes here>".to_string(),
         }
+    }
+}
+
+impl Jira {
+    /// Does the token look like a valid Jira Security token
+    #[must_use]
+    pub fn has_valid_jira_token(&self) -> bool {
+        !(self.token == Jira::default().token
+            || self.token.contains("secret")
+            || self.token == JIRA_TOKEN_STORED_IN_MACOS_KEYCHAIN)
     }
 }
 
@@ -89,23 +87,54 @@ fn project_dirs() -> ProjectDirs {
 }
 
 /// Assumes there is a configuration file and loads it
+///
+/// # Panics
+///
+/// Will panic if the configuration file could not be written after migrating the
+/// secure Jira Token from the configuration file into the macos keychain
 #[allow(clippy::missing_errors_doc)]
 pub fn load_configuration() -> Result<Application, io::Error> {
-    read_configuration(file_name().as_path())
+    let config_path = file_name();
+
+    let mut app_config = match read_configuration(&config_path) {
+        Ok(config) => config,
+        Err(err) => {
+            eprintln!("ERROR: Unable to parse {}", config_path.to_string_lossy());
+            eprintln!("Cause: {err:?}");
+            exit(4);
+        }
+    };
+
+    #[cfg(target_os = "macos")]
+    if cfg!(target_os = "macos") {
+        // If the loaded configuration file holds a valid Jira token, migrate it to
+        // the macos Keychain
+        if app_config.jira.has_valid_jira_token()
+            && secure_credentials::get_secure_token(KEYCHAIN_SERVICE, &app_config.jira.user).is_err()
+        {
+            #[allow(clippy::manual_assert)]
+            if create_configuration_file(&app_config, &config_path).is_err() {
+                panic!("Unable to migrate the Jira token from the config file to keychain");
+            }
+        }
+        // Merges the Jira token from the Keychain into the Application configuration
+        merge_jira_token_from_keychain(&mut app_config);
+    }
+    Ok(app_config)
 }
 
 #[allow(clippy::missing_errors_doc)]
-pub fn save_configuration(application_config: &Application) -> std::io::Result<()> {
+pub fn save_configuration(application_config: &Application) -> io::Result<()> {
     create_configuration_file(application_config, &file_name())
 }
 
 #[allow(clippy::missing_errors_doc)]
-pub fn remove_configuration() -> std::io::Result<()> {
+pub fn remove_configuration() -> io::Result<()> {
     fs::remove_file(file_name().as_path())
 }
 
 #[allow(clippy::missing_errors_doc)]
-pub fn create_and_save_sample_configuration() -> Result<Application, io::Error> {
+fn create_and_save_sample_configuration() -> Result<Application, io::Error> {
     debug!("create_and_save_sample_configuration() :- entering ...");
     let application_config = Application::default();
     create_configuration_file(&application_config, &file_name())?;
@@ -124,7 +153,7 @@ pub fn load_or_create_configuration() -> Result<Application, io::Error> {
 
 #[allow(clippy::missing_panics_doc)]
 #[must_use]
-pub fn is_configuration_file_available() -> Option<Application> {
+fn is_configuration_file_available() -> Option<Application> {
     let p = file_name();
     if p.exists() && p.is_file() {
         match load_configuration() {
@@ -138,7 +167,7 @@ pub fn is_configuration_file_available() -> Option<Application> {
             }
         }
     } else {
-        Option::None
+        None
     }
 }
 
@@ -146,13 +175,14 @@ fn read_configuration(path: &Path) -> Result<Application, io::Error> {
     let mut file = match File::open(path) {
         Ok(f) => f,
         Err(e) => {
-            debug!("Unable to open {}, cause: {}", path.to_string_lossy(),e);
-            return Err(e)
-        },
+            debug!("Unable to open {}, cause: {}", path.to_string_lossy(), e);
+            return Err(e);
+        }
     };
 
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
+
     match toml::from_str::<Application>(&contents) {
         Ok(config) => Ok(config),
         Err(err) => {
@@ -164,15 +194,50 @@ fn read_configuration(path: &Path) -> Result<Application, io::Error> {
     }
 }
 
+/// Sets the Jira Access Security Token in the macos Keychain
+/// See also the `security` command.
+/// `
+/// security add-generic-password -s com.autosstoresystem.jira_worklog \
+///   -a steinar.cook@autostoresystem.com -w secure_token_goes_here
+/// `
+#[cfg(target_os = "macos")]
+fn merge_jira_token_from_keychain(config: &mut Application) {
+    debug!("MacOS: retrieving the Jira access token from the keychain ...");
+    match secure_credentials::get_secure_token(KEYCHAIN_SERVICE, &config.jira.user) {
+        Ok(token) => {
+            debug!("Found Jira access token in keychain and injected it");
+            config.jira.token = token;
+        }
+        Err(err) => {
+            warn!(
+                "No Jira Access Token in keychain for {} and {}",
+                KEYCHAIN_SERVICE, &config.jira.user
+            );
+            warn!("ERROR: {err}");
+            eprintln!(
+                "No Jira Access Token in keychain for {} and {}",
+                KEYCHAIN_SERVICE, &config.jira.user
+            );
+            eprintln!("If this is the first time your using the tool, this warning can be ignored");
+        }
+    }
+}
+
 #[allow(clippy::manual_assert)]
-fn create_configuration_file(application_config: &Application, path: &PathBuf) -> Result<(), io::Error> {
-    debug!("create_configuration_file({}) :- entering ..", path.to_string_lossy());
+fn create_configuration_file(
+    application_config: &Application,
+    path: &PathBuf,
+) -> Result<(), io::Error> {
+    debug!(
+        "create_configuration_file({}) :- entering ..",
+        path.to_string_lossy()
+    );
 
     let directory = path.parent().unwrap();
     if directory.try_exists()? {
         debug!("Path {} exists", directory.to_string_lossy());
     } else {
-        std::fs::create_dir_all(directory)?;
+        create_dir_all(directory)?;
     }
 
     match path.parent() {
@@ -195,13 +260,48 @@ fn create_configuration_file(application_config: &Application, path: &PathBuf) -
             }
         },
     }
+    let mut config_updated = application_config.clone();
+
+    #[cfg(target_os = "macos")]
+    if cfg!(target_os = "macos") {
+        debug!("MacOs: Moving security token into the keychain");
+        migrate_jira_token_into_keychain(&mut config_updated);
+    }
 
     let mut file = File::create(path)?;
-    let toml = application_config_to_string(application_config);
-
+    let toml = application_config_to_string(&config_updated);
     file.write_all(toml.as_bytes())?;
 
     Ok(())
+}
+
+const JIRA_TOKEN_STORED_IN_MACOS_KEYCHAIN: &str = "*** stored in macos keychain ***";
+
+#[cfg(target_os = "macos")]
+fn migrate_jira_token_into_keychain(app_config: &mut Application) {
+    match secure_credentials::store_secure_token(
+        KEYCHAIN_SERVICE,
+        &app_config.jira.user,
+        &app_config.jira.token,
+    ) {
+        Ok(()) => {
+            debug!(
+                "Jira access token stored into the Keychain under {} and {}",
+                KEYCHAIN_SERVICE, app_config.jira.user
+            );
+            debug!("MacOs: Removing the security token from the config file");
+        }
+        #[allow(unused_variables)]
+        Err(error) => {
+            panic!(
+                "Unable to store the Jira access token into the MacOS keychain {error}"
+            );
+        }
+    }
+    // a useless placeholder
+    // This will ensure the jira security token in the config file on disk contains
+    debug!("MacOs: Removing the security token from the config file");
+    app_config.jira.token = JIRA_TOKEN_STORED_IN_MACOS_KEYCHAIN.to_string();
 }
 
 #[allow(clippy::missing_panics_doc)]
@@ -209,6 +309,7 @@ fn create_configuration_file(application_config: &Application, path: &PathBuf) -
 pub fn application_config_to_string(application_config: &Application) -> String {
     match toml::to_string::<Application>(application_config) {
         Ok(s) => s,
+        #[allow(unused_variables)]
         Err(e) => panic!(
             "Unable to transform application config {application_config:?} structure into Toml: {e}"
         ),
@@ -315,5 +416,17 @@ mod tests {
         }
 
         eprintln!("{:?}", p.to_string_lossy());
+    }
+
+    #[test]
+    fn test_jira_valid_token() {
+        let mut app = Application::default();
+        assert_eq!(app.jira.has_valid_jira_token(), false, "{}", app.jira.token);
+
+        app.jira.token = JIRA_TOKEN_STORED_IN_MACOS_KEYCHAIN.to_string();
+        assert_eq!(app.jira.has_valid_jira_token(), false);
+
+        app.jira.token = "XXXXX3xFfGF07-XjakdCf_Y7_CNWuvhyHAhCr5sn4Q1kp35oUiN-zrZm9TeZUIllWqrMuPRc4Zcbo-GvCEgPZSjj1oUZkUZBc7vEOJmSxcdq-lEWHkECvyAee64iBboDeYDJZIaiAidS57YJQnWCEAADmGnE5TyDeZqRkdMgvbMvU9Wyd6T05wI=3FF0BE2A".to_string();
+        assert!(app.jira.has_valid_jira_token());
     }
 }

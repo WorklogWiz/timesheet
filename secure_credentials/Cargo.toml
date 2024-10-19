@@ -1,0 +1,9 @@
+[package]
+name = "secure_credentials"
+edition = "2021"
+version.workspace = true
+
+[dependencies]
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "3"
