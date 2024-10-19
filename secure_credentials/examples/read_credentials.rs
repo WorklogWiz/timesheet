@@ -5,7 +5,7 @@ fn main() {
     let account = "steinar.cook@autostoresystem.com";
 
     match get_secure_token(service, account) {
-        Ok(token) => println!("Retrieved secure token: {}", token),
-        Err(e) => eprintln!("Failed to retrieve secure token: {}", e),
+        Ok(token) => println!("Retrieved secure token: {token}"),
+        Err(e) => eprintln!("Failed to retrieve secure token: {e}"),
     }
 }
