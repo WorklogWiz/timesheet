@@ -22,8 +22,10 @@ Disclaimer: Network latency and the response time of Jira is the main culprit of
     * [Using `curl` to verify your security token](#using-curl-to-verify-your-security-token)
     * [Installing on MacOS](#installing-on-macos)
     * [Notes on security](#notes-on-security)
+      * [MacOS specifics for the Jira Security token](#macos-specifics-for-the-jira-security-token)
+      * [Removing local configuration files](#removing-local-configuration-files)
   * [How to specify the duration](#how-to-specify-the-duration)
-  * [Examples](#examples-)
+  * [Examples](#examples)
     * [Adding worklog entries](#adding-worklog-entries)
     * [Status of your worklog entries](#status-of-your-worklog-entries)
     * [Create a status report from most used time codes](#create-a-status-report-from-most-used-time-codes)
@@ -99,8 +101,21 @@ See the table below for details.
 
 If you think your machine has been compromised, go to Jira account ira and "Revoke" the API key.
 
+#### MacOS specifics for the Jira Security token
 On MacOS, the Jira Security Access Token is stored in the built-in KeyChain.
 
+When `jira_worklog` attempts to access your MacOS Keychain, this window will pop up.
+It is a good idea to press `Always Allow` to save you some time :-)
+![](images/keychain_prompt.png)
+
+Here is a neat command to work with security tokens and passwords
+on MacOS:
+````shell
+# This will list the entire contents of the `jira_worklog` entry from the keychain
+security find-generic-password -s com.autostoresystem.jira_worklog -a your.name@company.com -g
+````
+
+#### Removing local configuration files
 You can remove your local configuration file using the command: `jira_worklog config --remove`
 
 | Operating system     | Config file location                                               |
@@ -109,6 +124,7 @@ You can remove your local configuration file using the command: `jira_worklog co
 | Windows:             | `C:\Users\Alice\AppData\Roaming\com.autostore\jira_worklog\config` |
 | Linux:               | `/home/steinar/.config/jira_worklog`                               |
 
+Note! For MacOS: The Jira Security Access token stored in the Keychain, will not be deleted
 ## How to specify the duration
 
 You can specify the duration of your work using weeks, days, hours and minutes.
