@@ -2,7 +2,10 @@
 [workspace]
 members = [
     "jira_lib",
-    "jira_worklog", "rust-axum-backend", "secure_credentials",
+    "jira_worklog",
+    "jira_worklog_tui",
+    "rust-axum-backend",
+    "secure_credentials",
 ]
 # Set the resolver to "2" to match the 2021 edition
 resolver = "2"
