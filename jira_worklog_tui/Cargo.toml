@@ -9,3 +9,5 @@ ratatui = "0.28.1"
 jira_lib =  {path = "../jira_lib"}
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 chrono = { workspace = true }
+futures = "0.3.31"
+
