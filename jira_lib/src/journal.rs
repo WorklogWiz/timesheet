@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::process::exit;
 use chrono::{DateTime, Local, };
-use csv::{ReaderBuilder, WriterBuilder};
+use csv::{Reader, ReaderBuilder, Writer, WriterBuilder};
 use log::debug;
 use serde::{Deserialize, Serialize, Serializer};
 use crate::{config, date};
@@ -46,10 +46,7 @@ pub fn add_worklog_entries(worklog: Vec<Entry>) -> io::Result<()> {
 
     let file_name = config::journal_data_file_name();
     let file = create_or_open(&file_name)?;
-    let mut csv_writer = WriterBuilder::new ()
-        .delimiter(CSV_DELIMITER)
-        .has_headers(false)
-        .from_writer(&file);
+    let mut csv_writer = create_csv_writer(&file);
 
     for entry in worklog {
         csv_writer.serialize(entry)?;
@@ -58,6 +55,21 @@ pub fn add_worklog_entries(worklog: Vec<Entry>) -> io::Result<()> {
     csv_writer.flush()?;
 
     Ok(())
+}
+
+/// Ensures we always create the CSV writer with the same delimiter
+fn create_csv_writer<W: io::Write>(file: W) -> Writer<W> {
+    WriterBuilder::new()
+        .delimiter(CSV_DELIMITER)
+        .has_headers(false)
+        .from_writer(file)
+}
+
+/// Ensures we always create CSV readers with our standard delimiter
+fn create_csv_reader<R: io::Read>(rdr: R) -> Reader<R> {
+    ReaderBuilder::new()
+        .delimiter(CSV_DELIMITER)
+        .has_headers(true).from_reader(rdr)
 }
 
 #[allow(clippy::missing_errors_doc)]
@@ -76,9 +88,7 @@ pub fn create_or_open(path_to_file: &PathBuf) -> io::Result<File>{
         debug!("File {} does not exist, creating it", path_to_file.to_string_lossy());
 
         let journal_file = File::create_new(path_to_file)?;
-        let mut csv_writer = WriterBuilder::new()
-            .delimiter(CSV_DELIMITER)
-            .from_writer(journal_file);
+        let mut csv_writer = create_csv_writer(journal_file);
         debug!("Writing the CSV header");
         csv_writer.write_record(["key", "w_id", "started", "time spent", "comment"])?;
         csv_writer.flush()?;
@@ -93,9 +103,7 @@ pub fn remove_entry(path_buf: &PathBuf, worklog_id_to_remove: &str) -> io::Resul
     debug!("Removing key {} from file {}", worklog_id_to_remove, path_buf.to_string_lossy());
 
     let file = File::open(path_buf)?;
-    let mut rd = ReaderBuilder::new()
-        .delimiter(CSV_DELIMITER)
-        .has_headers(true).from_reader(file);
+    let mut rd = create_csv_reader(file);
     let mut records_to_keep = Vec::new();
 
     for result in rd.records() {
@@ -117,10 +125,7 @@ pub fn remove_entry(path_buf: &PathBuf, worklog_id_to_remove: &str) -> io::Resul
 
     // Rewrite filtered data back to the CSV file
     let file = File::create(path_buf)?;
-    let mut csv_writer = WriterBuilder::new()
-        .delimiter(CSV_DELIMITER)
-        .has_headers(true).from_writer(file);
-
+    let mut csv_writer = create_csv_writer(file);
     for record in records_to_keep {
         csv_writer.write_record(&record)?;
     }
@@ -134,10 +139,7 @@ pub fn find_unique_keys(p0: &PathBuf) -> io::Result<Vec<String>> {
     let file = File::open(p0)?;
     let mut keys: HashSet<String>= HashSet::new();
 
-    let mut csv_reader = ReaderBuilder::new()
-        .has_headers(true)
-        .delimiter(CSV_DELIMITER)
-        .from_reader(file);
+    let mut csv_reader = create_csv_reader(file);
 
     for result in csv_reader.records(){
         let record = result?;
