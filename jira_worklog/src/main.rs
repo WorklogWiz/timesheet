@@ -413,7 +413,6 @@ async fn add_subcommand(add: &mut Add) {
     if add.durations.len() == 1 && add.durations[0].chars().next().unwrap() <= '9' {
         // Single duration without a "day name" prefix
         // like for instance --duration 7,5h
-        println!("Adding single entry");
         let result = add_single_entry(
             &jira_client,
             &time_tracking_options,
@@ -606,7 +605,7 @@ async fn add_single_entry(
             exit(4);
         }
     };
-    debug!("time spent in seconds: {}_", time_spent_seconds);
+    debug!("time spent in seconds: {}", time_spent_seconds);
 
     // If a starting point was given, transform it from string to a full DateTime<Local>
     let starting_point = started.as_ref().map(|dt| date::str_to_date_time(dt).unwrap());
