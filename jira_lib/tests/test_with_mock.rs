@@ -54,9 +54,11 @@ fn test_without_real() -> Result<(), Box<dyn Error>>{
     Ok(())
 
 }
+// We use the real service if we are not testing
 #[cfg(not(test))]
 use RealComplexService as TheService;
 
+// We use the mock service if we are testing
 #[cfg(test)]
 use MockComplexService as TheService;
 

@@ -7,6 +7,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use std::error;
 use std::fmt::{Display, Formatter};
+use log::debug;
 use num_traits::cast::FromPrimitive;
 
 /// Parses a date, a time or a datetime, which has been supplied
@@ -116,8 +117,10 @@ impl TimeSpent {
                 Regex::new(r"\b(?:(\d+(?:[.,]\d{1,2})?)w)?(?:(\d+(?:[.,]\d{1,2})?)d)?(?:(\d+(?:[.,]\d{1,2})?)h)?(?:(\d+)m)?\b"
             ).unwrap();
         }
-
-        match TIME_SPEC.captures(s.to_lowercase().as_str()) {
+        // Parsing floating point, requires full stop as the decimal point delimiter
+        let s = s.to_lowercase().replace(",",".");
+        let cap = TIME_SPEC.captures(&s);
+        match cap {
             // There seems to be a bug with Captures(), even with no match, it returns Some()
             Some(captures) if !captures.get(0).unwrap().as_str().is_empty() => {
                 let weeks = captures
@@ -308,6 +311,7 @@ pub fn seconds_to_hour_and_min(seconds: &i32) -> String {
 
 #[cfg(test)]
 mod tests {
+    use crate::date;
     use super::*;
 
     #[test]
@@ -490,6 +494,21 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_decimal_duration() {
+      match TimeSpent::from_str(
+            "1,2h",
+            7.5,
+            5.0) {
+          Ok(result) => {
+              assert_eq!(result.time_spent_seconds, 4320, "Invalid calculation of time spent");
+              println!("{} {}", result.time_spent_seconds, result.time_spent);
+          }
+          Err(e) => { panic!("")}
+      }
+
+
+    }
     #[test]
     fn test_date_and_timezone_conversion() {
         let utc = chrono::Utc::now();
