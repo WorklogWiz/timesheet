@@ -24,7 +24,7 @@ impl ComplexService for RealComplexService {
 }
 
 /// This is the service we will be invoking, into which an implementation of
-/// ComplexService has been injected.
+/// `ComplexService` has been injected.
 struct DummyService<T: ComplexService> {
     service: T,
 }

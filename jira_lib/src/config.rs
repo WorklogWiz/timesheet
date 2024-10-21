@@ -285,7 +285,7 @@ mod tests {
             // Don't compare the jira.token field as this may vary depending on operating system
             assert!(cfg.jira.jira_url == result.jira.jira_url
                 && cfg.jira.user == result.jira.user
-                && cfg.application_data == result.application_data)
+                && cfg.application_data == result.application_data);
         } else {
             panic!("Unable to read the TOML configuration back from disk");
         }
