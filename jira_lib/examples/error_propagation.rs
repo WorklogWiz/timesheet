@@ -11,7 +11,7 @@ enum MiddleEarth {
 impl From<UnderGround> for MiddleEarth {
     fn from(value: UnderGround) -> Self {
         match &value {
-            HttpNotResponding(s) => NoService { source: value },
+            HttpNotResponding(_s) => NoService { source: value },
         }
     }
 }
@@ -60,7 +60,7 @@ fn main() {
 }
 
 fn middle_earth() -> Result<(), MiddleEarth> {
-    let result = underground().map_err(|e| MiddleEarth::from(e) )?;
+    let _result = underground().map_err(|e| MiddleEarth::from(e) )?;
     Ok(())
 }
 

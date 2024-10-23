@@ -6,6 +6,7 @@ use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use log::debug;
+use crate::journal::{Journal, JournalCsv};
 
 const KEYCHAIN_SERVICE: &str = "com.autostoresystem.jira_worklog";
 /// Application configuration struct
@@ -34,6 +35,12 @@ impl Default for ApplicationData {
     }
 }
 
+impl ApplicationData {
+    pub fn get_journal(&self) -> Box<dyn Journal> {
+        Box::new(JournalCsv::new(PathBuf::from(&self.journal_data_file_name)))
+    }
+}
+
 fn default_application_data_section() -> ApplicationData {
     ApplicationData::default()
 }
@@ -56,7 +63,7 @@ impl Default for Jira {
 }
 
 impl Jira {
-    /// Does the token look like a valid Jira Security token
+    /// Does the token look like a valid Jira Security token?
     #[must_use]
     pub fn has_valid_jira_token(&self) -> bool {
         !(self.token == Jira::default().token

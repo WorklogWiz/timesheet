@@ -1,14 +1,14 @@
-use chrono::offset::TimeZone;
-use chrono::{
-    DateTime, Datelike, Days, Duration, Local, Month, NaiveDate, NaiveDateTime, NaiveTime,
-    ParseResult, Weekday,
-};
-use lazy_static::lazy_static;
-use regex::Regex;
 use std::error;
 use std::fmt::{Display, Formatter};
-use log::debug;
+
+use chrono::{
+    Datelike, DateTime, Days, Duration, Local, Month, NaiveDate, NaiveDateTime, NaiveTime,
+    ParseResult, Weekday,
+};
+use chrono::offset::TimeZone;
+use lazy_static::lazy_static;
 use num_traits::cast::FromPrimitive;
+use regex::Regex;
 
 /// Parses a date, a time or a datetime, which has been supplied
 /// as:
@@ -311,7 +311,6 @@ pub fn seconds_to_hour_and_min(seconds: &i32) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::date;
     use super::*;
 
     #[test]
@@ -504,7 +503,7 @@ mod tests {
               assert_eq!(result.time_spent_seconds, 4320, "Invalid calculation of time spent");
               println!("{} {}", result.time_spent_seconds, result.time_spent);
           }
-          Err(e) => { panic!("")}
+          Err(e) => { panic!("{e}")}
       }
 
 
