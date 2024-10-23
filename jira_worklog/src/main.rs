@@ -1,18 +1,18 @@
 //! The Jira worklog command line utility
 //!
-use chrono::{Datelike, Local, TimeZone, Weekday};
-use clap::{Args, Parser, Subcommand, ValueEnum};
-use env_logger::Env;
-use jira_lib::{config, date, JiraClient, JiraIssue, JiraKey, journal, TimeTrackingConfiguration, Worklog};
-
-use log::{debug, info};
-use reqwest::StatusCode;
+use std::{env, fmt};
 use std::collections::HashMap;
 use std::fmt::Formatter;
 use std::fs::File;
 use std::process::exit;
-use std::{env, fmt};
-use std::path::PathBuf;
+
+use chrono::{Datelike, Local, TimeZone, Weekday};
+use clap::{Args, Parser, Subcommand, ValueEnum};
+use env_logger::Env;
+use log::{debug, info};
+use reqwest::StatusCode;
+
+use jira_lib::{config, date, JiraClient, JiraIssue, JiraKey, journal, TimeTrackingConfiguration, Worklog};
 
 mod table_report;
 
@@ -234,6 +234,7 @@ async fn main() {
 async fn delete_subcommand(delete: &Del) {
     let app_config = get_app_config();
     let jira_client = get_jira_client(&app_config);
+    let journal= app_config.application_data.get_journal();
 
     let current_user = jira_client.get_current_user().await;
     let worklog_entry = match jira_client
@@ -276,9 +277,7 @@ async fn delete_subcommand(delete: &Del) {
             exit(4);
         }
     }
-    journal::remove_entry(&PathBuf::from(
-        app_config.application_data.journal_data_file_name),
-        delete.worklog_id.as_str()).unwrap();
+    journal.remove_entry(delete.worklog_id.as_str()).unwrap();
     println!("Removed entry {} from local journal", delete.worklog_id);
 }
 
@@ -292,7 +291,7 @@ async fn status_subcommand(status: Status) {
     let mut issue_information: HashMap<String, JiraIssue> = HashMap::new();
 
     let keys = if status.issues.is_none() {
-        match journal::find_unique_keys(&PathBuf::from(app_config.application_data.journal_data_file_name)) {
+        match app_config.application_data.get_journal().find_unique_keys() {
             Ok(issues) => issues,
             Err(e) => {
                 eprintln!("Failed to find issues: {e}");
@@ -443,12 +442,13 @@ async fn add_subcommand(add: &mut Add) {
         exit(4);
     }
     // Writes the added worklog items to our local journal
-    if let Err(e) = journal::add_worklog_entries(added_worklog_items) {
+    if let Err(e) = app_config.application_data.get_journal().add_worklog_entries(added_worklog_items) {
         eprintln!("Failed to add worklog entries: {e}");
         exit(4);
     }
 }
 
+/// Creates the `JiraClient` instance based on the supplied parameters.
 fn get_jira_client(app_config: &config::Application) -> JiraClient {
 
     match JiraClient::new(
@@ -464,6 +464,7 @@ fn get_jira_client(app_config: &config::Application) -> JiraClient {
     }
 }
 
+/// Retrieves the application configuration file
 fn get_app_config() -> config::Application {
     let Ok(app_config) = config::load() else {
         println!(
@@ -479,11 +480,13 @@ fn get_app_config() -> config::Application {
     app_config
 }
 
+
 fn list_config_and_exit() {
     println!(
         "Configuration file {}:\n",
         config::file_name().to_string_lossy()
     );
+
     match config::load() {
         Ok(config) => {
             let toml_as_string = config::application_config_to_string(&config).unwrap();
