@@ -7,7 +7,6 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use std::error;
 use std::fmt::{Display, Formatter};
-use log::debug;
 use num_traits::cast::FromPrimitive;
 
 /// Parses a date, a time or a datetime, which has been supplied
