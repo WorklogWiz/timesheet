@@ -1,5 +1,4 @@
-use std::{error::Error, path::PathBuf};
-
+use std::{error::Error};
 use ratatui::{
     crossterm::event::{
         self, KeyCode, KeyEventKind},
@@ -108,8 +107,7 @@ async fn run(mut terminal: DefaultTerminal) -> Result<(), Box<dyn Error>> {
         let (week, start_of_week, end_of_week) =
             week_bounds(current_date);
         let time_codes =
-            jira_lib::journal::find_unique_keys(&PathBuf::from(&cfg.application_data.journal_data_file_name)
-        )?;
+            cfg.application_data.get_journal().find_unique_keys()?;
         let (
             week_data,
             column_sums,
