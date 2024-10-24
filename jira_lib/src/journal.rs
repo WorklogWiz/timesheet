@@ -1,12 +1,12 @@
 use std::{fs::{self, File}, io};
 use std::collections::HashSet;
-use std::path::{PathBuf};
+use std::path::PathBuf;
 use std::process::exit;
 use chrono::{DateTime, Local, };
 use csv::{Reader, ReaderBuilder, Writer, WriterBuilder};
-use log::{debug};
+use log::debug;
 use serde::{Deserialize, Serialize, Serializer};
-use crate::{ date};
+use crate::date;
 
 /// Represents the columns in the journal file, which is CSV formatted
 #[derive(Serialize, Deserialize, PartialEq, Clone)]
@@ -33,6 +33,7 @@ pub trait Journal {
     fn find_unique_keys(&self) -> io::Result<Vec<String>>;
 }
 
+#[allow(clippy::module_name_repetitions)]
 pub struct JournalCsv {
     pub journal_file_name: PathBuf,
 }
@@ -117,7 +118,7 @@ impl Journal for JournalCsv {
             let record = match result {
                 Ok(r) => {r}
                 Err(err) => {
-                     return Err(format!("Unable to read CSV records: {:?}", err).into());
+                     return Err(format!("Unable to read CSV records: {err:?}"));
                 }
             };
 
@@ -136,13 +137,13 @@ impl Journal for JournalCsv {
         }
 
         // Rewrite filtered data back to the CSV file
-        let file = File::create(&self.journal_file_name).map_err(|e| format!("Unable to open journal: {}", e))?;
+        let file = File::create(&self.journal_file_name).map_err(|e| format!("Unable to open journal: {e}"))?;
         let mut csv_writer = JournalCsv::create_csv_writer(file);
         for record in records_to_keep {
             csv_writer.write_record(&record).map_err(|e| format!("Unable to write record {:?}: {}", &record,e))?;
         }
 
-        csv_writer.flush().map_err(|e| format!("Unable to flush the CSV file {:?}", e))?;
+        csv_writer.flush().map_err(|e| format!("Unable to flush the CSV file {e:?}"))?;
         Ok(())
     }
 
@@ -207,11 +208,9 @@ mod tests {
     }
 
     #[test]
-    fn test_create_or_open_worklog_journal() -> io::Result<()> {
+    fn test_create_or_open_worklog_journal() {
         let tmp_config_file = std::env::temp_dir().join("worklog.tmp");
         let _journal = JournalCsv::new(tmp_config_file.clone());
-
-        Ok(())
     }
 
     /// Writes a sample journal file, attempts to remove a single entry
@@ -222,7 +221,7 @@ mod tests {
         let path_buf = create_sample_journal();
 
         // Removes a single record identified by the worklog id
-        let _journal = JournalCsv::new(path_buf.clone()).remove_entry("315100").map_err(|e| format!("unable to remove entry 315100: {} ",e))?;
+        JournalCsv::new(path_buf.clone()).remove_entry("315100").map_err(|e| format!("unable to remove entry 315100: {e} "))?;
         eprintln!("Rewrote {}", path_buf.to_string_lossy());
 
         // Opens the journal file again and verifies the removal of the record

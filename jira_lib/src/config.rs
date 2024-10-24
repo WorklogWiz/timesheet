@@ -36,6 +36,7 @@ impl Default for ApplicationData {
 }
 
 impl ApplicationData {
+    #[must_use]
     pub fn get_journal(&self) -> Box<dyn Journal> {
         Box::new(JournalCsv::new(PathBuf::from(&self.journal_data_file_name)))
     }

@@ -1,4 +1,4 @@
-use std::{error::Error};
+use std::error::Error;
 use ratatui::{
     crossterm::event::{
         self, KeyCode, KeyEventKind},
