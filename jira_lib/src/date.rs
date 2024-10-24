@@ -118,7 +118,7 @@ impl TimeSpent {
             ).unwrap();
         }
         // Parsing floating point, requires full stop as the decimal point delimiter
-        let s = s.to_lowercase().replace(",",".");
+        let s = s.to_lowercase().replace(',',".");
         let cap = TIME_SPEC.captures(&s);
         match cap {
             // There seems to be a bug with Captures(), even with no match, it returns Some()

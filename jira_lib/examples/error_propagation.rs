@@ -19,7 +19,7 @@ impl From<UnderGround> for MiddleEarth {
 
 impl Display for MiddleEarth {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self { NoService { source } => { write!(f,"no service: {}", source)} }
+        match self { NoService { source } => { write!(f,"no service: {source}")} }
     }
 }
 
@@ -52,15 +52,15 @@ fn main() {
 
     let x = middle_earth();
     match x {
-        Ok(_) => {}
+        Ok(()) => {}
         Err(e) => {
-            println!("{}", e);
+            println!("{e}");
         }
     }
 }
 
 fn middle_earth() -> Result<(), MiddleEarth> {
-    let _result = underground().map_err(|e| MiddleEarth::from(e) )?;
+    underground().map_err(MiddleEarth::from)?;
     Ok(())
 }
 
