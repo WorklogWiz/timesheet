@@ -20,3 +20,4 @@ env_logger = {  workspace = true }
 jira_lib = { path = "../jira_lib" }
 reqwest = { version = "0.12.7", features = ["json"] }
 tokio = { workspace = true, features = ["full"] }
+anyhow = {workspace = true}

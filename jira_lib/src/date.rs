@@ -101,6 +101,13 @@ pub struct TimeSpent {
 }
 
 impl TimeSpent {
+
+    /// Parses strings describing a duration into `TimeSpent`
+    /// Examples:
+    ///  - `1,5d2,5h3m`
+    ///  - `1w2.5d5.5h30m
+    /// # Errors
+    ///    `crate::date::Error::InvalidInput` if the input string could not be matched against the regexp
     #[allow(
         clippy::missing_errors_doc,
         clippy::missing_panics_doc,
@@ -150,40 +157,6 @@ impl TimeSpent {
             _ => Err(Error::InvalidInput(format!("Could not obtain duration and unit from '{s}'"))),
         }
     }
-
-    // Parses strings like 1,5h -> (1.5 'h')
-    #[allow(clippy::missing_errors_doc)]
-    pub fn parse_to_unit_and_duration(s: &str) -> Result<(f32, String), Error> {
-        lazy_static! {
-            static ref TIME_EXPR: Regex = Regex::new(
-                r"(?x)
-            ^
-            (\d+                # One ore more digits
-                (?:             # Non capture
-                    [\.,]       # Decimal separator
-                    \d{1,2}     # 1 or 2 digits after decimal sep
-                )?
-            )
-            (\w)                # Single word character
-            $"
-            )
-            .unwrap();
-        }
-        match TIME_EXPR.captures(s) {
-            Some(caps) => {
-                let duration: &str = &caps[1];
-                let duration = duration.replace(',', ".");
-                match duration.parse::<f32>() {
-                    Ok(d) => {
-                        let unit = String::from(&caps[2]);
-                        Ok((d, unit))
-                    }
-                    Err(_) => Err(Error::InvalidInput(format!("Could not parse '{duration}'"))),
-                }
-            }
-            None => Err(Error::InvalidInput(format!("Could not obtain duration and unit from '{s}'"))),
-        }
-    }
 }
 
 #[must_use]
@@ -223,40 +196,25 @@ pub fn calculate_started_time(
     }
 }
 
+/// Splits a vector of day names and durations separated by ':' into
+/// a vector of tuples, holding the Weekday and the duration
+/// Given for instance ["mon:1,5h"] the resulting vector will be
+/// [(Monday, "1,5h")]
 #[allow(clippy::missing_panics_doc)]
 #[must_use]
-pub fn parse_worklog_durations(entries: Vec<String>) -> Vec<(Weekday, f32, String)> {
-    lazy_static! {
-        // Mon:1,5h or Mon:1.5h
-        // Capturing regexp
-        static ref DURATION_EXPR: Regex = Regex::new(r"(?x)
-        ^(\w{3}) # Three letter day name (Mon, Tue, Wed, ...
-        :        # Followed by colon
-        (           # Capturing group
-            \d+     # digits
-            (?:     # Non capturing group
-                [\.,]   # Decimal separator US and Euro
-                \d{1,2} # 1-2 digits
-            )?\w    # single word char
-        )
-        $").unwrap();
-    }
+pub fn parse_worklog_durations(entries: Vec<String>) -> Vec<(Weekday, String)> {
 
-    let mut result: Vec<(Weekday, f32, String)> = Vec::new();
+    let mut result: Vec<(Weekday, String)> = Vec::new();
 
     // Iterates the pattern and extracts tuples of Weekday names and duration
-    for s in entries {
-        match DURATION_EXPR.captures(&s) {
-            Some(captured) => {
-                // Parses 3 character weekday abbreviation to Weekday enumerator
-                let week_day = String::from(&captured[1]).parse::<Weekday>().unwrap();
-                // Parses the duration into duration and unit as separate values
-                let (duration, unit) =
-                    TimeSpent::parse_to_unit_and_duration(&captured[2]).expect("parsing error!");
-
-                result.push((week_day, duration, unit));
-            }
-            None => panic!("Could not parse {s} into weekday, duration and unit"),
+    for entry in entries {
+        if let Some(split_result) = entry.split_once(":") {
+            let day_name = split_result.0;
+            let week_day = String::from(day_name).parse::<Weekday>().unwrap();
+            let duration = split_result.1.to_string();
+            result.push((week_day, duration))
+        } else {
+            eprintln!("Unable to split string \"{}\", missing ':' ?", entry);
         }
     }
     result
@@ -337,11 +295,6 @@ mod tests {
         assert_eq!(str_to_date_time("2023-05-25T20:59").unwrap(), dt);
     }
 
-    #[test]
-    fn test_parse_to_unit_and_duration() {
-        assert!(TimeSpent::parse_to_unit_and_duration("1,5h").is_ok());
-        assert!(TimeSpent::parse_to_unit_and_duration("Mon:1,5h").is_err());
-    }
 
     #[test]
     fn test_time_spent() {
@@ -465,31 +418,31 @@ mod tests {
     fn test_parse_durations() {
         assert_eq!(
             parse_worklog_durations(vec!["Mon:1,5h".to_string()]),
-            vec![(chrono::Weekday::Mon, 1.5f32, "h".to_string())]
+            vec![(chrono::Weekday::Mon, "1,5h".to_string())]
         );
         assert_eq!(
             parse_worklog_durations(vec!["Tue:1,5h".to_string()]),
-            vec![(chrono::Weekday::Tue, 1.5f32, "h".to_string())]
+            vec![(chrono::Weekday::Tue, "1,5h".to_string())]
         );
         assert_eq!(
             parse_worklog_durations(vec!["Wed:1,5h".to_string()]),
-            vec![(chrono::Weekday::Wed, 1.5f32, "h".to_string())]
+            vec![(chrono::Weekday::Wed, "1,5h".to_string())]
         );
         assert_eq!(
             parse_worklog_durations(vec!["Thu:1.5h".to_string()]),
-            vec![(chrono::Weekday::Thu, 1.5f32, "h".to_string())]
+            vec![(chrono::Weekday::Thu, "1.5h".to_string())]
         );
         assert_eq!(
             parse_worklog_durations(vec!["Fri:1,5h".to_string()]),
-            vec![(chrono::Weekday::Fri, 1.5f32, "h".to_string())]
+            vec![(chrono::Weekday::Fri, "1,5h".to_string())]
         );
         assert_eq!(
             parse_worklog_durations(vec!["Sat:1,5h".to_string()]),
-            vec![(chrono::Weekday::Sat, 1.5f32, "h".to_string())]
+            vec![(chrono::Weekday::Sat, "1,5h".to_string())]
         );
         assert_eq!(
             parse_worklog_durations(vec!["Sun:1,5h".to_string()]),
-            vec![(chrono::Weekday::Sun, 1.5f32, "h".to_string())]
+            vec![(chrono::Weekday::Sun, "1,5h".to_string())]
         );
     }
 
