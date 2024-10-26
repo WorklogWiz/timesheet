@@ -549,14 +549,13 @@ async fn add_multiple_entries(
     comment: Option<String>,
 ) -> Vec<journal::Entry> {
     // Parses the list of durations in the format XXX:nn,nnU, i.e. Mon:1,5h into Weekday, duration and unit
-    let durations: Vec<(Weekday, f32, String)> = date::parse_worklog_durations(durations);
+    let durations: Vec<(Weekday, String)> = date::parse_worklog_durations(durations);
 
     let mut inserted_work_logs: Vec<journal::Entry> = vec![];
 
     for entry in durations {
         let weekday = entry.0;
         let duration = entry.1;
-        let unit = entry.2;
 
         let started = date::last_weekday(weekday);
         // Starts all entries at 08:00
@@ -565,7 +564,7 @@ async fn add_multiple_entries(
             .unwrap();
 
         let started = started.format("%Y-%m-%dT%H:%M").to_string();
-        let duration = format!("{duration}{unit}");
+
         debug!(
             "Adding {}, {}, {}, {:?}",
             issue, &duration, started, comment

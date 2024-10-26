@@ -39,7 +39,7 @@ enum UnderGround {
 impl Display for UnderGround {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            UnderGround::HttpNotResponding(_) => { write!(f, "HTTP server not responding")}
+            UnderGround::HttpNotResponding(server) => { write!(f, "HTTP server at {} not responding", server)}
         }
     }
 }
@@ -60,7 +60,7 @@ fn main() {
 }
 
 fn middle_earth() -> Result<(), MiddleEarth> {
-    underground().map_err(MiddleEarth::from)?;
+    underground().map_err(MiddleEarth::from)?;  // TODO: what if I need more context here?
     Ok(())
 }
 

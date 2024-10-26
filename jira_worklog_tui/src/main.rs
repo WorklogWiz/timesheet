@@ -1,22 +1,16 @@
-use std::error::Error;
 use ratatui::{
-    crossterm::event::{
-        self, KeyCode, KeyEventKind},
-        layout::Constraint,
-        style::{Style, Stylize},
-        widgets::{Block, Borders, Row, Table}, DefaultTerminal
+    crossterm::event::{self, KeyCode, KeyEventKind},
+    layout::Constraint,
+    style::{Style, Stylize},
+    widgets::{Block, Borders, Row, Table},
+    DefaultTerminal,
 };
+use std::error::Error;
 
-use jira_lib::{self, config, JiraClient, Worklog};
 use chrono::{
-    offset::TimeZone,
-    DateTime,
-    Datelike,
-    Duration,
-    Local,
-    NaiveDate,
-    NaiveTime,
-    Weekday};
+    offset::TimeZone, DateTime, Datelike, Duration, Local, NaiveDate, NaiveTime, Weekday,
+};
+use jira_lib::{self, config, JiraClient, Worklog};
 
 fn week_bounds(date: DateTime<Local>) -> (u32, DateTime<Local>, DateTime<Local>) {
     //let now = Local::now();
@@ -36,9 +30,7 @@ fn week_bounds(date: DateTime<Local>) -> (u32, DateTime<Local>, DateTime<Local>)
 
 #[allow(clippy::type_complexity)]
 #[allow(clippy::cast_sign_loss)]
-fn map_to_week_view(
-    worklogs: &[Worklog]
-) -> (Vec<(String, [u32; 7], u32)>, [u32; 7], u32) {
+fn map_to_week_view(worklogs: &[Worklog]) -> (Vec<(String, [u32; 7], u32)>, [u32; 7], u32) {
     let mut week_view: Vec<(String, [u32; 7], u32)> = vec![];
     let mut column_sums = [0u32; 7];
     let mut total_sum = 0u32;
@@ -46,11 +38,7 @@ fn map_to_week_view(
     for worklog in worklogs.iter().take(7) {
         let day = worklog.started.weekday().num_days_from_monday();
         let mut found = false;
-        for (
-            code,
-            times,
-            row_sum
-        ) in &mut week_view {
+        for (code, times, row_sum) in &mut week_view {
             if code == &worklog.issueId {
                 times[day as usize] += worklog.timeSpentSeconds as u32;
                 *row_sum += worklog.timeSpentSeconds as u32;
@@ -62,7 +50,11 @@ fn map_to_week_view(
         if !found {
             let mut times = [0u32; 7];
             times[day as usize] = worklog.timeSpentSeconds as u32;
-            week_view.push((worklog.issueId.clone(), times, worklog.timeSpentSeconds as u32));
+            week_view.push((
+                worklog.issueId.clone(),
+                times,
+                worklog.timeSpentSeconds as u32,
+            ));
         }
 
         column_sums[day as usize] += worklog.timeSpentSeconds as u32;
@@ -75,22 +67,25 @@ fn map_to_week_view(
 async fn fetch_weekly_data(
     client: &JiraClient,
     time_codes: Vec<String>,
-    start_of_week: DateTime<Local>
+    start_of_week: DateTime<Local>,
 ) -> (Vec<(String, [u32; 7], u32)>, [u32; 7], u32) {
     let all_entries: Vec<Vec<Worklog>> =
         futures::future::join_all(time_codes.into_iter().map(|issue| {
             let client = &client;
             async move {
-                match client.get_worklogs_for_current_user(
-                    &issue, Some(start_of_week)).await {
+                match client
+                    .get_worklogs_for_current_user(&issue, Some(start_of_week))
+                    .await
+                {
                     Ok(result) => result,
                     Err(e) => {
                         eprintln!("Failed to get work log for Issue {} [{e}]", &issue);
-                        vec!()
-                    },
+                        vec![]
+                    }
                 }
             }
-    })).await;
+        }))
+        .await;
 
     let mut all_entries: Vec<Worklog> = all_entries.into_iter().flatten().collect();
     all_entries.sort_by_key(|e| e.started);
@@ -104,31 +99,31 @@ async fn run(mut terminal: DefaultTerminal) -> Result<(), Box<dyn Error>> {
     let mut current_date = Local::now();
 
     loop {
-        let (week, start_of_week, end_of_week) =
-            week_bounds(current_date);
-        let time_codes =
-            cfg.application_data.get_journal().find_unique_keys()?;
-        let (
-            week_data,
-            column_sums,
-            row_sums
-        ) = fetch_weekly_data(&client, time_codes, start_of_week).await;
+        let (week, start_of_week, end_of_week) = week_bounds(current_date);
+        let time_codes = cfg.application_data.get_journal().find_unique_keys()?;
+        let (week_data, column_sums, row_sums) =
+            fetch_weekly_data(&client, time_codes, start_of_week).await;
 
         let rows: Vec<Row> = week_data
             .iter()
             .map(|(code, times, row_sum)| {
-            let mut cells = vec![code.clone()];
-            cells.extend(times
-                .iter()
-                .map(|&time_spent| format!("{} hours", time_spent / 3600)));
-            cells.push(format!("{} hours", row_sum / 3600));
-            Row::new(cells)
-        }).collect();
+                let mut cells = vec![code.clone()];
+                cells.extend(
+                    times
+                        .iter()
+                        .map(|&time_spent| format!("{} hours", time_spent / 3600)),
+                );
+                cells.push(format!("{} hours", row_sum / 3600));
+                Row::new(cells)
+            })
+            .collect();
 
         let mut footer_cells = vec!["Total".to_string()];
-        footer_cells.extend(column_sums
-            .iter()
-            .map(|&sum| format!("{} hours", sum / 3600)));
+        footer_cells.extend(
+            column_sums
+                .iter()
+                .map(|&sum| format!("{} hours", sum / 3600)),
+        );
         footer_cells.push(format!("{} hours", row_sums / 3600));
 
         terminal.draw(|frame| {
@@ -156,16 +151,17 @@ async fn run(mut terminal: DefaultTerminal) -> Result<(), Box<dyn Error>> {
                         "Friday",
                         "Saturday",
                         "Sunday",
-                        "Total"])
-                        .style(Style::new().bold())
-                        .bottom_margin(1),
+                        "Total",
+                    ])
+                    .style(Style::new().bold())
+                    .bottom_margin(1),
                 )
                 .footer(Row::new(footer_cells))
-                .block(Block::new().borders(Borders::ALL).title(
-                    format!(
-                        "Week {week} [{} - {}]",
-                        start_of_week.date_naive(),
-                        end_of_week.date_naive())))
+                .block(Block::new().borders(Borders::ALL).title(format!(
+                    "Week {week} [{} - {}]",
+                    start_of_week.date_naive(),
+                    end_of_week.date_naive()
+                )))
                 .highlight_style(Style::new().reversed())
                 .highlight_symbol(">>");
             frame.render_widget(table, frame.area());
