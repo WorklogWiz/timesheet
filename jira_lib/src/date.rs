@@ -105,7 +105,7 @@ impl TimeSpent {
     /// Parses strings describing a duration into `TimeSpent`
     /// Examples:
     ///  - `1,5d2,5h3m`
-    ///  - `1w2.5d5.5h30m
+    ///  - `1w2.5d5.5h30m`
     /// # Errors
     ///    `crate::date::Error::InvalidInput` if the input string could not be matched against the regexp
     #[allow(
@@ -198,8 +198,8 @@ pub fn calculate_started_time(
 
 /// Splits a vector of day names and durations separated by ':' into
 /// a vector of tuples, holding the Weekday and the duration
-/// Given for instance ["mon:1,5h"] the resulting vector will be
-/// [(Monday, "1,5h")]
+/// Given for instance \["mon:1,5h"\] the resulting vector will be
+/// \[(Monday, "1,5h")\]
 #[allow(clippy::missing_panics_doc)]
 #[must_use]
 pub fn parse_worklog_durations(entries: Vec<String>) -> Vec<(Weekday, String)> {
@@ -208,13 +208,13 @@ pub fn parse_worklog_durations(entries: Vec<String>) -> Vec<(Weekday, String)> {
 
     // Iterates the pattern and extracts tuples of Weekday names and duration
     for entry in entries {
-        if let Some(split_result) = entry.split_once(":") {
+        if let Some(split_result) = entry.split_once(':') {
             let day_name = split_result.0;
             let week_day = String::from(day_name).parse::<Weekday>().unwrap();
             let duration = split_result.1.to_string();
-            result.push((week_day, duration))
+            result.push((week_day, duration));
         } else {
-            eprintln!("Unable to split string \"{}\", missing ':' ?", entry);
+            eprintln!("Unable to split string \"{entry}\", missing ':' ?");
         }
     }
     result
