@@ -12,7 +12,8 @@ use env_logger::Env;
 use log::{debug, info};
 use reqwest::StatusCode;
 
-use jira_lib::{config, date, JiraClient, JiraIssue, JiraKey, journal, TimeTrackingConfiguration, Worklog};
+use jira_lib::{ JiraClient, JiraIssue, JiraKey, TimeTrackingConfiguration, Worklog};
+use worklog_lib::{config, date, journal};
 
 mod table_report;
 

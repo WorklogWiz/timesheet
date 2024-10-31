@@ -6,14 +6,15 @@ use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use log::debug;
-use crate::journal::{Journal, JournalCsv};
+use crate::journal::{Journal};
+use crate::journal::journal_csv::JournalCsv;
 
 const KEYCHAIN_SERVICE: &str = "com.autostoresystem.jira_worklog";
 /// Application configuration struct
 /// Holds the data we need to connect to Jira, write to the local journal and so on
 #[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
 pub struct Application {
-    /// Holds the URL to the Jira instance we are running agains.
+    /// Holds the URL to the Jira instance we are running again.
     pub jira: Jira,
     /// This will ensure that the filename is created, even if the Toml file
     /// is an old version, which does not have an `application_data` section
@@ -132,7 +133,7 @@ pub fn load() -> Result<Application, Box<dyn error::Error>> {
     #[cfg(target_os = "macos")]
     if cfg!(target_os = "macos") {
         // If the loaded configuration file holds a valid Jira token, migrate it to
-        // the macos Key Chain
+        // the macOS Key Chain
         if app_config.jira.has_valid_jira_token()
             && secure_credentials::get_secure_token(KEYCHAIN_SERVICE, &app_config.jira.user).is_err()
         {

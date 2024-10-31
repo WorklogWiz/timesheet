@@ -1,5 +1,5 @@
 use std::fs::File;
-use jira_lib::config;
+use worklog_lib::config;
 
 fn main() {
     let configuration = config::load().unwrap();

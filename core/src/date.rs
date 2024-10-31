@@ -159,11 +159,6 @@ impl TimeSpent {
     }
 }
 
-#[must_use]
-pub fn to_jira_timestamp(datetime: &DateTime<Local>) -> String {
-    datetime.format("%Y-%m-%dT%H:%M:%S.000%z").to_string()
-}
-
 /// Calculates and verifies the starting point. If no starting point is given,
 /// `duration_seconds` is subtracted from the current time, else if a starting
 /// point was supplied, we use that as-is.
@@ -347,11 +342,6 @@ mod tests {
         let r = Regex::new(r"\b\d+\b");
         // If this suddenly starts returning a "Some" value, the bug in Regex has been fixed
         assert!(r.unwrap().captures("rubbish").is_none(), "Seems they have fixed the bug in regex captures()");
-    }
-
-    #[test]
-    fn test_to_jira_timestamp() {
-        _ = to_jira_timestamp(&str_to_date_time("2023-05-25").unwrap());
     }
 
     #[test]

@@ -15,7 +15,7 @@ use std::time::Instant;
 use base64::prelude::*;
 use base64::Engine;
 use chrono::{DateTime, Days, Local, Months, NaiveDateTime, NaiveTime, TimeZone, Utc};
-use config::Application;
+use worklog_lib::config::Application;
 use futures::StreamExt;
 use log::{debug, info};
 use reqwest::header::HeaderMap;
@@ -24,10 +24,7 @@ use reqwest::{Client, StatusCode};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde::Serialize;
-
-pub mod config;
-pub mod journal;
-pub mod date;
+use worklog_lib::config;
 
 /// Holds the ULR of the Jira API to use
 pub const JIRA_URL: &str = "https://autostore.atlassian.net/rest/api/latest";

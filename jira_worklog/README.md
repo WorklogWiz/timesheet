@@ -20,9 +20,9 @@ Disclaimer: Network latency and the response time of Jira is the main culprit of
 * [The Jira worklog utility](#the-jira-worklog-utility)
   * [Installation](#installation)
     * [Using `curl` to verify your security token](#using-curl-to-verify-your-security-token)
-    * [Installing on MacOS](#installing-on-macos)
+    * [Installing on macOS](#installing-on-macOS)
     * [Notes on security](#notes-on-security)
-      * [MacOS specifics for the Jira Security token](#macos-specifics-for-the-jira-security-token)
+      * [macOS specifics for the Jira Security token](#macOS-specifics-for-the-jira-security-token)
       * [Removing local configuration files](#removing-local-configuration-files)
   * [How to specify the duration](#how-to-specify-the-duration)
   * [Examples](#examples)
@@ -75,12 +75,12 @@ curl --request GET \
   --header 'Accept: application/json'
 ````
 
-### Installing on MacOS
+### Installing on macOS
 
 There are some extra security built into the macOS which prevents you from running potential malware.
 Consequently, you will see this error message if you attempt to run `jira_worklog`:
 
-![MacOS Unidentified Developer Screenshot](images/macos_error_unidentified_dev.png)
+![macOS Unidentified Developer Screenshot](images/macOS_error_unidentified_dev.png)
 
 To fix this:
 
@@ -101,15 +101,15 @@ See the table below for details.
 
 If you think your machine has been compromised, go to Jira account ira and "Revoke" the API key.
 
-#### MacOS specifics for the Jira Security token
-On MacOS, the Jira Security Access Token is stored in the built-in KeyChain.
+#### macOS specifics for the Jira Security token
+On macOS, the Jira Security Access Token is stored in the built-in KeyChain.
 
-When `jira_worklog` attempts to access your MacOS Keychain, this window will pop up.
+When `jira_worklog` attempts to access your macOS Keychain, this window will pop up.
 It is a good idea to press `Always Allow` to save you some time :-)
 ![](images/keychain_prompt.png)
 
 Here is a neat command to work with security tokens and passwords
-on MacOS:
+on macOS:
 ````shell
 # This will list the entire contents of the `jira_worklog` entry from the keychain
 security find-generic-password -s com.autostoresystem.jira_worklog -a your.name@company.com -g
@@ -120,11 +120,11 @@ You can remove your local configuration file using the command: `jira_worklog co
 
 | Operating system     | Config file location                                               |
 |----------------------|--------------------------------------------------------------------|
-| MacOs:               | `/Users/steinar/Library/Preferences/com.autostore.jira_worklog`    |
+| macOS:               | `/Users/steinar/Library/Preferences/com.autostore.jira_worklog`    |
 | Windows:             | `C:\Users\Alice\AppData\Roaming\com.autostore\jira_worklog\config` |
 | Linux:               | `/home/steinar/.config/jira_worklog`                               |
 
-Note! For MacOS: The Jira Security Access token stored in the Keychain, will not be deleted
+Note! For macOS: The Jira Security Access token stored in the Keychain, will not be deleted
 ## How to specify the duration
 
 You can specify the duration of your work using weeks, days, hours and minutes.

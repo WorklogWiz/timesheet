@@ -4,8 +4,10 @@ members = [
     "jira_lib",
     "jira_worklog",
     "jira_worklog_tui",
+    "journal_sql",
     "rust-axum-backend",
     "secure_credentials",
+    "core",
 ]
 # Set the resolver to "2" to match the 2021 edition
 resolver = "2"
@@ -22,5 +24,6 @@ serde_json = { version = "1" }
 log = "0.4"
 env_logger = "0.11.5"
 anyhow = "1"
-
+thiserror = "1"
+lazy_static = { version = "1.5" }
 
