@@ -1,7 +1,36 @@
-FROM rust:1.73-alpine3.18
+FROM rust:1.82-alpine3.20
 
 RUN apk add --no-cache \
-    zsh
+        cosign \
+        git-lfs \
+        less \
+        make \
+        musl \
+        musl-dev \
+        perl \
+        protobuf-dev \
+        sccache \
+        zig \
+        zsh && \
+    apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/testing/ \
+        grcov && \
+    cargo install \
+        cargo-zigbuild \
+        semantic-release-cargo && \
+    rm -rf "$HOME"/.cargo/git && \
+    rm -rf /usr/local/cargo/registry
+
+RUN rustup component add \
+        clippy \
+        rustfmt-preview \
+        llvm-tools-preview
+
+RUN rustup target add \
+        x86_64-unknown-linux-musl \
+        aarch64-unknown-linux-musl \
+        x86_64-unknown-linux-gnu \
+        aarch64-unknown-linux-gnu \
+        x86_64-pc-windows-gnu
 
 RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/v1.1.5/zsh-in-docker.sh)" -- \
     -t robbyrussell
