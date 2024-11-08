@@ -1,6 +1,6 @@
 use std::error;
 use std::fmt::{Display, Formatter};
-
+use anyhow::{bail, Context};
 use chrono::{
     Datelike, DateTime, Days, Duration, Local, Month, NaiveDate, NaiveDateTime, NaiveTime,
     ParseResult, Weekday,
@@ -191,6 +191,33 @@ pub fn calculate_started_time(
     }
 }
 
+pub fn parse_hour_and_minutes_to_seconds(time_str: &str) -> anyhow::Result<i32> {
+
+    lazy_static! {
+        static ref HH_MM_EXPR: Regex = Regex::new(r"^\d{2}:\d{2}$").unwrap();
+     }
+    if !HH_MM_EXPR.is_match(time_str){
+        bail!("{} cannot be parsed into hours and minutes",time_str);
+    }
+
+    // Split the string by ':' to get hours and minutes as strings
+    let parts: Vec<&str> = time_str.split(':').collect();
+
+    if parts.len() == 2 {
+        // Parse hours and minutes from the parts
+        let hours: i32 = parts[0].parse().with_context(|| format!("Unable to parse hours '{}' to i32", parts[0]))?;
+        let minutes: i32 = parts[1].parse().with_context(|| format!("Failed to parse minutes '{}' to i32", parts[1]))?;
+
+        // Convert hours and minutes to seconds
+        let total_seconds = (hours * 3600) + (minutes * 60);
+
+        Ok(total_seconds)
+    } else {
+        bail!("Invalid duration '{}' format. Expected HH:MM", time_str);
+    }
+}
+
+
 /// Splits a vector of day names and durations separated by ':' into
 /// a vector of tuples, holding the Weekday and the duration
 /// Given for instance \["mon:1,5h"\] the resulting vector will be
@@ -265,6 +292,19 @@ pub fn seconds_to_hour_and_min(seconds: &i32) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_parse_hour_and_minutes_to_seconds() {
+        let seconds = parse_hour_and_minutes_to_seconds("01:30").unwrap();
+        assert_eq!(seconds, 5400);
+    }
+
+    #[test]
+    fn test_parse_invalid_hour_and_minutes_to_seconds() {
+        if let Ok(seconds) = parse_hour_and_minutes_to_seconds("1:30") {
+            panic!("Parsing '1:30' did not fail!");
+        }
+    }
 
     #[test]
     fn test_as_date_time() {

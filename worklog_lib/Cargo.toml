@@ -1,0 +1,14 @@
+[package]
+name = "worklog_lib"
+edition = "2021"
+version.workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+log = {workspace = true}
+
+common = { path = "../common"}
+journal_sql = { path = "../journal_sql" }
+jira_lib = { path = "../jira_lib"}
+anyhow = {workspace = true}
+chrono = {workspace = true}

@@ -26,12 +26,16 @@ pub struct Application {
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct ApplicationData {
     pub journal_data_file_name: String,
+    /// The path to the local worklog data store
+    pub local_worklog: String,
+
 }
 
 impl Default for ApplicationData {
     fn default() -> Self {
         ApplicationData {
             journal_data_file_name: journal_data_file_name().to_string_lossy().to_string(),
+            local_worklog:  local_worklog_file_name().to_string_lossy().to_string(),
         }
     }
 }
@@ -41,6 +45,8 @@ impl ApplicationData {
     pub fn get_journal(&self) -> Box<dyn Journal> {
         Box::new(JournalCsv::new(PathBuf::from(&self.journal_data_file_name)))
     }
+
+
 }
 
 fn default_application_data_section() -> ApplicationData {
@@ -88,7 +94,18 @@ pub fn journal_data_file_name() -> PathBuf {
         .join("worklog_journal.csv")
 }
 
+#[must_use]
+pub fn local_worklog_file_name() -> PathBuf {
+    project_dirs().data_dir().join("worklog.db")
+}
+
+pub fn tmp_dir() -> PathBuf {
+    project_dirs()
+        .cache_dir().into()
+}
+
 fn project_dirs() -> ProjectDirs {
+
     ProjectDirs::from("com", "autostore", "jira_worklog")
         .expect("Unable to determine the name of the 'project_dirs' directory name")
 }
