@@ -9,16 +9,16 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+jira_lib = { path = "../jira_lib" }
+common = { path = "../common" }
+
 clap = { version = "4.2.2", features = ["derive"] }
 
 chrono = { workspace = true, features = ["serde"] }
 
 log = {workspace = true}
-
 env_logger = {  workspace = true }
 
-jira_lib = { path = "../jira_lib" }
-worklog_lib = { path = "../core" }
 reqwest = { version = "0.12.7", features = ["json"] }
 tokio = { workspace = true, features = ["full"] }
 anyhow = {workspace = true}

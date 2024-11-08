@@ -7,7 +7,7 @@ edition = "2021"
 crossterm = "0.28.1"
 ratatui = "0.28.1"
 jira_lib =  {path = "../jira_lib"}
-worklog_lib = {path = "../core" }
+common = {path = "../common" }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 chrono = { workspace = true }
 futures = "0.3.31"

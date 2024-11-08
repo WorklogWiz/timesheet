@@ -2,7 +2,7 @@ use jira_lib::{JiraIssue, JiraKey, Worklog};
 use std::collections::{BTreeMap, HashMap};
 use chrono::{Datelike, NaiveDate};
 use log::debug;
-use worklog_lib::date;
+use common::date;
 //
 // Prints a report with tables like this:
 //
@@ -66,7 +66,7 @@ pub fn table_report(
         }
 
         // If this date is in the next week, summarize for current week
-        if worklog_lib::date::is_new_week(current_week, &date) {
+        if date::is_new_week(current_week, &date) {
             print_weekly_total_per_issue(
                 issue_keys_by_command_line_order,
                 &mut weekly_totals_per_jira_key,
@@ -114,7 +114,7 @@ fn print_daily_entry(date: NaiveDate,issue_keys_by_command_line_order: &[JiraKey
         let seconds = daily_total_per_jira_key
             .get(jira_key)
             .unwrap_or(&default_value);
-        let hh_mm_string = worklog_lib::date::seconds_to_hour_and_min(seconds);
+        let hh_mm_string = date::seconds_to_hour_and_min(seconds);
         print!(
             " {:>8}",
             if *seconds == 0 {
@@ -131,7 +131,7 @@ fn print_daily_entry(date: NaiveDate,issue_keys_by_command_line_order: &[JiraKey
             .or_insert(*seconds);
         debug!("Weekly total for {jira_key} {s:?}");
     }
-    print!(" {:>8}", worklog_lib::date::seconds_to_hour_and_min(&daily_total));
+    print!(" {:>8}", date::seconds_to_hour_and_min(&daily_total));
 
     println!();
 }

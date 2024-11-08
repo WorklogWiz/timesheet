@@ -13,7 +13,7 @@ use log::{debug, info};
 use reqwest::StatusCode;
 
 use jira_lib::{ JiraClient, JiraIssue, JiraKey, TimeTrackingConfiguration, Worklog};
-use worklog_lib::{config, date, journal};
+use common::{config, date, journal};
 
 mod table_report;
 
@@ -56,6 +56,8 @@ enum SubCommand {
     Config(Configuration),
     /// Lists all time codes
     Codes,
+    /// Synchronize local data store with remote Jira work logs
+    Sync(Synchronisation)
 
 }
 
@@ -138,6 +140,16 @@ struct Configuration {
     jira_url: Option<String>,
     #[arg(long, default_value_t = false)]
     remove: bool,
+}
+
+#[derive(Parser)]
+struct Synchronisation {
+    #[arg(name = "started", short, long)]
+    /// Default is to sync for the current month, but you may specify an ISO8601 date from which
+    /// data should be synchronised
+    started: Option<String>,
+    #[arg(name = "issues", short, long, long_help="Limit synchronisation to these issues")]
+    issues: Vec<String>
 }
 
 #[tokio::main]
@@ -228,8 +240,15 @@ async fn main() {
             for issue in issues {
                 println!("{} {}", issue.key, issue.fields.summary);
             }
+        },
+        SubCommand::Sync(synchronisation) => {
+            sync_subcommand(synchronisation).await;
         }
     }
+}
+
+async fn sync_subcommand(_sync:Synchronisation) {
+
 }
 
 async fn delete_subcommand(delete: &Del) {
@@ -450,7 +469,7 @@ async fn add_subcommand(add: &mut Add) {
 }
 
 /// Creates the `JiraClient` instance based on the supplied parameters.
-fn get_jira_client(app_config: &config::Application) -> JiraClient {
+fn get_jira_client(app_config: &config::ApplicationConfig) -> JiraClient {
 
     match JiraClient::new(
         &app_config.jira.jira_url,
@@ -466,7 +485,7 @@ fn get_jira_client(app_config: &config::Application) -> JiraClient {
 }
 
 /// Retrieves the application configuration file
-fn get_app_config() -> config::Application {
+fn get_app_config() -> config::ApplicationConfig {
     let Ok(app_config) = config::load() else {
         println!(
             "Config file {} not found.",

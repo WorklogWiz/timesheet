@@ -4,9 +4,8 @@ edition = "2021"
 version.workspace = true
 
 [dependencies]
-jira_lib = { path="../jira_lib" }
-worklog_lib = {path = "../core" }
+common = {path = "../common" }
 anyhow = { workspace = true}
 thiserror = {workspace = true}
 chrono = { workspace = true}
-rusqlite = { version = "0", features = ["bundled"] }
+rusqlite = { version = "0", features = ["bundled", "chrono"] }

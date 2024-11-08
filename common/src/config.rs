@@ -2,18 +2,19 @@ use directories;
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 use std::error;
-use std::fs::{self, File};
+use std::fs::{self, File, remove_file};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use log::debug;
 use crate::journal::{Journal};
 use crate::journal::journal_csv::JournalCsv;
-
+use anyhow::Result;
+use anyhow::Context;
 const KEYCHAIN_SERVICE: &str = "com.autostoresystem.jira_worklog";
 /// Application configuration struct
 /// Holds the data we need to connect to Jira, write to the local journal and so on
 #[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
-pub struct Application {
+pub struct ApplicationConfig {
     /// Holds the URL to the Jira instance we are running again.
     pub jira: Jira,
     /// This will ensure that the filename is created, even if the Toml file
@@ -27,7 +28,7 @@ pub struct Application {
 pub struct ApplicationData {
     pub journal_data_file_name: String,
     /// The path to the local worklog data store
-    pub local_worklog: String,
+    pub local_worklog: Option<String>,
 
 }
 
@@ -35,7 +36,7 @@ impl Default for ApplicationData {
     fn default() -> Self {
         ApplicationData {
             journal_data_file_name: journal_data_file_name().to_string_lossy().to_string(),
-            local_worklog:  local_worklog_file_name().to_string_lossy().to_string(),
+            local_worklog:  Some(local_worklog_dbms_file_name().to_string_lossy().to_string()),
         }
     }
 }
@@ -45,8 +46,6 @@ impl ApplicationData {
     pub fn get_journal(&self) -> Box<dyn Journal> {
         Box::new(JournalCsv::new(PathBuf::from(&self.journal_data_file_name)))
     }
-
-
 }
 
 fn default_application_data_section() -> ApplicationData {
@@ -79,7 +78,7 @@ impl Jira {
             || self.token == JIRA_TOKEN_STORED_IN_MACOS_KEYCHAIN)
     }
 }
-
+/// Filename holding the configuration parameters
 #[must_use]
 pub fn file_name() -> PathBuf {
     project_dirs()
@@ -87,6 +86,7 @@ pub fn file_name() -> PathBuf {
         .into()
 }
 
+/// Name of CSV file holding the local journal
 #[must_use]
 pub fn journal_data_file_name() -> PathBuf {
     project_dirs()
@@ -94,9 +94,22 @@ pub fn journal_data_file_name() -> PathBuf {
         .join("worklog_journal.csv")
 }
 
+/// Filename of the Sqlite DBMS holding the local repo of work logs
 #[must_use]
-pub fn local_worklog_file_name() -> PathBuf {
+pub fn local_worklog_dbms_file_name() -> PathBuf {
     project_dirs().data_dir().join("worklog.db")
+}
+
+/// Creates a temporary local Sqlite DBMS file name, which is quite useful for integration tests
+pub fn tmp_local_worklog_dbms_file_name() -> anyhow::Result<PathBuf> {
+    let tmp_db = tmp_dir().join("test.db");
+    if tmp_db.is_file() {
+        let result = remove_file(&tmp_db).with_context(||format!("Unable to remove database file {}", &tmp_db.to_string_lossy()))?;
+    }
+    // Create the directory if it doesn't exist
+    fs::create_dir_all(&tmp_db.parent().unwrap())?;
+
+    Ok(tmp_db)
 }
 
 pub fn tmp_dir() -> PathBuf {
@@ -110,15 +123,16 @@ fn project_dirs() -> ProjectDirs {
         .expect("Unable to determine the name of the 'project_dirs' directory name")
 }
 
-fn read(path: &Path) -> Result<Application, Box<dyn error::Error>> {
+/// Reads the `Application` configuration struct from the supplied TOML file
+fn read(path: &Path) -> Result<ApplicationConfig, Box<dyn error::Error>> {
     let mut file = File::open(path)?;
     let mut contents = String::new();
     file.read_to_string(&mut contents)?;
-    Ok(toml::from_str::<Application>(&contents)?)
+    Ok(toml::from_str::<ApplicationConfig>(&contents)?)
 }
 
 fn create_configuration_file(
-    cfg: &Application,
+    cfg: &ApplicationConfig,
     path: &PathBuf
 ) -> Result<(), Box<dyn error::Error>> {
     let directory = path.parent().unwrap();
@@ -142,7 +156,7 @@ fn create_configuration_file(
 }
 
 #[allow(clippy::missing_errors_doc)]
-pub fn load() -> Result<Application, Box<dyn error::Error>> {
+pub fn load() -> Result<ApplicationConfig, Box<dyn error::Error>> {
     let config_path = file_name();
 
     let mut app_config = read(&config_path)?;
@@ -164,7 +178,7 @@ pub fn load() -> Result<Application, Box<dyn error::Error>> {
 }
 
 #[allow(clippy::missing_errors_doc)]
-pub fn save(cfg: &Application) -> Result<(), Box<dyn error::Error>> {
+pub fn save(cfg: &ApplicationConfig) -> Result<(), Box<dyn error::Error>> {
     create_configuration_file(cfg, &file_name())
 }
 
@@ -174,12 +188,12 @@ pub fn remove() -> io::Result<()> {
 }
 
 #[allow(clippy::missing_errors_doc)]
-pub fn load_or_create() -> Result<Application, Box<dyn error::Error>> {
+pub fn load_or_create() -> Result<ApplicationConfig, Box<dyn error::Error>> {
     let p = file_name();
     if p.exists() && p.is_file() {
         Ok(load()?)
     } else {
-        let cfg = Application::default();
+        let cfg = ApplicationConfig::default();
         create_configuration_file(&cfg, &file_name())?;
         Ok(cfg)
     }
@@ -192,7 +206,7 @@ pub fn load_or_create() -> Result<Application, Box<dyn error::Error>> {
 ///   -a steinar.cook@autostoresystem.com -w secure_token_goes_here
 /// `
 #[cfg(target_os = "macos")]
-fn merge_jira_token_from_keychain(config: &mut Application) {
+fn merge_jira_token_from_keychain(config: &mut ApplicationConfig) {
     use log::warn;
 
     debug!("MacOS: retrieving the Jira access token from the keychain ...");
@@ -219,7 +233,7 @@ fn merge_jira_token_from_keychain(config: &mut Application) {
 const JIRA_TOKEN_STORED_IN_MACOS_KEYCHAIN: &str = "*** stored in macos keychain ***";
 
 #[cfg(target_os = "macos")]
-fn migrate_jira_token_into_keychain(app_config: &mut Application) {
+fn migrate_jira_token_into_keychain(app_config: &mut ApplicationConfig) {
     match secure_credentials::store_secure_token(
         KEYCHAIN_SERVICE,
         &app_config.jira.user,
@@ -246,8 +260,8 @@ fn migrate_jira_token_into_keychain(app_config: &mut Application) {
 }
 
 #[allow(clippy::missing_errors_doc)]
-pub fn application_config_to_string(cfg: &Application) -> Result<String, Box<dyn error::Error>> {
-    Ok(toml::to_string::<Application>(cfg)?)
+pub fn application_config_to_string(cfg: &ApplicationConfig) -> Result<String, Box<dyn error::Error>> {
+    Ok(toml::to_string::<ApplicationConfig>(cfg)?)
 }
 
 #[cfg(test)]
@@ -266,7 +280,7 @@ mod tests {
         journal_data_file_name = "journal"
         "#;
 
-        let app_config: Application = toml::from_str(toml_str).unwrap();
+        let app_config: ApplicationConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(
             app_config.application_data.journal_data_file_name,
             "journal"
@@ -284,7 +298,7 @@ mod tests {
         token = "rubbish"
         "#;
 
-        let app_config: Application = toml::from_str(toml_str).unwrap();
+        let app_config: ApplicationConfig = toml::from_str(toml_str).unwrap();
         assert_eq!(
             app_config.application_data.journal_data_file_name,
             journal_data_file_name().to_string_lossy()
@@ -298,7 +312,7 @@ mod tests {
 
         let tmp_config_file = std::env::temp_dir().join(file_name);
 
-        let cfg = Application::default();
+        let cfg = ApplicationConfig::default();
         if cfg!(target_os = "macos") {
             assert!(&cfg
                 .application_data
@@ -335,7 +349,7 @@ mod tests {
 
     #[test]
     fn test_jira_valid_token() {
-        let mut app = Application::default();
+        let mut app = ApplicationConfig::default();
         assert!(!app.jira.has_valid_jira_token(), "{}", app.jira.token);
 
         app.jira.token = JIRA_TOKEN_STORED_IN_MACOS_KEYCHAIN.to_string();

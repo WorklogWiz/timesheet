@@ -12,19 +12,21 @@ use std::fmt;
 use std::fmt::Formatter;
 use std::process::exit;
 use std::time::Instant;
-use base64::prelude::*;
+
 use base64::Engine;
+use base64::prelude::*;
 use chrono::{DateTime, Days, Local, Months, NaiveDateTime, NaiveTime, TimeZone, Utc};
-use worklog_lib::config::Application;
 use futures::StreamExt;
 use log::{debug, info};
+use reqwest::{Client, StatusCode};
 use reqwest::header::HeaderMap;
 use reqwest::header::HeaderValue;
-use reqwest::{Client, StatusCode};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde::Serialize;
-use worklog_lib::config;
+
+use common::config;
+use config::ApplicationConfig;
 
 /// Holds the ULR of the Jira API to use
 pub const JIRA_URL: &str = "https://autostore.atlassian.net/rest/api/latest";
@@ -311,7 +313,7 @@ impl JiraClient {
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn from(cfg: &Application) -> Result<JiraClient, JiraError> {
+    pub fn from(cfg: &ApplicationConfig) -> Result<JiraClient, JiraError> {
         JiraClient::new(&cfg.jira.jira_url,&cfg.jira.user, &cfg.jira.token)
     }
 
