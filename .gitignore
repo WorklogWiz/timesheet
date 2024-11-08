@@ -1,1 +1,6 @@
 target/
+*.profraw
+.VERSION
+.scannerwork/
+clippy-report.json
+coverage.lcov
