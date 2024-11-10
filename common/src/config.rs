@@ -11,6 +11,7 @@ use std::error;
 use std::fs::{self, remove_file, File};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 const KEYCHAIN_SERVICE: &str = "com.autostoresystem.jira_worklog";
 /// Application configuration struct
@@ -44,8 +45,8 @@ impl Default for ApplicationData {
 
 impl ApplicationData {
     #[must_use]
-    pub fn get_journal(&self) -> Box<dyn Journal> {
-        Box::new(JournalCsv::new(PathBuf::from(&self.journal_data_file_name)))
+    pub fn get_journal(&self) -> Rc<dyn Journal> {
+        Rc::new(JournalCsv::new(PathBuf::from(&self.journal_data_file_name)))
     }
 }
 

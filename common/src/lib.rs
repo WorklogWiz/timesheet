@@ -43,6 +43,8 @@ pub enum WorklogError {
     ConfigFileCreation { path: PathBuf },
     #[error("Error creating Jira client: {msg}")]
     JiraClient { msg: String },
+    #[error("Jira request failed: {msg} : {reason}" )]
+    JiraResponse{ msg: String, reason: String},
     #[error("Unable to open journal file {0}")]
     OpenJournal(String),
     #[error("Unable to open DBMS in file {path}: {reason}")]
@@ -55,5 +57,7 @@ pub enum WorklogError {
     FileNotDeleted(String),
     #[error("Directory creation failed")]
     CreateDir(#[from] io::Error),
+    #[error("Unable to retrieve the unique jira keys from the deprecated local journal: {0}")]
+    UniqueKeys(String),
 }
 

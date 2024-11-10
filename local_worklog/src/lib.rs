@@ -30,9 +30,13 @@ impl LocalWorklogService {
     pub fn new(dbms_path: &PathBuf) -> Result<Self, WorklogError> {
         let connection = Connection::open(dbms_path.as_path())
             .map_err(|e| WorklogError::OpenDbms {path: dbms_path.to_string_lossy().into(), reason: e.to_string()})?;
+        // Creates the schema if needed
+        create_local_worklog_schema(&connection)?;
+
         Ok(LocalWorklogService{ connection, dbms_path: dbms_path.to_path_buf()})
     }
 
+    /// Adds a new entry into the local DBMS
     pub fn add_entry(&self, local_worklog: LocalWorklog) -> Result<(), WorklogError> {
         let i = self.connection.execute(
             "INSERT INTO worklog (
@@ -43,10 +47,11 @@ impl LocalWorklogService {
             to_params_named(&local_worklog).map_err(|e| WorklogError::Sql(format!("Unable to convert parameters: {}", e.to_string())))?.to_slice().as_slice(),
         ).map_err(|e| WorklogError::Sql(format!("Unable to insert into worklog: {}", e.to_string())))?;
         if i ==0 {
-            panic!("Inset failed");
+            panic!("Insert failed");
         }
         Ok(())
     }
+
 
 }
 
