@@ -1,4 +1,4 @@
-use jira_lib::{JiraClient, midnight_a_month_ago_in};
+use jira_lib::{midnight_a_month_ago_in, JiraClient};
 
 #[tokio::main]
 async fn main() {
@@ -13,11 +13,17 @@ async fn main() {
             i, project.id, project.key, project.name, project.is_private
         );
     }
-    let worklogs = JiraClient::get_worklogs_for(&jira_client.http_client,  "A3SRS-1".to_string(), midnight_a_month_ago_in()).await
-        ;
+    let worklogs = JiraClient::get_worklogs_for(
+        &jira_client.http_client,
+        "A3SRS-1".to_string(),
+        midnight_a_month_ago_in(),
+    )
+    .await;
     println!("{:?}", &worklogs);
 
-    let results = jira_client.get_worklogs_for_current_user("time-147", Option::None).await;
+    let results = jira_client
+        .get_worklogs_for_current_user("time-147", Option::None)
+        .await;
     if let Ok(worklogs) = results {
         for worklog in worklogs {
             println!("{} {} {}", worklog.id, worklog.started, worklog.timeSpent);

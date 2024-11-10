@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow;
 use anyhow::Context;
@@ -26,12 +26,15 @@ impl JournalSqlite {
         })
     }
 
+    pub fn get_db_path(&self) -> &Path {
+        self.db_path.as_path()
+    }
+
     #[must_use]
     pub fn entry_count(&self) -> Result<i32> {
-         let count:i32 = self.connection.query_row(
-            "select count(*) from worklog",
-            params![],
-            |row|  row.get(0) )?;
+        let count: i32 =
+            self.connection
+                .query_row("select count(*) from worklog", params![], |row| row.get(0))?;
         Ok(count)
     }
 }
@@ -62,8 +65,10 @@ impl Journal for JournalSqlite {
     }
 
     fn find_unique_keys(&self) -> anyhow::Result<Vec<String>> {
-        let mut stmt = self.connection.prepare("select distinct(issue_key) from worklog")?;
-        let issue_keys_iter = stmt.query_map([], |row|   row.get::<_,String>(0))?;
+        let mut stmt = self
+            .connection
+            .prepare("select distinct(issue_key) from worklog")?;
+        let issue_keys_iter = stmt.query_map([], |row| row.get::<_, String>(0))?;
         let mut issue_keys = Vec::new();
         for issue_key in issue_keys_iter {
             issue_keys.push(issue_key?);
@@ -96,18 +101,17 @@ fn create_journal(connection: &Connection) -> anyhow::Result<usize> {
 
 #[cfg(test)]
 mod tests {
+    use chrono::{DateTime, Local};
     use std::fs;
     use std::fs::remove_file;
-    use chrono::{DateTime, Local};
 
     use common::{config, date};
 
     use super::*;
 
-
     ///
     /// Creates a small sample database for testing purposes
-    fn get_journal_for_test2() -> Result<JournalSqlite> {
+    fn get_journal_for_test() -> Result<JournalSqlite> {
         let data = r"
 TIME-147;314335;2024-09-19 20:21 +0200;02:00;jira_worklog
 TIME-148;315100;2024-09-20 11:57 +0200;01:00;Information meeting on time codes
@@ -117,10 +121,13 @@ TIME-147;315634;2024-09-20 22:49 +0200;01:00;jira_worklog
 ";
         let tmp_db = config::tmp_local_worklog_dbms_file_name()?;
         let journal = JournalSqlite::new(&tmp_db)?;
+        journal
+            .connection
+            .execute("delete from worklog", params![])?;
         let lines = data.lines();
         for line in lines {
             if line.len() <= 1 {
-                continue
+                continue;
             }
 
             let fields: Vec<&str> = line.split(';').collect();
@@ -141,10 +148,9 @@ TIME-147;315634;2024-09-20 22:49 +0200;01:00;jira_worklog
         Ok(journal)
     }
 
-
     #[test]
     fn test_create_dbms() -> anyhow::Result<()> {
-        let journal = get_journal_for_test2()?;
+        let journal = get_journal_for_test()?;
 
         let _p = connect_sqlite(&journal.db_path)?;
         assert!(journal.db_path.exists());
@@ -153,7 +159,7 @@ TIME-147;315634;2024-09-20 22:49 +0200;01:00;jira_worklog
 
     #[test]
     fn test_add_journal_entry() -> Result<()> {
-        let journal = get_journal_for_test2()?;
+        let journal = get_journal_for_test()?;
 
         let entry = Entry {
             issue_key: "TIME-147".to_string(),
@@ -172,7 +178,7 @@ TIME-147;315634;2024-09-20 22:49 +0200;01:00;jira_worklog
 
     #[test]
     fn test_remove_journal_entry() -> Result<()> {
-        let journal = get_journal_for_test2()?;
+        let journal = get_journal_for_test()?;
         journal.remove_entry("315633")?;
 
         Ok(())
@@ -180,11 +186,9 @@ TIME-147;315634;2024-09-20 22:49 +0200;01:00;jira_worklog
 
     #[test]
     fn test_find_unique_keys() -> Result<()> {
-        let journal = get_journal_for_test2()?;
+        let journal = get_journal_for_test()?;
         let result = journal.find_unique_keys()?;
-        assert_eq!(result.len(),3);
+        assert_eq!(result.len(), 3);
         Ok(())
     }
-
-
 }

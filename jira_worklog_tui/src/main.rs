@@ -10,8 +10,8 @@ use std::error::Error;
 use chrono::{
     offset::TimeZone, DateTime, Datelike, Duration, Local, NaiveDate, NaiveTime, Weekday,
 };
-use jira_lib::{self, JiraClient, Worklog};
 use common::config;
+use jira_lib::{self, JiraClient, Worklog};
 
 fn week_bounds(date: DateTime<Local>) -> (u32, DateTime<Local>, DateTime<Local>) {
     //let now = Local::now();

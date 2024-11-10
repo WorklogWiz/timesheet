@@ -13,14 +13,14 @@ use std::fmt::Formatter;
 use std::process::exit;
 use std::time::Instant;
 
-use base64::Engine;
 use base64::prelude::*;
+use base64::Engine;
 use chrono::{DateTime, Days, Local, Months, NaiveDateTime, NaiveTime, TimeZone, Utc};
 use futures::StreamExt;
 use log::{debug, info};
-use reqwest::{Client, StatusCode};
 use reqwest::header::HeaderMap;
 use reqwest::header::HeaderValue;
+use reqwest::{Client, StatusCode};
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 use serde::Serialize;
@@ -93,7 +93,7 @@ pub struct Worklog {
     pub started: DateTime<Utc>,
     pub timeSpent: String,
     pub timeSpentSeconds: i32,
-    pub issueId: String,    // Numeric FK to issue
+    pub issueId: String, // Numeric FK to issue
     pub comment: Option<String>,
 }
 
@@ -248,7 +248,8 @@ impl fmt::Display for JiraError {
             JiraError::WorklogNotFound(issue, worklog_id) => {
                 write!(
                     f,
-                    "Worklog entry with issue_key: {issue} and worklog_id: {worklog_id} not found")
+                    "Worklog entry with issue_key: {issue} and worklog_id: {worklog_id} not found"
+                )
             }
             JiraError::ReqwestError(e) => {
                 write!(
@@ -273,6 +274,7 @@ impl Error for JiraError {
 
 /// Convenience method to create a `JiraClient` instance. It will load parameters
 /// from the .toml file on disk and set up everything for you.
+// TODO: rewrite this to get rid of the dependency on common::config
 #[must_use]
 #[allow(clippy::missing_panics_doc)]
 pub fn create_jira_client() -> JiraClient {
@@ -314,7 +316,7 @@ impl JiraClient {
 
     #[allow(clippy::missing_errors_doc)]
     pub fn from(cfg: &ApplicationConfig) -> Result<JiraClient, JiraError> {
-        JiraClient::new(&cfg.jira.jira_url,&cfg.jira.user, &cfg.jira.token)
+        JiraClient::new(&cfg.jira.jira_url, &cfg.jira.user, &cfg.jira.token)
     }
 
     fn create_http_client(user_name: &str, token: &str) -> Result<reqwest::Client, reqwest::Error> {
@@ -452,7 +454,11 @@ impl JiraClient {
     // the only way I can get away from the dreaded compiler error:
     //     | |__________________`self` escapes the associated function body here
     //     |                    argument requires that `'1` must outlive `'static`
-    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+    #[allow(
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_possible_wrap
+    )]
     async fn static_get_issues_for_single_project(
         http_client: &Client,
         project_key: String,
@@ -497,7 +503,11 @@ impl JiraClient {
     }
 
     #[allow(clippy::missing_errors_doc)]
-    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+    #[allow(
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_possible_wrap
+    )]
     pub async fn get_worklogs_for(
         http_client: &Client,
         issue_key: String,
@@ -760,8 +770,6 @@ impl JiraClient {
         body: String,
         http_status_code: StatusCode,
     ) -> Result<T, StatusCode> {
-
-
         let response = http_client
             .post(url.clone())
             .body(body)

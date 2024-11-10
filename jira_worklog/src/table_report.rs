@@ -1,8 +1,8 @@
-use jira_lib::{JiraIssue, JiraKey, Worklog};
-use std::collections::{BTreeMap, HashMap};
 use chrono::{Datelike, NaiveDate};
-use log::debug;
 use common::date;
+use jira_lib::{JiraIssue, JiraKey, Worklog};
+use log::debug;
+use std::collections::{BTreeMap, HashMap};
 //
 // Prints a report with tables like this:
 //
@@ -25,7 +25,8 @@ pub fn table_report(
     issue_information: &HashMap<String, JiraIssue>,
 ) {
     // Holds the accumulated work hours per date and then per issue key
-    let mut daily_totals_for_all_jira_key: BTreeMap<NaiveDate, BTreeMap<JiraKey, i32>> = BTreeMap::new();
+    let mut daily_totals_for_all_jira_key: BTreeMap<NaiveDate, BTreeMap<JiraKey, i32>> =
+        BTreeMap::new();
 
     // Iterates all work logs and accumulates them by date, Jira issue key
     for e in worklog_entries.iter() {
@@ -50,12 +51,12 @@ pub fn table_report(
     let mut weekly_totals_per_jira_key: BTreeMap<JiraKey, i32> = BTreeMap::new();
     let mut current_week = 0;
     // year, {month, total}
-    let mut monthly_total: BTreeMap<i32,BTreeMap<u32, i32>> = BTreeMap::new();
+    let mut monthly_total: BTreeMap<i32, BTreeMap<u32, i32>> = BTreeMap::new();
 
     for (date, daily_total_per_jira_key) in daily_totals_for_all_jira_key {
-
         let daily_total: i32 = daily_total_per_jira_key.values().sum();
-        monthly_total.entry(date.year())
+        monthly_total
+            .entry(date.year())
             .or_default()
             .entry(date.month())
             .and_modify(|current_month_total| *current_month_total += daily_total)
@@ -73,7 +74,7 @@ pub fn table_report(
                 &mut current_week,
             );
 
-            let current_week_totals:i32 = weekly_totals_per_jira_key.values().sum();
+            let current_week_totals: i32 = weekly_totals_per_jira_key.values().sum();
             debug!("Total for CW {} is {}", current_week, current_week_totals);
 
             current_week = date.iso_week().week(); // Skips to week of current date
@@ -81,7 +82,12 @@ pub fn table_report(
             print_weekly_table_header(issue_keys_by_command_line_order); // Table header for next week
         }
 
-        print_daily_entry(date,issue_keys_by_command_line_order, &mut weekly_totals_per_jira_key, &daily_total_per_jira_key);
+        print_daily_entry(
+            date,
+            issue_keys_by_command_line_order,
+            &mut weekly_totals_per_jira_key,
+            &daily_total_per_jira_key,
+        );
     }
 
     // In case the last week is incomplete, we also need to print those entries
@@ -96,12 +102,21 @@ pub fn table_report(
     // Print totals for each (year) and month
     for (_year, monthly_total) in monthly_total {
         for (month_no, month_total) in monthly_total {
-            println!("{:<9}: {:>8}", date::month_name(month_no).name(), date::seconds_to_hour_and_min(&month_total));
+            println!(
+                "{:<9}: {:>8}",
+                date::month_name(month_no).name(),
+                date::seconds_to_hour_and_min(&month_total)
+            );
         }
     }
 }
 
-fn print_daily_entry(date: NaiveDate,issue_keys_by_command_line_order: &[JiraKey], weekly_totals_per_jira_key: &mut BTreeMap<JiraKey, i32>,  daily_total_per_jira_key: &BTreeMap<JiraKey, i32>) {
+fn print_daily_entry(
+    date: NaiveDate,
+    issue_keys_by_command_line_order: &[JiraKey],
+    weekly_totals_per_jira_key: &mut BTreeMap<JiraKey, i32>,
+    daily_total_per_jira_key: &BTreeMap<JiraKey, i32>,
+) {
     let default_value = 0;
 
     print!("{:10} {:3}", date, date.weekday());
@@ -181,7 +196,7 @@ fn print_double_line(issue_keys_by_command_line_order: &[JiraKey]) {
     for _i in 0..issue_keys_by_command_line_order.len() {
         print!(" {:=<8}", "");
     }
-    print!(" {:=<8}", "");  // The Total column
+    print!(" {:=<8}", ""); // The Total column
 
     println!();
 }

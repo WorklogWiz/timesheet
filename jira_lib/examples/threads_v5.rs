@@ -312,7 +312,6 @@ async fn main() {
 
     let http_client = jira_lib::create_jira_client().http_client;
 
-
     /*    print!("Retrieving 50 Jira issues...");
         let elapsed = loop_wait(&urls, &http_client).await;
         println!("Retrieved in {}ms", elapsed.as_millis());

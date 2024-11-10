@@ -1,14 +1,14 @@
-use std::error;
-use std::fmt::{Display, Formatter};
 use anyhow::{bail, Context};
+use chrono::offset::TimeZone;
 use chrono::{
-    Datelike, DateTime, Days, Duration, Local, Month, NaiveDate, NaiveDateTime, NaiveTime,
+    DateTime, Datelike, Days, Duration, Local, Month, NaiveDate, NaiveDateTime, NaiveTime,
     ParseResult, Weekday,
 };
-use chrono::offset::TimeZone;
 use lazy_static::lazy_static;
 use num_traits::cast::FromPrimitive;
 use regex::Regex;
+use std::error;
+use std::fmt::{Display, Formatter};
 
 /// Parses a date, a time or a datetime, which has been supplied
 /// as:
@@ -101,7 +101,6 @@ pub struct TimeSpent {
 }
 
 impl TimeSpent {
-
     /// Parses strings describing a duration into `TimeSpent`
     /// Examples:
     ///  - `1,5d2,5h3m`
@@ -125,7 +124,7 @@ impl TimeSpent {
             ).unwrap();
         }
         // Parsing floating point, requires full stop as the decimal point delimiter
-        let s = s.to_lowercase().replace(',',".");
+        let s = s.to_lowercase().replace(',', ".");
         let cap = TIME_SPEC.captures(&s);
         match cap {
             // There seems to be a bug with Captures(), even with no match, it returns Some()
@@ -144,17 +143,18 @@ impl TimeSpent {
                     .map_or(0, |m| m.as_str().parse::<u32>().unwrap_or(0));
 
                 println!("Parsed time: {days} days, {hours} hours, {minutes} minutes");
-                let seconds: f32 =
-                    weeks * working_days_per_week  * work_hours_per_day  * 3600.0
-                        + days * work_hours_per_day * 3600.0
-                        + hours * 3600.0
-                        + minutes as f32 * 60.0;
+                let seconds: f32 = weeks * working_days_per_week * work_hours_per_day * 3600.0
+                    + days * work_hours_per_day * 3600.0
+                    + hours * 3600.0
+                    + minutes as f32 * 60.0;
                 Ok(TimeSpent {
                     time_spent: s.to_lowercase(),
                     time_spent_seconds: seconds as i32,
                 })
             }
-            _ => Err(Error::InvalidInput(format!("Could not obtain duration and unit from '{s}'"))),
+            _ => Err(Error::InvalidInput(format!(
+                "Could not obtain duration and unit from '{s}'"
+            ))),
         }
     }
 }
@@ -192,12 +192,11 @@ pub fn calculate_started_time(
 }
 
 pub fn parse_hour_and_minutes_to_seconds(time_str: &str) -> anyhow::Result<i32> {
-
     lazy_static! {
         static ref HH_MM_EXPR: Regex = Regex::new(r"^\d{2}:\d{2}$").unwrap();
-     }
-    if !HH_MM_EXPR.is_match(time_str){
-        bail!("{} cannot be parsed into hours and minutes",time_str);
+    }
+    if !HH_MM_EXPR.is_match(time_str) {
+        bail!("{} cannot be parsed into hours and minutes", time_str);
     }
 
     // Split the string by ':' to get hours and minutes as strings
@@ -205,8 +204,12 @@ pub fn parse_hour_and_minutes_to_seconds(time_str: &str) -> anyhow::Result<i32> 
 
     if parts.len() == 2 {
         // Parse hours and minutes from the parts
-        let hours: i32 = parts[0].parse().with_context(|| format!("Unable to parse hours '{}' to i32", parts[0]))?;
-        let minutes: i32 = parts[1].parse().with_context(|| format!("Failed to parse minutes '{}' to i32", parts[1]))?;
+        let hours: i32 = parts[0]
+            .parse()
+            .with_context(|| format!("Unable to parse hours '{}' to i32", parts[0]))?;
+        let minutes: i32 = parts[1]
+            .parse()
+            .with_context(|| format!("Failed to parse minutes '{}' to i32", parts[1]))?;
 
         // Convert hours and minutes to seconds
         let total_seconds = (hours * 3600) + (minutes * 60);
@@ -217,7 +220,6 @@ pub fn parse_hour_and_minutes_to_seconds(time_str: &str) -> anyhow::Result<i32> 
     }
 }
 
-
 /// Splits a vector of day names and durations separated by ':' into
 /// a vector of tuples, holding the Weekday and the duration
 /// Given for instance \["mon:1,5h"\] the resulting vector will be
@@ -225,7 +227,6 @@ pub fn parse_hour_and_minutes_to_seconds(time_str: &str) -> anyhow::Result<i32> 
 #[allow(clippy::missing_panics_doc)]
 #[must_use]
 pub fn parse_worklog_durations(entries: Vec<String>) -> Vec<(Weekday, String)> {
-
     let mut result: Vec<(Weekday, String)> = Vec::new();
 
     // Iterates the pattern and extracts tuples of Weekday names and duration
@@ -330,7 +331,6 @@ mod tests {
         assert_eq!(str_to_date_time("2023-05-25T20:59").unwrap(), dt);
     }
 
-
     #[test]
     fn test_time_spent() {
         assert!(
@@ -366,22 +366,26 @@ mod tests {
                 time_spent: "7h30m".to_string(),
                 time_spent_seconds: 27000
             },
-            TimeSpent::from_str("7h30m", 7.5, 5.0).unwrap());
+            TimeSpent::from_str("7h30m", 7.5, 5.0).unwrap()
+        );
 
         assert_eq!(
             TimeSpent {
                 time_spent: "1.5w0.5d7.5h30m".to_string(),
                 time_spent_seconds: 244_800
             },
-            TimeSpent::from_str("1.5w0.5d7.5h30m", 7.5, 5.0).unwrap());
-
+            TimeSpent::from_str("1.5w0.5d7.5h30m", 7.5, 5.0).unwrap()
+        );
     }
 
     #[test]
     fn test_captures_bug() {
         let r = Regex::new(r"\b\d+\b");
         // If this suddenly starts returning a "Some" value, the bug in Regex has been fixed
-        assert!(r.unwrap().captures("rubbish").is_none(), "Seems they have fixed the bug in regex captures()");
+        assert!(
+            r.unwrap().captures("rubbish").is_none(),
+            "Seems they have fixed the bug in regex captures()"
+        );
     }
 
     #[test]
@@ -478,18 +482,18 @@ mod tests {
 
     #[test]
     fn test_decimal_duration() {
-      match TimeSpent::from_str(
-            "1,2h",
-            7.5,
-            5.0) {
-          Ok(result) => {
-              assert_eq!(result.time_spent_seconds, 4320, "Invalid calculation of time spent");
-              println!("{} {}", result.time_spent_seconds, result.time_spent);
-          }
-          Err(e) => { panic!("{e}")}
-      }
-
-
+        match TimeSpent::from_str("1,2h", 7.5, 5.0) {
+            Ok(result) => {
+                assert_eq!(
+                    result.time_spent_seconds, 4320,
+                    "Invalid calculation of time spent"
+                );
+                println!("{} {}", result.time_spent_seconds, result.time_spent);
+            }
+            Err(e) => {
+                panic!("{e}")
+            }
+        }
     }
     #[test]
     fn test_date_and_timezone_conversion() {

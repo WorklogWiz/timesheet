@@ -1,5 +1,5 @@
+use common::config;
 use std::fs::File;
-use worklog_lib::config;
 
 fn main() {
     let configuration = config::load().unwrap();
@@ -9,15 +9,15 @@ fn main() {
         .delimiter(b';')
         .has_headers(true)
         .from_reader(file);
-    let vec = rdr.records().filter_map(|e| {
-        match e {
-            Ok(record) if &record[1] != "315100" =>
-                Some(Ok(record))
-            ,
+    let vec = rdr
+        .records()
+        .filter_map(|e| match e {
+            Ok(record) if &record[1] != "315100" => Some(Ok(record)),
             Ok(_) => None,
             Err(e) => Some(Err(e)),
-        }
-    }).collect::<Result<Vec<_>, _>>().unwrap();
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
 
     for record in vec {
         println!("{record:?}");

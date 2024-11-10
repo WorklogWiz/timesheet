@@ -13,7 +13,10 @@ fn test_collect_authors() {
             id: String::new(),
             self_url: String::new(),
             key: JiraKey(String::new()),
-            fields: JiraFields {summary: "Rubbish".to_string(),asset: Option::None },
+            fields: JiraFields {
+                summary: "Rubbish".to_string(),
+                asset: Option::None,
+            },
             worklogs: vec![
                 Worklog {
                     author: Author {
@@ -64,8 +67,14 @@ fn test_collect_authors() {
         }],
     };
 
-    let authors: Vec<Author> = p.issues.iter().flat_map(|i| &i.worklogs).map(|w| &w.author).cloned().collect();
+    let authors: Vec<Author> = p
+        .issues
+        .iter()
+        .flat_map(|i| &i.worklogs)
+        .map(|w| &w.author)
+        .cloned()
+        .collect();
     assert_eq!(authors[0].displayName, "Steinar");
     assert_eq!(authors[1].displayName, "Steinar");
-    assert_eq!(authors.len(),3);
+    assert_eq!(authors.len(), 3);
 }

@@ -1,10 +1,10 @@
 //! The Jira worklog command line utility
 //!
-use std::{env, fmt};
 use std::collections::HashMap;
 use std::fmt::Formatter;
 use std::fs::File;
 use std::process::exit;
+use std::{env, fmt};
 
 use chrono::{Datelike, Local, TimeZone, Weekday};
 use clap::{Args, Parser, Subcommand, ValueEnum};
@@ -12,11 +12,10 @@ use env_logger::Env;
 use log::{debug, info};
 use reqwest::StatusCode;
 
-use jira_lib::{ JiraClient, JiraIssue, JiraKey, TimeTrackingConfiguration, Worklog};
 use common::{config, date, journal};
+use jira_lib::{JiraClient, JiraIssue, JiraKey, TimeTrackingConfiguration, Worklog};
 
 mod table_report;
-
 
 #[derive(Parser)]
 /// Jira worklog utility - add, delete and list jira worklog entries
@@ -57,8 +56,7 @@ enum SubCommand {
     /// Lists all time codes
     Codes,
     /// Synchronize local data store with remote Jira work logs
-    Sync(Synchronisation)
-
+    Sync(Synchronisation),
 }
 
 #[derive(Args)]
@@ -148,8 +146,13 @@ struct Synchronisation {
     /// Default is to sync for the current month, but you may specify an ISO8601 date from which
     /// data should be synchronised
     started: Option<String>,
-    #[arg(name = "issues", short, long, long_help="Limit synchronisation to these issues")]
-    issues: Vec<String>
+    #[arg(
+        name = "issues",
+        short,
+        long,
+        long_help = "Limit synchronisation to these issues"
+    )]
+    issues: Vec<String>,
 }
 
 #[tokio::main]
@@ -173,7 +176,6 @@ async fn main() {
         }
 
         SubCommand::Config(config) => match config {
-
             // List current configuration
             Configuration {
                 list: true,
@@ -236,25 +238,25 @@ async fn main() {
         SubCommand::Codes => {
             let app_config = get_app_config();
             let jira_client = get_jira_client(&app_config);
-            let issues = jira_client.get_issues_for_single_project("TIME".to_string()).await;
+            let issues = jira_client
+                .get_issues_for_single_project("TIME".to_string())
+                .await;
             for issue in issues {
                 println!("{} {}", issue.key, issue.fields.summary);
             }
-        },
+        }
         SubCommand::Sync(synchronisation) => {
             sync_subcommand(synchronisation).await;
         }
     }
 }
 
-async fn sync_subcommand(_sync:Synchronisation) {
-
-}
+async fn sync_subcommand(_sync: Synchronisation) {}
 
 async fn delete_subcommand(delete: &Del) {
     let app_config = get_app_config();
     let jira_client = get_jira_client(&app_config);
-    let journal= app_config.application_data.get_journal();
+    let journal = app_config.application_data.get_journal();
 
     let current_user = jira_client.get_current_user().await;
     let worklog_entry = match jira_client
@@ -291,9 +293,7 @@ async fn delete_subcommand(delete: &Del) {
     {
         Ok(()) => println!("Jira work log id {} deleted", &delete.worklog_id),
         Err(e) => {
-            println!(
-                "An error occurred, worklog entry probably not deleted: {e}"
-            );
+            println!("An error occurred, worklog entry probably not deleted: {e}");
             exit(4);
         }
     }
@@ -330,12 +330,11 @@ async fn status_subcommand(status: Status) {
     eprintln!("Retrieving data for time codes: {}", &keys.join(", "));
 
     let keys_clone = keys.clone();
-    tokio::spawn( async move {
+    tokio::spawn(async move {
         let conf = get_app_config();
         let client = get_jira_client(&conf);
         time_codes_info(&client, &keys_clone).await;
-    }
-    );
+    });
 
     for issue in &keys {
         let mut entries = match jira_client
@@ -349,9 +348,7 @@ async fn status_subcommand(status: Status) {
                     exit(4);
                 }
                 other => {
-                    eprintln!(
-                        "ERROR: Unknown http status code {other} for issue {issue}"
-                    );
+                    eprintln!("ERROR: Unknown http status code {other} for issue {issue}");
                     exit(16);
                 }
             },
@@ -365,9 +362,7 @@ async fn status_subcommand(status: Status) {
                     exit(4);
                 }
                 other => {
-                    eprintln!(
-                        "ERROR: Unknown http status code {other} for issue {issue}",
-                    );
+                    eprintln!("ERROR: Unknown http status code {other} for issue {issue}",);
                     exit(4);
                 }
             },
@@ -379,10 +374,7 @@ async fn status_subcommand(status: Status) {
     issue_and_entry_report(&mut worklog_entries, &mut issue_information);
     println!();
 
-    let issue_keys_by_command_line_order = keys
-        .iter()
-        .map(|k| JiraKey(k.to_owned()))
-        .collect();
+    let issue_keys_by_command_line_order = keys.iter().map(|k| JiraKey(k.to_owned())).collect();
     table_report::table_report(
         &mut worklog_entries,
         &issue_keys_by_command_line_order,
@@ -393,8 +385,12 @@ async fn status_subcommand(status: Status) {
 async fn time_codes_info(jira_client: &JiraClient, keys: &Vec<String>) {
     for key in keys {
         match jira_client.get_issue_by_id_or_key(key).await {
-            Ok(issue) => { println!("{key} {}", issue.fields.summary); }
-            Err(err) => { println!("{key} {err:?}"); }
+            Ok(issue) => {
+                println!("{key} {}", issue.fields.summary);
+            }
+            Err(err) => {
+                println!("{key} {err:?}");
+            }
         }
     }
 }
@@ -422,10 +418,10 @@ async fn add_subcommand(add: &mut Add) {
 
     // If there is only a single duration which does starts with a numeric
     debug!(
-                "Length: {} and durations[0]: {}",
-                add.durations.len(),
-                add.durations[0].chars().next().unwrap()
-            );
+        "Length: {} and durations[0]: {}",
+        add.durations.len(),
+        add.durations[0].chars().next().unwrap()
+    );
 
     let mut added_worklog_items: Vec<journal::Entry> = vec![];
 
@@ -440,7 +436,7 @@ async fn add_subcommand(add: &mut Add) {
             add.started.clone(),
             add.comment.clone(),
         )
-            .await;
+        .await;
         added_worklog_items.push(result);
     } else if !add.durations.is_empty() && add.durations[0].chars().next().unwrap() >= 'A' {
         // One or more durations with day name prefix, like for instance:
@@ -453,7 +449,7 @@ async fn add_subcommand(add: &mut Add) {
             add.durations.clone(),
             add.comment.clone(),
         )
-            .await;
+        .await;
     } else {
         eprintln!(
             "Internal error, unable to parse the durations. Did not understand: {}",
@@ -462,7 +458,11 @@ async fn add_subcommand(add: &mut Add) {
         exit(4);
     }
     // Writes the added worklog items to our local journal
-    if let Err(e) = app_config.application_data.get_journal().add_worklog_entries(added_worklog_items) {
+    if let Err(e) = app_config
+        .application_data
+        .get_journal()
+        .add_worklog_entries(added_worklog_items)
+    {
         eprintln!("Failed to add worklog entries: {e}");
         exit(4);
     }
@@ -470,7 +470,6 @@ async fn add_subcommand(add: &mut Add) {
 
 /// Creates the `JiraClient` instance based on the supplied parameters.
 fn get_jira_client(app_config: &config::ApplicationConfig) -> JiraClient {
-
     match JiraClient::new(
         &app_config.jira.jira_url,
         &app_config.jira.user,
@@ -499,7 +498,6 @@ fn get_app_config() -> config::ApplicationConfig {
     debug!("configuration: '{app_config:?}'");
     app_config
 }
-
 
 fn list_config_and_exit() {
     println!(
@@ -606,14 +604,14 @@ async fn add_multiple_entries(
 async fn add_single_entry(
     jira_client: &JiraClient,
     time_tracking_options: &TimeTrackingConfiguration,
-    issue: String,
+    issue_key: String,
     duration: &str,
     started: Option<String>,
     comment: Option<String>,
 ) -> journal::Entry {
     debug!(
         "add_single_entry({}, {}, {:?}, {:?})",
-        &issue, duration, started, comment
+        &issue_key, duration, started, comment
     );
     // Transforms strings like "1h", "1d", "1w" into number of seconds. Decimal point and full stop supported
     let time_spent_seconds = match date::TimeSpent::from_str(
@@ -630,7 +628,9 @@ async fn add_single_entry(
     debug!("time spent in seconds: {}", time_spent_seconds);
 
     // If a starting point was given, transform it from string to a full DateTime<Local>
-    let starting_point = started.as_ref().map(|dt| date::str_to_date_time(dt).unwrap());
+    let starting_point = started
+        .as_ref()
+        .map(|dt| date::str_to_date_time(dt).unwrap());
     // Optionally calculates the starting point after which it is verified
     let calculated_start = date::calculate_started_time(starting_point, time_spent_seconds)
         .unwrap_or_else(|err: date::Error| {
@@ -639,7 +639,7 @@ async fn add_single_entry(
         });
 
     println!("Using these parameters as input:");
-    println!("\tIssue: {}", issue.as_str());
+    println!("\tIssue: {}", issue_key.as_str());
     println!(
         "\tStarted: {}  ({})",
         calculated_start.to_rfc3339(),
@@ -650,7 +650,7 @@ async fn add_single_entry(
 
     let result = match jira_client
         .insert_worklog(
-            issue.as_str(),
+            issue_key.as_str(),
             calculated_start,
             time_spent_seconds,
             comment.as_deref().unwrap_or(""),
@@ -660,11 +660,11 @@ async fn add_single_entry(
         Ok(result) => result,
         Err(e) => match e {
             StatusCode::NOT_FOUND => {
-                eprintln!("WARNING: Issue {issue} not found");
+                eprintln!("WARNING: Issue {issue_key} not found");
                 exit(4);
             }
             other => {
-                eprintln!("ERROR: Unable to insert worklog entry for issue {issue}, http error code {other}");
+                eprintln!("ERROR: Unable to insert worklog entry for issue {issue_key}, http error code {other}");
                 exit(4);
             }
         },
@@ -677,16 +677,18 @@ async fn add_single_entry(
         &result.timeSpentSeconds,
         &result.comment.as_deref().unwrap_or("")
     );
-    println!("To delete entry: jira_worklog del -i {} -w {}", issue, &result.id);
+    println!(
+        "To delete entry: jira_worklog del -i {} -w {}",
+        issue_key, &result.id
+    );
 
     journal::Entry {
-        issue_key: issue,
+        issue_key,
         worklog_id: result.id,
-        started: calculated_start.with_timezone(&Local),
+        started: result.started.with_timezone(&Local),
         time_spent_seconds: result.timeSpentSeconds,
-        comment
+        comment: result.comment,
     }
-
 }
 
 fn configure_logging(opts: &Opts) {
@@ -712,7 +714,6 @@ fn configure_logging(opts: &Opts) {
     .target(env_logger::Target::Pipe(target))
     .init();
     debug!("Logging started");
-
 }
 
 #[allow(dead_code)]

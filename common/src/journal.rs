@@ -1,5 +1,4 @@
-
-use chrono::{DateTime, Local, };
+use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize, Serializer};
 
 use crate::date;
@@ -15,13 +14,13 @@ pub struct Entry {
     pub started: DateTime<Local>,
     #[serde(serialize_with = "serialize_seconds")]
     pub time_spent_seconds: i32,
-    pub comment: Option<String>
+    pub comment: Option<String>,
 }
 
 pub trait Journal {
     #[allow(clippy::missing_errors_doc)]
     fn add_worklog_entries(&self, worklog: Vec<Entry>) -> anyhow::Result<()>;
-     #[allow(clippy::missing_errors_doc)]
+    #[allow(clippy::missing_errors_doc)]
     fn remove_entry(&self, worklog_id_to_remove: &str) -> anyhow::Result<()>;
     #[allow(clippy::missing_errors_doc)]
     fn find_unique_keys(&self) -> anyhow::Result<Vec<String>>;
