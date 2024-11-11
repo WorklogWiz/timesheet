@@ -3,7 +3,7 @@
   >
   if [ -n "${MR_PRERELEASE+x}" ] && [ ${MR_PRERELEASE} == "yes" ]; then
     cp .releaserc.yml .releaserc.bak
-    yq eval '.branches += {"name": "'"${CI_COMMIT_REF_NAME}"'", "prerelease": "pre.'"${CI_COMMIT_SHA:0:6}"'"}' .releaserc.bak > .releaserc.yml
+    yq eval '.branches += {"name": "'"${CI_COMMIT_REF_NAME}"'", "prerelease": "pre.'"${CI_PIPELINE_ID}"'"}' .releaserc.bak > .releaserc.yml
   fi
 
 .semantic-release-base:
