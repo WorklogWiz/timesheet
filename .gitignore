@@ -4,3 +4,4 @@ target/
 .scannerwork/
 clippy-report.json
 coverage.lcov
+.idea

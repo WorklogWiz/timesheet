@@ -6,7 +6,7 @@
 
 .rust-linux-builder:
   stage: build
-  image: $CI_REGISTRY/autostore/ci/rust:240524-linux
+  image: $CI_REGISTRY/autostore/ci/rust:240906-linux
   tags:
     - linux-docker
   before_script:
@@ -30,7 +30,7 @@
   script:
     - export CARGO_INCREMENTAL=0 RUSTFLAGS='-Cinstrument-coverage'
     - export LLVM_PROFILE_FILE='.cargo-test-%p-%m.profraw'
-    - cargo test --release
+    - cargo test --release --no-fail-fast
     - |
       cargo clippy --release --message-format=json -- -D clippy::pedantic 1> clippy-report.json || clippy_exit=$?
       if [ $clippy_exit -ne 0 ]; then
