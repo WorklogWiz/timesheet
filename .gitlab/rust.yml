@@ -39,20 +39,26 @@
     - grcov .
         --binary-path ./target/release/deps/
         -s .
-        -t lcov
+        -t cobertura
         --branch
         --ignore-not-existing
         --ignore '../*'
         --ignore "/*"
-        -o coverage.lcov
+        -o cobertura.xml
+    - |
+      apk add --no-cache xmlstarlet
+      xmlstarlet sel -t -v "sum(//coverage/@line-rate) div count(//coverage/@line-rate) * 100" \
+        cobertura.xml \
+        | xargs printf "Total coverage: %.1f%%\n"
+  coverage: '/Total coverage: \d+(?:\.\d+)?/'
   artifacts:
     reports:
       coverage_report:
         coverage_format: cobertura
-        path: coverage.lcov
+        path: cobertura.xml
     paths:
       - clippy-report.json
-      - coverage.lcov
+      - cobertura.xml
 
 .sonar-scanner:
   image: sonarsource/sonar-scanner-cli
@@ -65,4 +71,4 @@
       -Dsonar.projectKey=$SONARQUBE_PROJECT_KEY
       -Dsonar.token=$SONARQUBE_TOKEN
       -Dsonar.projectVersion=$SEMANTIC_RELEASE_VERSION
-      -Dcommunity.rust.lcov.reportPaths=coverage.lcov
+      -Dcommunity.rust.cobertura.reportPaths=cobertura.xml
