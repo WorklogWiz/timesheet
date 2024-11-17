@@ -3,6 +3,7 @@ use common::date;
 use jira_lib::{JiraIssue, JiraKey, Worklog};
 use log::debug;
 use std::collections::{BTreeMap, HashMap};
+use local_worklog::LocalWorklog;
 //
 // Prints a report with tables like this:
 //
@@ -20,9 +21,8 @@ use std::collections::{BTreeMap, HashMap};
 //
 
 pub fn table_report(
-    worklog_entries: &mut [Worklog],
+    worklog_entries: &mut [LocalWorklog],
     issue_keys_by_command_line_order: &Vec<JiraKey>,
-    issue_information: &HashMap<String, JiraIssue>,
 ) {
     // Holds the accumulated work hours per date and then per issue key
     let mut daily_totals_for_all_jira_key: BTreeMap<NaiveDate, BTreeMap<JiraKey, i32>> =
@@ -30,18 +30,11 @@ pub fn table_report(
 
     // Iterates all work logs and accumulates them by date, Jira issue key
     for e in worklog_entries.iter() {
-        let issue_key = match issue_information.get(&e.issueId) {
-            None => panic!(
-                "Internal programming error, there is no Jira key for issue {}",
-                &e.issueId
-            ),
-            Some(issue) => &issue.key,
-        };
         let date_entry = daily_totals_for_all_jira_key
             .entry(e.started.date_naive())
             .or_default(); // Inserts new  BTreeMap, which is default
         let _daily_total_for_jira_key = date_entry
-            .entry(issue_key.to_owned())
+            .entry(e.issue_key.to_owned())
             .and_modify(|v| *v += e.timeSpentSeconds)
             .or_insert(e.timeSpentSeconds);
     }

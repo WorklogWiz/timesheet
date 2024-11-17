@@ -363,9 +363,9 @@ async fn status_subcommand(status: Status) {
     let jira_client = get_jira_client(runtime.get_application_configuration());
     let start_after = status.after.map(|s| date::str_to_date_time(&s).unwrap());
 
-    let mut worklog_entries: Vec<Worklog> = Vec::new();
-    let mut issue_information: HashMap<String, JiraIssue> = HashMap::new();
+    let mut worklog_entries: Vec<LocalWorklog> = Vec::new();
 
+    // TODO: augment this code to start by inspecting the local dbms if no keys have been given
     let keys = if status.issues.is_none() {
         match runtime.get_local_worklog_service().find_unique_keys() {
             Ok(issues) => issues,
@@ -378,8 +378,8 @@ async fn status_subcommand(status: Status) {
         status.issues.unwrap()
     };
     if keys.is_empty() {
-        eprintln!("No issues provided on command line and no issues found in local journal");
-        eprintln!("You want to use the -i option and specify issues");
+        eprintln!("No issues provided on command line and no issues found in local database");
+        eprintln!("You want to use the -i option and specify issues or use the 'sync' sub command");
         exit(4);
     }
 
@@ -392,7 +392,14 @@ async fn status_subcommand(status: Status) {
             .get_worklogs_for_current_user(issue, start_after)
             .await
         {
-            Ok(result) => result,
+            Ok(result) => {
+                let mut work_logs = vec![];
+                for worklog in result {
+                    let local_worklog = LocalWorklog::from_worklog(&worklog, JiraKey(issue.to_string()));
+                    work_logs.push(local_worklog);
+                }
+                work_logs
+            },
             Err(e) => match e {
                 StatusCode::NOT_FOUND => {
                     eprintln!("Issue {issue} not found");
@@ -405,32 +412,14 @@ async fn status_subcommand(status: Status) {
             },
         };
         worklog_entries.append(&mut entries);
-        let issue_info = match jira_client.get_issue_by_id_or_key(issue).await {
-            Ok(r) => r,
-            Err(e) => match e {
-                StatusCode::NOT_FOUND => {
-                    eprintln!("Issue {issue} not found");
-                    exit(4);
-                }
-                other => {
-                    eprintln!("ERROR: Unknown http status code {other} for issue {issue}",);
-                    exit(4);
-                }
-            },
-        };
         // Allows us to look up the issue by numeric id to augment the report
-        issue_information.insert(issue_info.id.to_string(), issue_info);
     }
 
-    issue_and_entry_report(&mut worklog_entries, &mut issue_information);
+    issue_and_entry_report(&mut worklog_entries);
     println!();
 
     let issue_keys_by_command_line_order = keys.iter().map(|k| JiraKey(k.to_owned())).collect();
-    table_report::table_report(
-        &mut worklog_entries,
-        &issue_keys_by_command_line_order,
-        &issue_information,
-    );
+    table_report::table_report(&mut worklog_entries, &issue_keys_by_command_line_order);
 }
 
 async fn time_codes_info(jira_client: &JiraClient, keys: &Vec<String>) {
@@ -566,8 +555,7 @@ fn list_config_and_exit() {
 }
 
 fn issue_and_entry_report(
-    status_entries: &mut [Worklog],
-    issue_information: &mut HashMap<String, JiraIssue>,
+    status_entries: &mut [LocalWorklog],
 ) {
     println!(
         "{:8} {:7} {:7} {:<7} {:22} {:10} Comment",
@@ -580,13 +568,9 @@ fn issue_and_entry_report(
     });
 
     for e in status_entries.iter() {
-        let issue_key: &str = match issue_information.get(&e.issueId) {
-            None => "Unknown",
-            Some(issue) => issue.key.value(),
-        };
         println!(
             "{:8} {:7} {:7} {:<7} {:22} {:10} {}",
-            issue_key,
+            e.issue_key,
             e.issueId,
             e.id,
             format!("{}", e.started.weekday()),
