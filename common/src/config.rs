@@ -115,7 +115,7 @@ pub fn local_worklog_dbms_file_name() -> PathBuf {
 pub fn tmp_local_worklog_dbms_file_name() -> anyhow::Result<PathBuf,WorklogError> {
     let tmp_db = tmp_dir().join("test.db");
     if tmp_db.is_file() {
-        let result = remove_file(&tmp_db).with_context(|| {
+        let _result = remove_file(&tmp_db).with_context(|| {
             format!(
                 "Unable to remove database file {}",
                 &tmp_db.to_string_lossy()

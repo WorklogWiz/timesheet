@@ -1,10 +1,10 @@
-use chrono::{DateTime, Local, Utc};
+use chrono::{DateTime, Local};
 use common::WorklogError;
-use jira_lib::{Author, JiraKey, Worklog};
-use rusqlite::{params, Connection, Error};
+use jira_lib::{JiraKey, Worklog};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
-use serde_rusqlite::{from_row, to_params_named};
-use std::path::{Path, PathBuf};
+use serde_rusqlite::to_params_named;
+use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, PartialOrd)]
 #[allow(non_snake_case)]
@@ -124,7 +124,7 @@ impl LocalWorklogService {
     }
 
     pub fn purge_entire_local_worklog(&self) -> Result<(), WorklogError> {
-        let usize = self.connection.execute("delete from worklog", [])?;
+        self.connection.execute("delete from worklog", [])?;
         Ok(())
     }
 
@@ -179,7 +179,7 @@ pub fn create_local_worklog_schema(connection: &Connection) -> Result<(), Worklo
             comment varchar(1024)
     );
     "#;
-    let result = connection.execute(&sql, []).map_err(|e| {
+    connection.execute(&sql, []).map_err(|e| {
         WorklogError::Sql(format!(
             "Unable to create table 'worklog': {}",
             e.to_string()

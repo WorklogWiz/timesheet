@@ -140,7 +140,6 @@ pub async fn migrate_csv_journal_to_local_worklog_dbms(
         .find_unique_keys()
         .map_err(|e| WorklogError::UniqueKeys(e.to_string()))?;
 
-    let handle = tokio::runtime::Handle::current(); // Use the current runtime handle
     debug!("Found these Jira keys in the old journal {:?}", unique_keys);
 
     // For each Jira key

@@ -267,6 +267,7 @@ async fn sync_subcommand(sync: Synchronisation) -> anyhow::Result<()> {
     let start_after = sync.started.map(|s| date::str_to_date_time(&s).unwrap());
 
     let issues = sync.issues.clone();
+    // TODO: find unique keys in local dbms if no issue keys were specified on the command line
     let unique_keys = runtime.get_local_worklog_service().find_unique_keys()?;
 
     println!("Synchronising work logs for these issues:");
