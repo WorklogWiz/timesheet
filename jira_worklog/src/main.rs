@@ -266,21 +266,26 @@ async fn sync_subcommand(sync: Synchronisation) -> anyhow::Result<()> {
     let runtime = ApplicationProductionRuntime::new()?;
     let start_after = sync.started.map(|s| date::str_to_date_time(&s).unwrap());
 
-    let issues = sync.issues.clone();
-    // TODO: find unique keys in local dbms if no issue keys were specified on the command line
-    let unique_keys = runtime.get_local_worklog_service().find_unique_keys()?;
+    let mut issue_keys_to_sync = sync.issues.clone();
+    if issue_keys_to_sync.is_empty() {
+        issue_keys_to_sync = runtime.get_local_worklog_service().find_unique_keys()?;
+    }
+    if issue_keys_to_sync.is_empty() {
+        eprintln!("No issue keys to synchronise supplied on commandline or found in the local dbms");
+        exit(4);
+    }
 
     println!("Synchronising work logs for these issues:");
-    for issue in issues.iter(){
+    for issue in issue_keys_to_sync.iter(){
         println!("\t{}", issue);
     }
     debug!(
         "Synchronising with Jira for these issues {:?}",
-        &issues
+        &issue_keys_to_sync
     );
 
     // Retrieve the work logs for each issue key specified on the command line
-    for issue_key in sync.issues {
+    for issue_key in issue_keys_to_sync {
         let worklogs = runtime
             .get_jira_client()
             .get_worklogs_for_current_user(&issue_key, start_after)
