@@ -5,6 +5,7 @@ use std::{env, io};
 use env_logger::Env;
 use log;
 use log::{debug, Level};
+use rusqlite::Error;
 use thiserror::Error;
 
 pub mod config;
@@ -59,5 +60,17 @@ pub enum WorklogError {
     CreateDir(#[from] io::Error),
     #[error("Unable to retrieve the unique jira keys from the deprecated local journal: {0}")]
     UniqueKeys(String),
+    #[error("Invalid Jira token in application configuration struct")]
+    InvalidJiraToken,
+    #[error("File not found: {0}")]
+    FileNotFound(String),
+}
+
+impl From<rusqlite::Error> for WorklogError {
+    fn from(err: rusqlite::Error) -> Self {
+        match err {
+                  _ =>   WorklogError::Sql(format!("Sqlite error {}", err.to_string())) ,
+        }
+    }
 }
 

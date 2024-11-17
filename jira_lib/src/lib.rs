@@ -150,6 +150,12 @@ pub struct JiraIssuesPage {
 #[derive(Debug, Deserialize, Serialize, Default, Eq, PartialEq, Clone)]
 pub struct JiraKey(pub String);
 
+impl From<String> for JiraKey {
+    fn from(s: String) -> Self {
+        JiraKey(s)
+    }
+}
+
 impl JiraKey {
     #[must_use]
     pub fn value(&self) -> &str {

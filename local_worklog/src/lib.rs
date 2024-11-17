@@ -1,10 +1,10 @@
-use std::path::PathBuf;
 use chrono::{DateTime, Local, Utc};
-use rusqlite::Connection;
-use serde::{Deserialize, Serialize};
-use serde_rusqlite::to_params_named;
 use common::WorklogError;
 use jira_lib::{Author, JiraKey, Worklog};
+use rusqlite::{params, Connection, Error};
+use serde::{Deserialize, Serialize};
+use serde_rusqlite::{from_row, to_params_named};
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, PartialOrd)]
 #[allow(non_snake_case)]
@@ -20,6 +20,23 @@ pub struct LocalWorklog {
     pub issueId: String, // Numeric FK to issue
     pub comment: Option<String>,
 }
+impl LocalWorklog {
+    /// Converts a Jira `Worklog` entry into a `LocalWorklog` entry
+    pub fn from_worklog(worklog: &Worklog, issue_key: JiraKey) -> Self {
+        LocalWorklog {
+            issue_key,
+            id: worklog.id.clone(),
+            author: worklog.author.displayName.clone(),
+            created: worklog.created.with_timezone(&Local),
+            updated: worklog.updated.with_timezone(&Local),
+            started: worklog.started.with_timezone(&Local),
+            timeSpent: worklog.timeSpent.clone(),
+            timeSpentSeconds: worklog.timeSpentSeconds,
+            issueId: worklog.issueId.clone(),
+            comment: worklog.comment.clone(),
+        }
+    }
+}
 
 pub struct LocalWorklogService {
     dbms_path: PathBuf,
@@ -27,13 +44,31 @@ pub struct LocalWorklogService {
 }
 
 impl LocalWorklogService {
+    pub fn remove_entry(&self, wl: &Worklog) -> Result<(), WorklogError> {
+        self.remove_entry_by_worklog_id(wl.id.as_str())?;
+        Ok(())
+    }
+    pub fn remove_entry_by_worklog_id(&self, wl_id: &str) -> Result<(), WorklogError> {
+        self.connection
+            .execute("delete from worklog where id = ?1", params![wl_id])?;
+        Ok(())
+    }
+}
+
+impl LocalWorklogService {
     pub fn new(dbms_path: &PathBuf) -> Result<Self, WorklogError> {
-        let connection = Connection::open(dbms_path.as_path())
-            .map_err(|e| WorklogError::OpenDbms {path: dbms_path.to_string_lossy().into(), reason: e.to_string()})?;
+        let connection =
+            Connection::open(dbms_path.as_path()).map_err(|e| WorklogError::OpenDbms {
+                path: dbms_path.to_string_lossy().into(),
+                reason: e.to_string(),
+            })?;
         // Creates the schema if needed
         create_local_worklog_schema(&connection)?;
 
-        Ok(LocalWorklogService{ connection, dbms_path: dbms_path.to_path_buf()})
+        Ok(LocalWorklogService {
+            connection,
+            dbms_path: dbms_path.to_path_buf(),
+        })
     }
 
     /// Adds a new entry into the local DBMS
@@ -46,13 +81,87 @@ impl LocalWorklogService {
         )",
             to_params_named(&local_worklog).map_err(|e| WorklogError::Sql(format!("Unable to convert parameters: {}", e.to_string())))?.to_slice().as_slice(),
         ).map_err(|e| WorklogError::Sql(format!("Unable to insert into worklog: {}", e.to_string())))?;
-        if i ==0 {
+        if i == 0 {
             panic!("Insert failed");
         }
         Ok(())
     }
 
+    pub fn add_worklog_entries(&self, worklogs: Vec<LocalWorklog>) -> Result<(), WorklogError> {
+        // Prepare the SQL insert statement
+        let mut stmt = self.connection.prepare("INSERT INTO worklog (id, issue_key, issue_id, author, created, updated, started, time_spent, time_spent_seconds, comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")?;
 
+        // Execute the insert statement for each LocalWorklog instance
+        for worklog in worklogs {
+            stmt.execute(params![
+                worklog.id,
+                worklog.issue_key.to_string(),
+                worklog.issueId,
+                worklog.author,
+                worklog.created,
+                worklog.updated,
+                worklog.started,
+                worklog.timeSpent,
+                worklog.timeSpentSeconds,
+                worklog.comment,
+            ])?;
+        }
+        Ok(())
+    }
+
+    pub fn get_count(&self) -> Result<i64, WorklogError> {
+        let mut stmt = self
+            .connection
+            .prepare("select count(*) from worklog")
+            .map_err(|e| {
+                WorklogError::Sql(format!(
+                    "Unable to retrive count(*) from worklog: {}",
+                    e.to_string()
+                ))
+            })?;
+        let count = stmt.query_row([], |row| row.get(0))?;
+        Ok(count)
+    }
+
+    pub fn purge_entire_local_worklog(&self) -> Result<(), WorklogError> {
+        let usize = self.connection.execute("delete from worklog", [])?;
+        Ok(())
+    }
+
+    /// Retrieves the path to the current open database
+    pub fn get_dbms_path(&self) -> &PathBuf {
+        &self.dbms_path
+    }
+
+    pub fn find_unique_keys(&self) -> Result<Vec<String>, WorklogError> {
+        let mut stmt = self
+            .connection
+            .prepare("SELECT DISTINCT(issue_key) FROM worklog")?;
+        let issue_keys: Vec<String> = stmt
+            .query_map([], |row| Ok(row.get::<_, String>(0)?))?
+            .filter_map(Result::ok)
+            .collect();
+        Ok(issue_keys)
+    }
+    pub fn find_worklog_by_id(&self, worklog_id: &str) -> Result<LocalWorklog, WorklogError> {
+        let mut stmt = self.connection.prepare("SELECT issue_key, id, author, created, updated, started, time_spent, time_spent_seconds, issue_id, comment FROM worklog WHERE id = ?1")?;
+        let id: i32 = worklog_id.parse().expect("Invalid number");
+        let worklog = stmt.query_row(params![id], |row| {
+            Ok(LocalWorklog {
+                issue_key: JiraKey(row.get(0)?),
+                id: row.get::<_, i32>(1)?.to_string(),
+                author: row.get(2)?,
+                created: row.get(3)?,
+                updated: row.get(4)?,
+                started: row.get(5)?,
+                timeSpent: row.get(6)?,
+                timeSpentSeconds: row.get(7)?,
+                issueId: row.get(8)?,
+                comment: row.get(9)?,
+            })
+        })?;
+        Ok(worklog)
+    }
 }
 
 pub fn create_local_worklog_schema(connection: &Connection) -> Result<(), WorklogError> {
@@ -70,34 +179,37 @@ pub fn create_local_worklog_schema(connection: &Connection) -> Result<(), Worklo
             comment varchar(1024)
     );
     "#;
-    let result = connection.execute(&sql, [])
-        .map_err(|e| WorklogError::Sql(format!("Unable to create table 'worklog': {}", e.to_string())))?;
+    let result = connection.execute(&sql, []).map_err(|e| {
+        WorklogError::Sql(format!(
+            "Unable to create table 'worklog': {}",
+            e.to_string()
+        ))
+    })?;
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use chrono::Local;
     use common::config;
-    use super::*;
 
     pub fn setup() -> Result<LocalWorklogService, WorklogError> {
         let tmp_db = config::tmp_local_worklog_dbms_file_name()
             .map_err(|e| WorklogError::CreateFile("temp file".to_string()))?;
 
         let local_worklog_service = LocalWorklogService::new(&tmp_db)?;
-        create_local_worklog_schema(&local_worklog_service.connection)?;
         Ok(local_worklog_service)
     }
 
     #[test]
-    fn test_open_dbms() -> Result<(), WorklogError>{
+    fn test_open_dbms() -> Result<(), WorklogError> {
         let local_worklog_service = setup()?;
         Ok(())
     }
 
     #[test]
-    fn test_add_local_worklog_entry() -> Result<(), WorklogError>{
+    fn test_add_local_worklog_entry() -> Result<(), WorklogError> {
         let worklog = LocalWorklog {
             issue_key: JiraKey("ABC-123".to_string()),
             id: "1".to_string(),
@@ -115,4 +227,25 @@ mod tests {
 
         Ok(())
     }
+
+    #[test]
+    fn test_add_local_worklog_entries() -> Result<(), WorklogError> {
+        let worklog = LocalWorklog {
+            issue_key: JiraKey("ABC-123".to_string()),
+            id: "1".to_string(),
+            author: "John Doe".to_string(),
+            created: Local::now(),
+            updated: Local::now(),
+            started: Local::now(),
+            timeSpent: "1h".to_string(),
+            timeSpentSeconds: 3600,
+            issueId: "1001".to_string(),
+            comment: Some("Worked on the issue".to_string()),
+        };
+        let worklog_service = setup()?;
+        worklog_service.add_worklog_entries(vec![worklog])?;
+        let result = worklog_service.find_worklog_by_id("1")?;
+        Ok(())
+    }
+
 }

@@ -6,14 +6,18 @@ use std::fs::File;
 use std::process::exit;
 use std::{env, fmt};
 
-use chrono::{Datelike, Local, TimeZone, Weekday};
+use chrono::{DateTime, Datelike, Days, Local, TimeZone, Weekday};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use env_logger::Env;
 use log::{debug, info};
 use reqwest::StatusCode;
 
-use common::{config, date, journal};
+use common::config::ApplicationConfig;
+use common::journal::Journal;
+use common::{config, date, journal, WorklogError};
 use jira_lib::{JiraClient, JiraIssue, JiraKey, TimeTrackingConfiguration, Worklog};
+use local_worklog::{LocalWorklog, LocalWorklogService};
+use worklog_lib::{ApplicationProductionRuntime, ApplicationRuntime};
 
 mod table_report;
 
@@ -160,6 +164,13 @@ async fn main() {
     println!("Version: {VERSION}");
 
     let opts: Opts = Opts::parse();
+
+    if let Ok(entry_count) = worklog_lib::migrate_csv_journal_to_local_worklog_dbms(ApplicationProductionRuntime::new().unwrap().as_ref(), None).await {
+        debug!("Migrated {} entries from CVS Journal to local work log DBMS", entry_count);
+    } else {
+        info!("No local CSV Journal entries migrated");
+    }
+
     configure_logging(&opts); // Handles the -v option
 
     match opts.subcmd {
@@ -197,7 +208,7 @@ async fn main() {
                     Err(e) => {
                         eprintln!(
                             "ERROR: Unable to load or create configuration file {}, reason:{}",
-                            config::file_name().to_string_lossy(),
+                            config::config_file_name().to_string_lossy(),
                             e
                         );
                         exit(4);
@@ -215,7 +226,7 @@ async fn main() {
                 config::save(&app_config).expect("Unable to save the application config");
                 println!(
                     "Configuration saved to {}",
-                    config::file_name().to_string_lossy()
+                    config::config_file_name().to_string_lossy()
                 );
                 exit(0);
             }
@@ -223,21 +234,21 @@ async fn main() {
                 Ok(()) => {
                     println!(
                         "Configuration file {} removed",
-                        config::file_name().to_string_lossy()
+                        config::config_file_name().to_string_lossy()
                     );
                 }
                 Err(e) => {
                     println!(
                         "ERROR:Unable to remove configuration file {} : {}",
-                        config::file_name().to_string_lossy(),
+                        config::config_file_name().to_string_lossy(),
                         e
                     );
                 }
             },
         }, // end Config
         SubCommand::Codes => {
-            let app_config = get_app_config();
-            let jira_client = get_jira_client(&app_config);
+            let runtime = get_runtime();
+            let jira_client = get_jira_client(&runtime.get_application_configuration());
             let issues = jira_client
                 .get_issues_for_single_project("TIME".to_string())
                 .await;
@@ -246,17 +257,56 @@ async fn main() {
             }
         }
         SubCommand::Sync(synchronisation) => {
-            sync_subcommand(synchronisation).await;
+            let _result = sync_subcommand(synchronisation).await;
         }
     }
 }
 
-async fn sync_subcommand(_sync: Synchronisation) {}
+async fn sync_subcommand(sync: Synchronisation) -> anyhow::Result<()> {
+    let runtime = ApplicationProductionRuntime::new()?;
+    let start_after = sync.started.map(|s| date::str_to_date_time(&s).unwrap());
+
+    let issues = sync.issues.clone();
+    let unique_keys = runtime.get_local_worklog_service().find_unique_keys()?;
+
+    println!("Synchronising work logs for these issues:");
+    for issue in issues.iter(){
+        println!("\t{}", issue);
+    }
+    debug!(
+        "Synchronising with Jira for these issues {:?}",
+        &issues
+    );
+
+    // Retrieve the work logs for each issue key specified on the command line
+    for issue_key in sync.issues {
+        let worklogs = runtime
+            .get_jira_client()
+            .get_worklogs_for_current_user(&issue_key, start_after)
+            .await
+            .map_err(|e| WorklogError::JiraResponse {
+                msg: format!("unable to get worklogs for current user {}", e).to_string(),
+                reason: e.to_string(),
+            })?;
+        // ... and insert them into our local data store
+        for worklog in worklogs {
+            debug!("Removing and adding {:?}", &worklog);
+
+            // Delete the existing one if it exists
+            runtime.get_local_worklog_service().remove_entry(&worklog)?;
+
+            let local_worklog = LocalWorklog::from_worklog(&worklog, JiraKey(issue_key.clone()));
+            let _result = runtime
+                .get_local_worklog_service()
+                .add_entry(local_worklog)?;
+        }
+    }
+    Ok(())
+}
 
 async fn delete_subcommand(delete: &Del) {
-    let app_config = get_app_config();
-    let jira_client = get_jira_client(&app_config);
-    let journal = app_config.application_data.get_journal();
+    let runtime = get_runtime();
+    let jira_client = get_jira_client(&runtime.get_application_configuration());
 
     let current_user = jira_client.get_current_user().await;
     let worklog_entry = match jira_client
@@ -297,21 +347,21 @@ async fn delete_subcommand(delete: &Del) {
             exit(4);
         }
     }
-    journal.remove_entry(delete.worklog_id.as_str()).unwrap();
+    runtime.get_local_worklog_service().remove_entry_by_worklog_id(delete.worklog_id.as_str()).unwrap();
     println!("Removed entry {} from local journal", delete.worklog_id);
 }
 
 async fn status_subcommand(status: Status) {
-    let app_config = get_app_config();
+    let runtime = get_runtime();
 
-    let jira_client = get_jira_client(&app_config);
+    let jira_client = get_jira_client(runtime.get_application_configuration());
     let start_after = status.after.map(|s| date::str_to_date_time(&s).unwrap());
 
     let mut worklog_entries: Vec<Worklog> = Vec::new();
     let mut issue_information: HashMap<String, JiraIssue> = HashMap::new();
 
     let keys = if status.issues.is_none() {
-        match app_config.application_data.get_journal().find_unique_keys() {
+        match runtime.get_local_worklog_service().find_unique_keys() {
             Ok(issues) => issues,
             Err(e) => {
                 eprintln!("Failed to find issues: {e}");
@@ -328,13 +378,8 @@ async fn status_subcommand(status: Status) {
     }
 
     eprintln!("Retrieving data for time codes: {}", &keys.join(", "));
-
     let keys_clone = keys.clone();
-    tokio::spawn(async move {
-        let conf = get_app_config();
-        let client = get_jira_client(&conf);
-        time_codes_info(&client, &keys_clone).await;
-    });
+        time_codes_info(&jira_client, &keys_clone).await;
 
     for issue in &keys {
         let mut entries = match jira_client
@@ -396,8 +441,8 @@ async fn time_codes_info(jira_client: &JiraClient, keys: &Vec<String>) {
 }
 
 async fn add_subcommand(add: &mut Add) {
-    let app_config = get_app_config();
-    let jira_client = get_jira_client(&app_config);
+    let runtime = get_runtime();
+    let jira_client = get_jira_client(&runtime.get_application_configuration());
 
     let time_tracking_options = match jira_client.get_time_tracking_options().await {
         Ok(t) => t,
@@ -423,7 +468,7 @@ async fn add_subcommand(add: &mut Add) {
         add.durations[0].chars().next().unwrap()
     );
 
-    let mut added_worklog_items: Vec<journal::Entry> = vec![];
+    let mut added_worklog_items: Vec<LocalWorklog> = vec![];
 
     if add.durations.len() == 1 && add.durations[0].chars().next().unwrap() <= '9' {
         // Single duration without a "day name" prefix
@@ -458,12 +503,10 @@ async fn add_subcommand(add: &mut Add) {
         exit(4);
     }
     // Writes the added worklog items to our local journal
-    if let Err(e) = app_config
-        .application_data
-        .get_journal()
+    if let Err(e) = runtime.get_local_worklog_service()
         .add_worklog_entries(added_worklog_items)
     {
-        eprintln!("Failed to add worklog entries: {e}");
+        eprintln!("Failed to add worklog entries to local data store: {e}");
         exit(4);
     }
 }
@@ -484,25 +527,24 @@ fn get_jira_client(app_config: &config::ApplicationConfig) -> JiraClient {
 }
 
 /// Retrieves the application configuration file
-fn get_app_config() -> config::ApplicationConfig {
-    let Ok(app_config) = config::load() else {
-        println!(
-            "Config file {} not found.",
-            config::file_name().to_string_lossy()
-        );
-        println!("Create it with: jira_worklog config --user <EMAIL> --token <JIRA_TOKEN>");
-        println!("See 'config' subcommand for more details");
-        exit(4);
-    };
-
-    debug!("configuration: '{app_config:?}'");
-    app_config
+fn get_runtime() -> Box<dyn ApplicationRuntime> {
+    match  ApplicationProductionRuntime::new() {
+        Ok(runtime) => { runtime },
+        Err(err) => {
+            println!(
+                "Unable to load application runtime configuration {}", err
+            );
+            println!("Create it with: jira_worklog config --user <EMAIL> --token <JIRA_TOKEN>");
+            println!("See 'config' subcommand for more details");
+            exit(4);
+        }
+    }
 }
 
 fn list_config_and_exit() {
     println!(
         "Configuration file {}:\n",
-        config::file_name().to_string_lossy()
+        config::config_file_name().to_string_lossy()
     );
 
     match config::load() {
@@ -565,11 +607,11 @@ async fn add_multiple_entries(
     issue: String,
     durations: Vec<String>,
     comment: Option<String>,
-) -> Vec<journal::Entry> {
+) -> Vec<LocalWorklog> {
     // Parses the list of durations in the format XXX:nn,nnU, i.e. Mon:1,5h into Weekday, duration and unit
     let durations: Vec<(Weekday, String)> = date::parse_worklog_durations(durations);
 
-    let mut inserted_work_logs: Vec<journal::Entry> = vec![];
+    let mut inserted_work_logs: Vec<LocalWorklog> = vec![];
 
     for entry in durations {
         let weekday = entry.0;
@@ -608,7 +650,7 @@ async fn add_single_entry(
     duration: &str,
     started: Option<String>,
     comment: Option<String>,
-) -> journal::Entry {
+) -> LocalWorklog {
     debug!(
         "add_single_entry({}, {}, {:?}, {:?})",
         &issue_key, duration, started, comment
@@ -682,13 +724,8 @@ async fn add_single_entry(
         issue_key, &result.id
     );
 
-    journal::Entry {
-        issue_key,
-        worklog_id: result.id,
-        started: result.started.with_timezone(&Local),
-        time_spent_seconds: result.timeSpentSeconds,
-        comment: result.comment,
-    }
+    let local_worklog = LocalWorklog::from_worklog(&result, JiraKey(issue_key));
+    local_worklog
 }
 
 fn configure_logging(opts: &Opts) {
@@ -727,3 +764,4 @@ pub fn print_sum_per_week(sum_per_week: &mut i32, week: u32) {
     println!("{:=<23}", "");
     println!();
 }
+

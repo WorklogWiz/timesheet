@@ -11,7 +11,8 @@ edition = "2021"
 [dependencies]
 jira_lib = { path = "../jira_lib" }
 common = { path = "../common" }
-
+worklog_lib = { path = "../worklog_lib" }
+local_worklog = {path = "../local_worklog"}
 clap = { version = "4.2.2", features = ["derive"] }
 
 chrono = { workspace = true, features = ["serde"] }

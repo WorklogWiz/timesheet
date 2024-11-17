@@ -5,7 +5,6 @@ members = [
     "jira_lib",
     "jira_worklog",
     "jira_worklog_tui",
-    "journal_sql",
     "local_worklog",
     "rust-axum-backend",
     "secure_credentials",

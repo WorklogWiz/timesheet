@@ -5,7 +5,7 @@ use anyhow::Context;
 use anyhow::Result;
 use directories;
 use directories::ProjectDirs;
-use log::debug;
+use log::{debug, error};
 use serde::{Deserialize, Serialize};
 use std::error;
 use std::fs::{self, remove_file, File};
@@ -46,6 +46,8 @@ impl Default for ApplicationData {
 impl ApplicationData {
     #[must_use]
     pub fn get_journal(&self) -> Rc<dyn Journal> {
+        // The trait object is created here and shoved onto the heap with a reference count, before
+        // being returned
         Rc::new(JournalCsv::new(PathBuf::from(&self.journal_data_file_name)))
     }
 }
@@ -80,16 +82,27 @@ impl Jira {
             || self.token == JIRA_TOKEN_STORED_IN_MACOS_KEYCHAIN)
     }
 }
-/// Filename holding the configuration parameters
+/// Filename holding the application configuration parameters
 #[must_use]
-pub fn file_name() -> PathBuf {
+pub fn config_file_name() -> PathBuf {
     project_dirs().preference_dir().into()
 }
+
+/// Creates a temporary configuration file name, which is useful for integration tests
+pub fn tmp_config_file_name() -> PathBuf {
+    tmp_dir().join("worklog_conf.toml").into()
+}
+
+pub const JOURNAL_CSV_FILE_NAME: &'static str = "worklog_journal.csv";
 
 /// Name of CSV file holding the local journal
 #[must_use]
 pub fn journal_data_file_name() -> PathBuf {
-    project_dirs().data_dir().join("worklog_journal.csv")
+    project_dirs().data_dir().join(JOURNAL_CSV_FILE_NAME)
+}
+
+pub fn tmp_journal_data_file_name() -> PathBuf {
+    tmp_dir().join(JOURNAL_CSV_FILE_NAME)
 }
 
 /// Filename of the Sqlite DBMS holding the local repo of work logs
@@ -172,7 +185,7 @@ fn create_configuration_file(cfg: &ApplicationConfig, path: &PathBuf) -> Result<
 
 #[allow(clippy::missing_errors_doc)]
 pub fn load() -> Result<ApplicationConfig, WorklogError> {
-    let config_path = file_name();
+    let config_path = config_file_name();
 
     let mut app_config = read(&config_path)?;
 
@@ -197,24 +210,42 @@ pub fn load() -> Result<ApplicationConfig, WorklogError> {
     Ok(app_config)
 }
 
+pub fn tmp_conf_load() -> Result<ApplicationConfig, WorklogError> {
+    let mut application_config = load()?;
+
+    if application_config.jira.has_valid_jira_token() {
+        let config_file_name = tmp_config_file_name();
+
+        application_config.application_data.journal_data_file_name = tmp_journal_data_file_name().to_string_lossy().to_string();
+        eprintln!("{}", application_config.application_data.journal_data_file_name);
+        application_config.application_data.local_worklog = Some(tmp_local_worklog_dbms_file_name().unwrap().to_string_lossy().to_string());
+        create_configuration_file(&application_config, &config_file_name).expect(format!("Unable to create configuration file {}, with this content: {:?}", config_file_name.to_string_lossy(), application_config).as_str());
+        Ok(application_config)
+    } else {
+        panic!("The Jira token in the application configuration is invalid. You need to create a configuration file with a valid Jira token");
+    }
+}
+
 #[allow(clippy::missing_errors_doc)]
 pub fn save(cfg: &ApplicationConfig) -> Result<()> {
-    create_configuration_file(cfg, &file_name())
+    create_configuration_file(cfg, &config_file_name())
 }
 
 #[allow(clippy::missing_errors_doc)]
 pub fn remove() -> io::Result<()> {
-    fs::remove_file(file_name().as_path())
+    fs::remove_file(config_file_name().as_path())
 }
 
+/// Loads the current application configuration file or creates new one with default values
+/// The location will be the system default as provided by `config_file_name()`
 #[allow(clippy::missing_errors_doc)]
 pub fn load_or_create() -> Result<ApplicationConfig, Box<dyn error::Error>> {
-    let p = file_name();
+    let p = config_file_name();
     if p.exists() && p.is_file() {
         Ok(load()?)
     } else {
         let cfg = ApplicationConfig::default();
-        create_configuration_file(&cfg, &file_name())?;
+        create_configuration_file(&cfg, &config_file_name())?;
         Ok(cfg)
     }
 }
@@ -325,7 +356,7 @@ mod tests {
 
     #[test]
     fn test_write_and_read_toml_file() -> Result<(), Box<dyn error::Error>> {
-        let config_file_path = file_name().clone();
+        let config_file_path = config_file_name().clone();
         let file_name = config_file_path.file_name().unwrap();
 
         let tmp_config_file = std::env::temp_dir().join(file_name);
@@ -377,5 +408,10 @@ mod tests {
 
         app.jira.token = "XXXXX3xFfGF07-XjakdCf_Y7_CNWuvhyHAhCr5sn4Q1kp35oUiN-zrZm9TeZUIllWqrMuPRc4Zcbo-GvCEgPZSjj1oUZkUZBc7vEOJmSxcdq-lEWHkECvyAee64iBboDeYDJZIaiAidS57YJQnWCEAADmGnE5TyDeZqRkdMgvbMvU9Wyd6T05wI=3FF0BE2A".to_string();
         assert!(app.jira.has_valid_jira_token());
+    }
+
+    #[test]
+    fn test_tmp_conf_load() {
+        let config = tmp_conf_load().expect("Unable to create a temporary configuration");
     }
 }

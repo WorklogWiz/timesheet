@@ -102,7 +102,10 @@ impl Journal for JournalCsv {
             worklog_id_to_remove,
             self.journal_file_name.to_string_lossy()
         );
-
+        // Return immediately if the journal file does not exist, i.e. no entries have been written
+        if !PathBuf::from(&self.journal_file_name).try_exists().unwrap() {
+            return Ok(());
+        }
         let file = File::open(&self.journal_file_name).with_context(|| {
             format!(
                 "error opening {}",
@@ -165,6 +168,11 @@ impl Journal for JournalCsv {
 
     #[allow(clippy::missing_errors_doc)]
     fn find_unique_keys(&self) -> anyhow::Result<Vec<String>> {
+        // Return immediately if the journal does not exist, i.e. it is empty
+        if !PathBuf::from(&self.journal_file_name).try_exists().unwrap() {
+            return Ok(vec![]);
+        }
+
         let file = File::open(&self.journal_file_name)?;
         let mut keys: HashSet<String> = HashSet::new();
 
