@@ -13,6 +13,17 @@
     - apk add --no-cache git jq
     - *rewrite-git-url
     - semantic-release-cargo prepare $SEMANTIC_RELEASE_VERSION
+    - |
+      if [ -n "${SCCACHE_SECRET_KEY+x}" ]; then
+        export AWS_SECRET_ACCESS_KEY=${SCCACHE_SECRET_KEY}
+        export RUSTC_WRAPPER=$(which sccache)
+        sccache --start-server
+      fi
+  variables:
+    SCCACHE_BUCKET: rust
+    SCCACHE_REGION: auto
+    SCCACHE_ENDPOINT: https://minio.autostoresystem.com
+    AWS_ACCESS_KEY_ID: dev-user
 
 .rust-windows-builder:
   stage: build
