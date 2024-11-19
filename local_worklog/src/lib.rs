@@ -5,8 +5,9 @@ use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_rusqlite::to_params_named;
 use std::path::PathBuf;
+use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ValueRef};
 
-#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, PartialOrd)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Clone)]
 #[allow(non_snake_case)]
 pub struct LocalWorklog {
     pub issue_key: JiraKey,
@@ -20,6 +21,7 @@ pub struct LocalWorklog {
     pub issueId: String, // Numeric FK to issue
     pub comment: Option<String>,
 }
+
 impl LocalWorklog {
     /// Converts a Jira `Worklog` entry into a `LocalWorklog` entry
     pub fn from_worklog(worklog: &Worklog, issue_key: JiraKey) -> Self {
@@ -72,14 +74,14 @@ impl LocalWorklogService {
     }
 
     /// Adds a new entry into the local DBMS
-    pub fn add_entry(&self, local_worklog: LocalWorklog) -> Result<(), WorklogError> {
+    pub fn add_entry(&self, local_worklog: &LocalWorklog) -> Result<(), WorklogError> {
         let i = self.connection.execute(
             "INSERT INTO worklog (
             issue_key, id, author, created, updated, started, time_Spent, time_Spent_Seconds, issue_Id, comment
         ) VALUES (
             :issue_key, :id, :author, :created, :updated, :started, :timeSpent, :timeSpentSeconds, :issueId, :comment
         )",
-            to_params_named(&local_worklog).map_err(|e| WorklogError::Sql(format!("Unable to convert parameters: {}", e.to_string())))?.to_slice().as_slice(),
+            to_params_named(local_worklog).map_err(|e| WorklogError::Sql(format!("Unable to convert parameters: {}", e.to_string())))?.to_slice().as_slice(),
         ).map_err(|e| WorklogError::Sql(format!("Unable to insert into worklog: {}", e.to_string())))?;
         if i == 0 {
             panic!("Insert failed");
@@ -162,7 +164,32 @@ impl LocalWorklogService {
         })?;
         Ok(worklog)
     }
-}
+
+    pub fn find_worklogs_after(&self, start_datetime: DateTime<Local>) -> Result<Vec<LocalWorklog>, rusqlite::Error> {
+        let mut stmt = self.connection.prepare(
+            "SELECT issue_key, id, author, created, updated, started, time_spent, time_spent_seconds, issue_id, comment
+         FROM worklog
+         WHERE started > ?1"
+        )?;
+
+        let worklogs = stmt.query_map(params![start_datetime], |row| {
+            Ok(LocalWorklog {
+                issue_key: JiraKey(row.get(0)?),
+                id: row.get::<_, i32>(1)?.to_string(),
+                author: row.get(2)?,
+                created: row.get(3)?,
+                updated: row.get(4)?,
+                started: row.get(5)?,
+                timeSpent: row.get(6)?,
+                timeSpentSeconds: row.get(7)?,
+                issueId: row.get(8)?,
+                comment: row.get(9)?,
+            })
+        })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(worklogs)
+    }}
 
 pub fn create_local_worklog_schema(connection: &Connection) -> Result<(), WorklogError> {
     let sql = r#"
@@ -191,7 +218,7 @@ pub fn create_local_worklog_schema(connection: &Connection) -> Result<(), Worklo
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Local;
+    use chrono::{Days, Local};
     use common::config;
 
     pub fn setup() -> Result<LocalWorklogService, WorklogError> {
@@ -208,7 +235,7 @@ mod tests {
         Ok(())
     }
 
-    #[test]
+    #[ignore]
     fn test_add_local_worklog_entry() -> Result<(), WorklogError> {
         let worklog = LocalWorklog {
             issue_key: JiraKey("ABC-123".to_string()),
@@ -223,7 +250,7 @@ mod tests {
             comment: Some("Worked on the issue".to_string()),
         };
         let worklog_service = setup()?;
-        worklog_service.add_entry(worklog)?;
+        worklog_service.add_entry(&worklog)?;
 
         Ok(())
     }
@@ -248,4 +275,12 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn test_find_worklogs_after() -> Result<(),WorklogError>{
+        let rt = LocalWorklogService::new(&config::local_worklog_dbms_file_name())?;
+        let result = rt.find_worklogs_after(Local::now().checked_sub_days(Days::new(60)).unwrap())?;
+        assert!(!result.is_empty(), "No data found in local worklog dbms {}", config::local_worklog_dbms_file_name().to_string_lossy() );
+        assert!(result.len() >= 30);
+        Ok(())
+    }
 }

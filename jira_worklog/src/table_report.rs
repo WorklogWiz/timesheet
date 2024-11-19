@@ -19,14 +19,15 @@ use local_worklog::LocalWorklog;
 // ISO Week 36       36:00    07:30    00:00    43:30
 // ============== ======== ======== ======== ========
 //
-
+// TODO: Modify report to show issues vertically and the days horizontally
 pub fn table_report(
-    worklog_entries: &mut [LocalWorklog],
+    worklog_entries: &[LocalWorklog],
     issue_keys_by_command_line_order: &Vec<JiraKey>,
 ) {
     // Holds the accumulated work hours per date and then per issue key
     let mut daily_totals_for_all_jira_key: BTreeMap<NaiveDate, BTreeMap<JiraKey, i32>> =
         BTreeMap::new();
+    debug!("table_report() :- {:?}", &worklog_entries);
 
     // Iterates all work logs and accumulates them by date, Jira issue key
     for e in worklog_entries.iter() {

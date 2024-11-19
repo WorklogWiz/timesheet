@@ -148,11 +148,17 @@ pub struct JiraIssuesPage {
 }
 /// Represents a Jira issue key like for instance `TIME-148`
 #[derive(Debug, Deserialize, Serialize, Default, Eq, PartialEq, Clone)]
-pub struct JiraKey(pub String);
+pub struct JiraKey(pub String); // TODO: convert to struct to prevent lowercase construction
 
 impl From<String> for JiraKey {
     fn from(s: String) -> Self {
-        JiraKey(s)
+        JiraKey(s.to_uppercase())
+    }
+}
+
+impl From<&str> for JiraKey {
+    fn from(value: &str) -> Self {
+        JiraKey(value.to_uppercase())
     }
 }
 
@@ -177,6 +183,7 @@ impl PartialOrd for JiraKey {
         Some(self.cmp(other))
     }
 }
+
 
 /// Represents a jira issue
 #[derive(Debug, Deserialize, Serialize, Default)]
@@ -884,5 +891,13 @@ mod tests {
         let k1 = JiraKey("TIME-40".to_string());
         let k2 = JiraKey("TIME-40".to_string());
         assert_eq!(&k1, &k2, "Seems JiraKey does not compare by value");
+    }
+
+    #[test]
+    fn test_jira_key_uppercase() {
+        let k1 = JiraKey::from("time-147");
+        assert_eq!(k1.to_string(), "TIME-147".to_string());
+        let k2 = JiraKey("time-147".to_string());
+        assert_eq!(k2.to_string(), "time-147".to_string(),"This should fail!");
     }
 }

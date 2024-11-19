@@ -12,3 +12,4 @@ jira_lib = { path = "../jira_lib"}
 local_worklog = { path = "../local_worklog"}
 anyhow = {workspace = true}
 chrono = {workspace = true}
+env_logger = { workspace = true}

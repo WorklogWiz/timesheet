@@ -113,8 +113,15 @@ pub fn local_worklog_dbms_file_name() -> PathBuf {
 
 /// Creates a temporary local Sqlite DBMS file name, which is quite useful for integration tests
 pub fn tmp_local_worklog_dbms_file_name() -> anyhow::Result<PathBuf,WorklogError> {
-    let tmp_db = tmp_dir().join("test.db");
-    if tmp_db.is_file() {
+    // Create a temporary file with a custom prefix
+    let temp_file = tempfile::Builder::new()
+        .prefix("worklog")
+        .suffix(".db")
+        .tempfile()
+        .expect("Failed to create temporary file");
+
+    let tmp_db = PathBuf::from(temp_file.path());
+    if tmp_db.try_exists()? {
         let _result = remove_file(&tmp_db).with_context(|| {
             format!(
                 "Unable to remove database file {}",

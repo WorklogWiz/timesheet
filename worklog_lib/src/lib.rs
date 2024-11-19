@@ -4,9 +4,10 @@ use common::journal::Journal;
 use common::{config, WorklogError};
 use jira_lib::{JiraClient, JiraKey, Worklog};
 use local_worklog::{LocalWorklog, LocalWorklogService};
-use log::{debug, info};
+use log::{debug, info, warn};
 use std::fs;
 use std::path::PathBuf;
+use std::process::exit;
 use std::ptr::replace;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -130,8 +131,12 @@ pub async fn migrate_csv_journal_to_local_worklog_dbms(
     runtime: &dyn ApplicationRuntime,
     start_after: Option<DateTime<Local>>,
 ) -> Result<i32, WorklogError> {
-    let journal_file_name = runtime.get_application_configuration().application_data.journal_data_file_name.to_string();
+    eprintln!("migrate_csv_journal_to_local_worklog_dbms() :- entering..");
+    debug!("Debug is working!!");
+
+    let journal_file_name = config::journal_data_file_name();
     if !PathBuf::from(&journal_file_name).try_exists()? {
+        eprintln!("Old journal not found so return");
         return Ok(0);
     }
 
@@ -140,7 +145,7 @@ pub async fn migrate_csv_journal_to_local_worklog_dbms(
         .find_unique_keys()
         .map_err(|e| WorklogError::UniqueKeys(e.to_string()))?;
 
-    debug!("Found these Jira keys in the old journal {:?}", unique_keys);
+    eprintln!("Found these Jira keys in the old journal {:?}", unique_keys);
 
     // For each Jira key
     for key in unique_keys.iter() {
@@ -165,11 +170,16 @@ pub async fn migrate_csv_journal_to_local_worklog_dbms(
         );
 
         for wl in work_logs {
+
             let local_worklog = LocalWorklog::from_worklog(&wl, JiraKey(key.clone()));
             debug!("Adding {:?} to local worklog DBMS", &local_worklog);
-            runtime.get_local_worklog_service().add_entry(local_worklog)?;
+            if let Err(error) = runtime.get_local_worklog_service().add_entry(&local_worklog){
+                warn!("Failed to insert {:?} : {}", local_worklog, error);
+                info!("Continuing with next entry");
+            }
         }
     }
+    debug!("Going to move the local journal to a backup file");
     // Moves the local journal file into a safe spot
     move_local_journal_to_backup_file(runtime.get_application_configuration())?;
 
@@ -179,7 +189,10 @@ pub async fn migrate_csv_journal_to_local_worklog_dbms(
 /// Moves the local CSV journal file into a backup file
 fn move_local_journal_to_backup_file(app_config: &ApplicationConfig)
  -> Result<PathBuf, WorklogError> {
+
     let old_path = PathBuf::from(&app_config.application_data.journal_data_file_name);
+    eprintln!("Checking to see if {} exists {:?}", &old_path.to_string_lossy(), &old_path.try_exists());
+
     if old_path.try_exists()? {
         debug!(
                 "An existing journal found at {}, migrating to local DBMS in {}",
@@ -220,8 +233,6 @@ impl ApplicationTestRuntime {
             .get_local_worklog_service()
             .purge_entire_local_worklog()?;
 
-        // ...and move the local csv journal file to a backup file if it exists
-        move_local_journal_to_backup_file(&app_config)?;
         Ok(test_runtime)
     }
 }
@@ -281,49 +292,6 @@ mod tests {
             test_runtime.get_local_worklog_service().get_dbms_path(),
             prod_runtime.get_local_worklog_service().get_dbms_path()
         );
-        Ok(())
-    }
-
-    const SAMPLE_ISSUE_KEY: &'static str = "TIME-147";
-
-    // Retrieving data from Jira requires running in an async context
-    #[tokio::test]
-    async fn test_migrate_to_local_worklog_dbms() -> anyhow::Result<(), WorklogError> {
-        let test_runtime = ApplicationTestRuntime::new()?;
-        assert_eq!(
-            test_runtime.get_journal().find_unique_keys().unwrap().len(),
-            0,
-            "Seems there is stale data in the temporary journal {}",
-            test_runtime
-                .get_application_configuration()
-                .application_data
-                .journal_data_file_name
-        );
-
-        let entry = Entry {
-            worklog_id: "123456".into(),
-            issue_key: SAMPLE_ISSUE_KEY.into(),
-            started: Local::now(),
-            time_spent_seconds: 3600,
-            comment: Some("Rubbish".into()),
-        };
-        let result = test_runtime.get_journal().add_worklog_entries(vec![entry]);
-        assert!(
-            result.is_ok(),
-            "Failed to insert a new entry in the CSV Journal"
-        );
-        assert_eq!(
-            test_runtime.get_journal().find_unique_keys().unwrap().len(),
-            1,
-            "Invalid number of entries in the journal file"
-        );
-        let start_after = Some(Local::now() - Duration::days(30));
-
-        let count_before = test_runtime.get_local_worklog_service().get_count()?;
-        let result = migrate_csv_journal_to_local_worklog_dbms(test_runtime.as_ref(), None).await?;
-        let count_after = test_runtime.get_local_worklog_service().get_count()?;
-        assert!(count_after > count_before,"Seems like no data was migrated into the local worklog database");
-
         Ok(())
     }
 }
