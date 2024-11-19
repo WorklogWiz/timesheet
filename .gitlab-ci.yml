@@ -43,6 +43,9 @@ build:linux:
         | sed 's/ (bin)$//' | while IFS= read -r binary; do
             mkdir -p target/${target}/publish
             cp "$binary" target/${target}/publish
+            if [ -e "${binary}.Dockerfile" ]; then
+              cp "${binary}.Dockerfile" target/${target}/publish
+            fi
           done
       fi
   artifacts:
@@ -86,6 +89,9 @@ build:windows:
             $_ = New-Item -ItemType Directory -Path "target/${target}/publish" -Force
             $binary = $binary -replace ' \(bin\)$', ''
             Copy-Item $binary -Destination "target/${target}/publish"
+            if (Test-Path "${binary}.Dockerfile") {
+              Copy-Item "${binary}.Dockerfile" -Destination "target/${target}/publish"
+            }
         }
       }
   artifacts:
