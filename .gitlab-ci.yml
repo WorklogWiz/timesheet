@@ -16,6 +16,7 @@ workflow:
 
 include:
   - "/.gitlab/rust.yml"
+  - "/.gitlab/docker.yml"
   - "/.gitlab/semantic-release.yml"
 
 pre:next-semantic-release-version:
