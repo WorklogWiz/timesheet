@@ -1,0 +1,69 @@
+.build:docker:
+  tags:
+    - linux-docker-in-docker
+  stage: build
+  parallel:
+    matrix:
+      - ARCH: arm64
+        ALT_ARCH: aarch64
+        OS: linux
+        KIT: musl
+      - ARCH: amd64
+        ALT_ARCH: x86_64
+        OS: linux
+        KIT: musl
+  script:
+    - target=${ALT_ARCH}-unknown-${OS}-${KIT}
+    - echo "Building intermediary image for ${OS}/${ARCH} from target/${target}/publish"
+    - docker login ${CI_REGISTRY} --username ${CI_REGISTRY_USER} --password ${CI_JOB_TOKEN}
+    - docker buildx create --use
+    - |
+      for file in target/${target}/publish/*.Dockerfile; do
+        if [ -e "$file" ]; then
+          base=$(basename $file)
+          image_name=${base%.Dockerfile}
+          mkdir -p images/${image_name}
+          touch images/${image_name}/${OS}-${ARCH}.txt
+          echo "${CI_REGISTRY_IMAGE}/${image_name}-${OS}-${ARCH}:${CI_COMMIT_SHA:0:6}" > images/${image_name}/${OS}-${ARCH}.txt
+          docker buildx build \
+            --provenance=false --platform="${OS}/${ARCH}" --push \
+            -t ${CI_REGISTRY_IMAGE}/${image_name}-${OS}-${ARCH}:${CI_COMMIT_SHA:0:6} \
+            target/${target}/publish -f $file
+        fi
+      done
+  artifacts:
+    paths:
+      - images/*/${OS}-${ARCH}.txt
+
+.release:docker:
+  tags:
+    - linux-docker-in-docker
+  stage: deploy
+  script:
+    - docker login ${CI_REGISTRY} --username ${CI_REGISTRY_USER} --password ${CI_JOB_TOKEN}
+    - |
+      tags=""
+      for image_path in images/*; do
+        if [ -e "$image_path" ]; then
+          for tag_path in $image_path/*; do
+            if [ -e "$image_path" ]; then
+              contents=$(cat $tag_path)
+              tags="${tags} $contents"
+            fi
+          done
+          image=$(basename $image_path)
+          cmd="docker buildx imagetools create \
+            -t $CI_REGISTRY_IMAGE/${image}:$SEMANTIC_RELEASE_VERSION \
+            -t $CI_REGISTRY_IMAGE/${image}:latest \
+            ${tags}"
+          echo ${cmd}
+          $cmd
+        fi
+      done
+      for tag in $tags; do
+        apk add --no-cache curl
+        curl --fail-with-body --location "https://github.com/regclient/regclient/releases/download/v0.7.2/regctl-linux-amd64" > /usr/bin/regctl
+        chmod 755 /usr/bin/regctl
+        regctl registry login ${CI_REGISTRY} -u ${CI_REGISTRY_USER} -p ${CI_JOB_TOKEN}
+        regctl tag rm $tag
+      done

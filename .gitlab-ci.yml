@@ -33,8 +33,8 @@ build:linux:
   script:
     - |
       target=${ARCH}-unknown-${OS}-${KIT}
-      cargo zigbuild --release --target=${target} --message-format=json 1> rustc-messages.json
-      if [ $? -ne 0 ]; then
+      cargo zigbuild --release --target=${target} --message-format=json 1> rustc-messages.json || cargo_err=$?
+      if [ $cargo_err -ne 0 ]; then
         jq -r 'select(.reason == "compiler-message") | .message | select(.level == "error" or .level == "warning") | .rendered' rustc-messages.json
         exit 1
       else
@@ -100,6 +100,23 @@ test:sonar-scanner:
   extends: .sonar-scanner
   needs:
     - test:test-and-coverage
+
+build:docker:
+  extends: .build:docker
+  needs:
+    - build:linux
+  rules:
+    - <<: *push-branch-rule-cfg
+      when: always
+
+release:docker:
+  extends: .release:docker
+  needs:
+    - pre:next-semantic-release-version
+    - build:docker
+  rules:
+    - <<: *push-branch-rule-cfg
+      when: always
 
 post:semantic-release:
   extends: .semantic-release

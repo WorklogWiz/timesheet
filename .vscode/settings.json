@@ -1,16 +1,21 @@
 {
     "cSpell.words": [
         "autostore",
+        "buildx",
         "clippy",
+        "cobertura",
         "grcov",
+        "imagetools",
         "keyscan",
         "lcov",
         "profraw",
         "protoc",
         "releaserc",
         "rustc",
+        "sccache",
         "sonarqube",
         "sonarsource",
+        "xmlstarlet",
         "zigbuild"
     ]
 }
