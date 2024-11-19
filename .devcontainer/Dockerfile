@@ -32,5 +32,5 @@ RUN rustup target add \
         aarch64-unknown-linux-gnu \
         x86_64-pc-windows-gnu
 
-RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/v1.1.5/zsh-in-docker.sh)" -- \
-    -t robbyrussell
+RUN sh -c "$(wget -O- https://raw.githubusercontent.com/deluan/zsh-in-docker/cb315e12a047ba60fc32164bfc071bd858b60e39/zsh-in-docker.sh)" -- \
+        -t robbyrussell
