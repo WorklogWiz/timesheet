@@ -43,6 +43,7 @@
     - export LLVM_PROFILE_FILE='.cargo-test-%p-%m.profraw'
     - cargo test --release --no-fail-fast
     - |
+      clippy_exit=0
       cargo clippy --release --message-format=json -- -D clippy::pedantic 1> clippy-report.json || clippy_exit=$?
       if [ $clippy_exit -ne 0 ]; then
         jq -r 'select(.reason == "compiler-message") | .message | select(.level == "error" or .level == "warning") | .rendered' clippy-report.json
