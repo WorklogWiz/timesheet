@@ -148,34 +148,49 @@ pub struct JiraIssuesPage {
 }
 /// Represents a Jira issue key like for instance `TIME-148`
 #[derive(Debug, Deserialize, Serialize, Default, Eq, PartialEq, Clone)]
-pub struct JiraKey(pub String); // TODO: convert to struct to prevent lowercase construction
+pub struct JiraKey{ value: String }
+
+impl JiraKey {
+    pub fn new(input: &str) -> Self {
+        if input.is_empty() || input.trim().is_empty() {
+            panic!("JiraKey may not be empty!");
+        }
+        JiraKey { value: input.to_uppercase() }
+    }
+    #[must_use]
+    pub fn value(&self) -> &str {
+        &self.value
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.value
+    }
+
+    pub fn len(&self) -> usize {
+        self.value.len()
+    }
+}
 
 impl From<String> for JiraKey {
     fn from(s: String) -> Self {
-        JiraKey(s.to_uppercase())
+        JiraKey::new(&s)
     }
 }
 
 impl From<&str> for JiraKey {
     fn from(value: &str) -> Self {
-        JiraKey(value.to_uppercase())
+        JiraKey::new(value)
     }
 }
 
-impl JiraKey {
-    #[must_use]
-    pub fn value(&self) -> &str {
-        &self.0
-    }
-}
 impl fmt::Display for JiraKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", self.value)
     }
 }
 impl Ord for JiraKey {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.0.to_uppercase().cmp(&other.0.to_uppercase())
+        self.value.cmp(&other.value)
     }
 }
 impl PartialOrd for JiraKey {
@@ -695,7 +710,7 @@ impl JiraClient {
                     let issues: Vec<JiraIssue> = issues
                         .into_iter()
                         .filter(|issue| {
-                            filter.is_empty() || !filter.is_empty() && filter.contains(&issue.key.0)
+                            filter.is_empty() || !filter.is_empty() && filter.contains(&issue.key.value)
                         })
                         .collect();
                     debug!("Filtered {} issues for {}", issues.len(), &project.key);
@@ -710,7 +725,7 @@ impl JiraClient {
                             };
                         debug!(
                             "Issue {} has {} worklog entries",
-                            issue.key.0,
+                            issue.key.value,
                             worklogs.len()
                         );
                         issue.worklogs.append(&mut worklogs);
@@ -888,8 +903,8 @@ mod tests {
 
     #[test]
     fn test_jira_key() {
-        let k1 = JiraKey("TIME-40".to_string());
-        let k2 = JiraKey("TIME-40".to_string());
+        let k1 = JiraKey::from("TIME-40");
+        let k2 = JiraKey::from("TIME-40");
         assert_eq!(&k1, &k2, "Seems JiraKey does not compare by value");
     }
 
@@ -897,7 +912,7 @@ mod tests {
     fn test_jira_key_uppercase() {
         let k1 = JiraKey::from("time-147");
         assert_eq!(k1.to_string(), "TIME-147".to_string());
-        let k2 = JiraKey("time-147".to_string());
-        assert_eq!(k2.to_string(), "time-147".to_string(),"This should fail!");
+        let k2 = JiraKey::from("time-147");
+        assert_eq!(k2.as_str(), "time-147","This should fail!");
     }
 }

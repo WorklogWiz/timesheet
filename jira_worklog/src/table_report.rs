@@ -1,8 +1,8 @@
 use chrono::{Datelike, NaiveDate};
 use common::date;
-use jira_lib::{JiraIssue, JiraKey, Worklog};
+use jira_lib::{ JiraKey};
 use log::debug;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap};
 use local_worklog::LocalWorklog;
 //
 // Prints a report with tables like this:
@@ -30,12 +30,12 @@ pub fn table_report(
     debug!("table_report() :- {:?}", &worklog_entries);
 
     // Iterates all work logs and accumulates them by date, Jira issue key
-    for e in worklog_entries.iter() {
+    for e in worklog_entries {
         let date_entry = daily_totals_for_all_jira_key
             .entry(e.started.date_naive())
             .or_default(); // Inserts new  BTreeMap, which is default
         let _daily_total_for_jira_key = date_entry
-            .entry(e.issue_key.to_owned())
+            .entry(e.issue_key.clone())
             .and_modify(|v| *v += e.timeSpentSeconds)
             .or_insert(e.timeSpentSeconds);
     }

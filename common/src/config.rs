@@ -5,7 +5,7 @@ use anyhow::Context;
 use anyhow::Result;
 use directories;
 use directories::ProjectDirs;
-use log::{debug, error};
+use log::{debug};
 use serde::{Deserialize, Serialize};
 use std::error;
 use std::fs::{self, remove_file, File};

@@ -1,6 +1,5 @@
 //! The Jira worklog command line utility
 //!
-use std::collections::HashMap;
 use std::fmt::Formatter;
 use std::fs::File;
 use std::process::exit;
@@ -12,10 +11,8 @@ use env_logger::Env;
 use log::{debug, info};
 use reqwest::StatusCode;
 
-use common::config::ApplicationConfig;
-use common::journal::Journal;
-use common::{config, date, journal, WorklogError};
-use jira_lib::{JiraClient, JiraIssue, JiraKey, TimeTrackingConfiguration, Worklog};
+use common::{config, date, WorklogError};
+use jira_lib::{JiraClient,  JiraKey, TimeTrackingConfiguration};
 use local_worklog::{LocalWorklog, LocalWorklogService};
 use worklog_lib::{ApplicationProductionRuntime, ApplicationRuntime};
 
@@ -248,7 +245,7 @@ async fn main() {
         }, // end Config
         SubCommand::Codes => {
             let runtime = get_runtime();
-            let jira_client = get_jira_client(&runtime.get_application_configuration());
+            let jira_client = get_jira_client(runtime.get_application_configuration());
             let issues = jira_client
                 .get_issues_for_single_project("TIME".to_string())
                 .await;
@@ -276,8 +273,8 @@ async fn sync_subcommand(sync: Synchronisation) -> anyhow::Result<()> {
     }
 
     println!("Synchronising work logs for these issues:");
-    for issue in issue_keys_to_sync.iter(){
-        println!("\t{}", issue);
+    for issue in &issue_keys_to_sync {
+        println!("\t{issue}");
     }
     debug!(
         "Synchronising with Jira for these issues {:?}",
@@ -291,7 +288,7 @@ async fn sync_subcommand(sync: Synchronisation) -> anyhow::Result<()> {
             .get_worklogs_for_current_user(&issue_key, start_after)
             .await
             .map_err(|e| WorklogError::JiraResponse {
-                msg: format!("unable to get worklogs for current user {}", e).to_string(),
+                msg: format!("unable to get worklogs for current user {e}").to_string(),
                 reason: e.to_string(),
             })?;
         // ... and insert them into our local data store
@@ -304,7 +301,7 @@ async fn sync_subcommand(sync: Synchronisation) -> anyhow::Result<()> {
             }
 
             let local_worklog = LocalWorklog::from_worklog(&worklog, JiraKey::from(issue_key.clone()));
-            let _result = runtime
+            runtime
                 .get_local_worklog_service()
                 .add_entry(&local_worklog)?;
         }
@@ -314,7 +311,7 @@ async fn sync_subcommand(sync: Synchronisation) -> anyhow::Result<()> {
 
 async fn delete_subcommand(delete: &Del) {
     let runtime = get_runtime();
-    let jira_client = get_jira_client(&runtime.get_application_configuration());
+    let jira_client = get_jira_client(runtime.get_application_configuration());
 
     let current_user = jira_client.get_current_user().await;
     let worklog_entry = match jira_client
@@ -358,7 +355,7 @@ async fn delete_subcommand(delete: &Del) {
     runtime.get_local_worklog_service().remove_entry_by_worklog_id(delete.worklog_id.as_str()).unwrap();
     println!("Removed entry {} from local journal", delete.worklog_id);
 }
-
+#[allow(clippy::unused_async)]
 async fn status_subcommand(status: Status) {
     let worklog_service = LocalWorklogService::new(&config::local_worklog_dbms_file_name()).expect("Unable to create the local worklog servicer ");
 
@@ -371,7 +368,7 @@ async fn status_subcommand(status: Status) {
     let worklogs = match worklog_service.find_worklogs_after(start_after.unwrap()){
         Ok(worklogs) => { worklogs}
         Err(e) => {
-            eprintln!("Unable to retrieve worklogs from local work log database");
+            eprintln!("Unable to retrieve worklogs from local work log database {e}");
             exit(4);
         }
     };
@@ -383,20 +380,20 @@ async fn status_subcommand(status: Status) {
     assert_eq!(worklogs.len(), count_before);
 
     // Use whatever order the Jira issue keys are in the database
-    let issue_keys_ordered = worklog_service.find_unique_keys().unwrap().iter().map(|k| JiraKey(k.to_owned())).collect();
+    let issue_keys_ordered = worklog_service.find_unique_keys().unwrap().iter().map(|k| JiraKey::from(k.to_owned())).collect();
     debug!("Reporting in this order: {:?}", issue_keys_ordered);
     table_report::table_report(&worklogs, &issue_keys_ordered);
 }
-
+#[allow(dead_code)]
 async fn fetch_worklog_entries_from_jira_for_key(jira_client: &JiraClient, start_after: Option<DateTime<Local>>, issue_key: &String) -> Vec<LocalWorklog> {
-    let mut entries = match jira_client
+     match jira_client
         .get_worklogs_for_current_user(issue_key, start_after)
         .await
     {
         Ok(result) => {
             let mut work_logs = vec![];
             for worklog in result {
-                let local_worklog = LocalWorklog::from_worklog(&worklog, JiraKey(issue_key.to_string()));
+                let local_worklog = LocalWorklog::from_worklog(&worklog, JiraKey::from(issue_key.as_str()));
                 work_logs.push(local_worklog);
             }
             work_logs
@@ -411,13 +408,12 @@ async fn fetch_worklog_entries_from_jira_for_key(jira_client: &JiraClient, start
                 exit(16);
             }
         },
-    };
-    entries
+    }
 }
 
 async fn add_subcommand(add: &mut Add) {
     let runtime = get_runtime();
-    let jira_client = get_jira_client(&runtime.get_application_configuration());
+    let jira_client = get_jira_client(runtime.get_application_configuration());
 
     let time_tracking_options = match jira_client.get_time_tracking_options().await {
         Ok(t) => t,
@@ -507,8 +503,7 @@ fn get_runtime() -> Box<dyn ApplicationRuntime> {
         Ok(runtime) => { runtime },
         Err(err) => {
             println!(
-                "Unable to load application runtime configuration {}", err
-            );
+                "Unable to load application runtime configuration {err}");
             println!("Create it with: jira_worklog config --user <EMAIL> --token <JIRA_TOKEN>");
             println!("See 'config' subcommand for more details");
             exit(4);
@@ -548,7 +543,7 @@ fn issue_and_entry_report(
             .then_with(|| e.started.cmp(&other.started))
     });
 
-    for e in status_entries.iter() {
+    for e in &status_entries {
         println!(
             "{:8} {:7} {:7} {:<7} {:22} {:10} {}",
             e.issue_key,
@@ -695,8 +690,7 @@ async fn add_single_entry(
         issue_key, &result.id
     );
 
-    let local_worklog = LocalWorklog::from_worklog(&result, JiraKey(issue_key));
-    local_worklog
+     LocalWorklog::from_worklog(&result, JiraKey::from(issue_key))
 }
 
 fn configure_logging(opts: &Opts) {

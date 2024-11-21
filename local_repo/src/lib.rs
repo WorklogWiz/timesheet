@@ -4,8 +4,7 @@ use jira_lib::{JiraKey, Worklog};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use serde_rusqlite::to_params_named;
-use std::path::PathBuf;
-use rusqlite::types::{FromSql, FromSqlError, FromSqlResult, ValueRef};
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Clone)]
 #[allow(non_snake_case)]
@@ -58,9 +57,9 @@ impl LocalWorklogService {
 }
 
 impl LocalWorklogService {
-    pub fn new(dbms_path: &PathBuf) -> Result<Self, WorklogError> {
+    pub fn new(dbms_path: &Path) -> Result<Self, WorklogError> {
         let connection =
-            Connection::open(dbms_path.as_path()).map_err(|e| WorklogError::OpenDbms {
+            Connection::open(dbms_path).map_err(|e| WorklogError::OpenDbms {
                 path: dbms_path.to_string_lossy().into(),
                 reason: e.to_string(),
             })?;
@@ -69,7 +68,7 @@ impl LocalWorklogService {
 
         Ok(LocalWorklogService {
             connection,
-            dbms_path: dbms_path.to_path_buf(),
+            dbms_path: PathBuf::from(dbms_path),
         })
     }
 
@@ -81,8 +80,8 @@ impl LocalWorklogService {
         ) VALUES (
             :issue_key, :id, :author, :created, :updated, :started, :timeSpent, :timeSpentSeconds, :issueId, :comment
         )",
-            to_params_named(local_worklog).map_err(|e| WorklogError::Sql(format!("Unable to convert parameters: {}", e.to_string())))?.to_slice().as_slice(),
-        ).map_err(|e| WorklogError::Sql(format!("Unable to insert into worklog: {}", e.to_string())))?;
+            to_params_named(local_worklog).map_err(|e| WorklogError::Sql(format!("Unable to convert parameters: {}", e)))?.to_slice().as_slice(),
+        ).map_err(|e| WorklogError::Sql(format!("Unable to insert into worklog: {e}")))?;
         if i == 0 {
             panic!("Insert failed");
         }
@@ -118,7 +117,7 @@ impl LocalWorklogService {
             .map_err(|e| {
                 WorklogError::Sql(format!(
                     "Unable to retrive count(*) from worklog: {}",
-                    e.to_string()
+                    e
                 ))
             })?;
         let count = stmt.query_row([], |row| row.get(0))?;
@@ -150,7 +149,7 @@ impl LocalWorklogService {
         let id: i32 = worklog_id.parse().expect("Invalid number");
         let worklog = stmt.query_row(params![id], |row| {
             Ok(LocalWorklog {
-                issue_key: JiraKey(row.get(0)?),
+                issue_key: JiraKey::from(row.get::<_,String>(0)?),
                 id: row.get::<_, i32>(1)?.to_string(),
                 author: row.get(2)?,
                 created: row.get(3)?,
@@ -174,7 +173,7 @@ impl LocalWorklogService {
 
         let worklogs = stmt.query_map(params![start_datetime], |row| {
             Ok(LocalWorklog {
-                issue_key: JiraKey(row.get(0)?),
+                issue_key: JiraKey::from(row.get::<_,String>(0)?),
                 id: row.get::<_, i32>(1)?.to_string(),
                 author: row.get(2)?,
                 created: row.get(3)?,
@@ -206,11 +205,9 @@ pub fn create_local_worklog_schema(connection: &Connection) -> Result<(), Worklo
             comment varchar(1024)
     );
     "#;
-    connection.execute(&sql, []).map_err(|e| {
+    connection.execute(sql, []).map_err(|e| {
         WorklogError::Sql(format!(
-            "Unable to create table 'worklog': {}",
-            e.to_string()
-        ))
+            "Unable to create table 'worklog': {e}"))
     })?;
     Ok(())
 }
@@ -238,7 +235,7 @@ mod tests {
     #[ignore]
     fn test_add_local_worklog_entry() -> Result<(), WorklogError> {
         let worklog = LocalWorklog {
-            issue_key: JiraKey("ABC-123".to_string()),
+            issue_key: JiraKey::from("ABC-123"),
             id: "1".to_string(),
             author: "John Doe".to_string(),
             created: Local::now(),
@@ -258,7 +255,7 @@ mod tests {
     #[test]
     fn test_add_local_worklog_entries() -> Result<(), WorklogError> {
         let worklog = LocalWorklog {
-            issue_key: JiraKey("ABC-123".to_string()),
+            issue_key: JiraKey::from("ABC-123"),
             id: "1".to_string(),
             author: "John Doe".to_string(),
             created: Local::now(),

@@ -5,7 +5,6 @@ use std::{env, io};
 use env_logger::Env;
 use log;
 use log::{debug, Level};
-use rusqlite::Error;
 use thiserror::Error;
 
 pub mod config;

@@ -1,17 +1,13 @@
-use chrono::{DateTime, Days, Local};
+use chrono::{DateTime, Local};
 use common::config::ApplicationConfig;
 use common::journal::Journal;
 use common::{config, WorklogError};
-use jira_lib::{JiraClient, JiraKey, Worklog};
+use jira_lib::{JiraClient, JiraKey};
 use local_worklog::{LocalWorklog, LocalWorklogService};
 use log::{debug, info, warn};
 use std::fs;
 use std::path::PathBuf;
-use std::process::exit;
-use std::ptr::replace;
 use std::rc::Rc;
-use std::sync::Arc;
-use tokio::runtime::{Handle, Runtime};
 
 pub trait ApplicationRuntime {
     fn get_application_configuration(&self) -> &config::ApplicationConfig;
@@ -52,11 +48,12 @@ impl ApplicationProductionRuntime {
         Self::init_runtime(app_config)
     }
 
+    #[allow(dead_code)]
     /// Only available to unit tests, which requires access to a local test database
     fn with_local_worklog_dbms_path(
         local_worklog_dbms_path: &PathBuf,
     ) -> Result<Box<dyn ApplicationRuntime>, WorklogError> {
-        let mut app_config = Self::init_config(Some(local_worklog_dbms_path))?;
+        let  app_config = Self::init_config(Some(local_worklog_dbms_path))?;
         Self::init_runtime(app_config)
     }
 
@@ -71,7 +68,7 @@ impl ApplicationProductionRuntime {
     fn init_config(dbms_path: Option<&PathBuf>) -> Result<ApplicationConfig, WorklogError> {
         let mut app_config = config::load()?;
 
-        // If there is no path to the local_worklog database in the configuration file,
+        // If there is no path to the local_repo database in the configuration file,
         // use the default
         if app_config.application_data.local_worklog.is_none() && dbms_path.is_none() {
             app_config.application_data.local_worklog = Some(
@@ -86,7 +83,7 @@ impl ApplicationProductionRuntime {
             );
             // Always override when there is a supplied database path
             app_config.application_data.local_worklog =
-                Some(dbms_path.unwrap().to_string_lossy().to_string())
+                Some(dbms_path.unwrap().to_string_lossy().to_string());
         }
 
         Ok(app_config)
@@ -127,6 +124,7 @@ impl ApplicationProductionRuntime {
 
 /// Migrates the data from the local journal into the local work log dbms by retrieving the
 /// unique jira keys found in the journal and then downloading them from Jira.
+#[allow(clippy::cast_possible_wrap)]
 pub async fn migrate_csv_journal_to_local_worklog_dbms(
     runtime: &dyn ApplicationRuntime,
     start_after: Option<DateTime<Local>>,
@@ -145,10 +143,10 @@ pub async fn migrate_csv_journal_to_local_worklog_dbms(
         .find_unique_keys()
         .map_err(|e| WorklogError::UniqueKeys(e.to_string()))?;
 
-    eprintln!("Found these Jira keys in the old journal {:?}", unique_keys);
+    eprintln!("Found these Jira keys in the old journal {unique_keys:?}");
 
     // For each Jira key
-    for key in unique_keys.iter() {
+    for key in &unique_keys {
         // Get the work log entries
         let key_copy = key.clone();
         debug!("Retrieving worklogs for current user for key {}", &key);
@@ -171,7 +169,7 @@ pub async fn migrate_csv_journal_to_local_worklog_dbms(
 
         for wl in work_logs {
 
-            let local_worklog = LocalWorklog::from_worklog(&wl, JiraKey(key.clone()));
+            let local_worklog = LocalWorklog::from_worklog(&wl, JiraKey::from(key.clone()));
             debug!("Adding {:?} to local worklog DBMS", &local_worklog);
             if let Err(error) = runtime.get_local_worklog_service().add_entry(&local_worklog){
                 warn!("Failed to insert {:?} : {}", local_worklog, error);
@@ -183,6 +181,7 @@ pub async fn migrate_csv_journal_to_local_worklog_dbms(
     // Moves the local journal file into a safe spot
     move_local_journal_to_backup_file(runtime.get_application_configuration())?;
 
+    #[allow(clippy::cast_possible_truncation)]
     Ok(unique_keys.len() as i32)
 }
 
