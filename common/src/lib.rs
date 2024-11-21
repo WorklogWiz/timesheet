@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use std::{env, io};
 
 use env_logger::Env;
-use log;
 use log::{debug, Level};
 use thiserror::Error;
 
@@ -11,6 +10,10 @@ pub mod config;
 pub mod date;
 pub mod journal;
 
+///
+/// # Panics
+/// If the temp file could not be created
+///
 pub fn configure_logging(log_level: log::Level) {
     let mut tmp_dir = env::temp_dir();
     tmp_dir.push("jira_worklog.log");
@@ -67,9 +70,7 @@ pub enum WorklogError {
 
 impl From<rusqlite::Error> for WorklogError {
     fn from(err: rusqlite::Error) -> Self {
-        match err {
-                  _ =>   WorklogError::Sql(format!("Sqlite error {}", err.to_string())) ,
-        }
+        WorklogError::Sql(format!("Sqlite error {err}"))
     }
 }
 

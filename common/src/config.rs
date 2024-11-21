@@ -89,11 +89,12 @@ pub fn config_file_name() -> PathBuf {
 }
 
 /// Creates a temporary configuration file name, which is useful for integration tests
+#[must_use]
 pub fn tmp_config_file_name() -> PathBuf {
-    tmp_dir().join("worklog_conf.toml").into()
+    tmp_dir().join("worklog_conf.toml")
 }
 
-pub const JOURNAL_CSV_FILE_NAME: &'static str = "worklog_journal.csv";
+pub const JOURNAL_CSV_FILE_NAME: &str = "worklog_journal.csv";
 
 /// Name of CSV file holding the local journal
 #[must_use]
@@ -101,6 +102,7 @@ pub fn journal_data_file_name() -> PathBuf {
     project_dirs().data_dir().join(JOURNAL_CSV_FILE_NAME)
 }
 
+#[must_use]
 pub fn tmp_journal_data_file_name() -> PathBuf {
     tmp_dir().join(JOURNAL_CSV_FILE_NAME)
 }
@@ -112,6 +114,10 @@ pub fn local_worklog_dbms_file_name() -> PathBuf {
 }
 
 /// Creates a temporary local Sqlite DBMS file name, which is quite useful for integration tests
+/// # Errors
+/// When something goes wrong
+/// # Panics
+/// If the temp file could not be created
 pub fn tmp_local_worklog_dbms_file_name() -> anyhow::Result<PathBuf,WorklogError> {
     // Create a temporary file with a custom prefix
     let temp_file = tempfile::Builder::new()
@@ -133,11 +139,12 @@ pub fn tmp_local_worklog_dbms_file_name() -> anyhow::Result<PathBuf,WorklogError
         }
     } else {
         // Create the directory if it doesn't exist
-        fs::create_dir_all(&tmp_db.parent().unwrap()).map_err(|e| WorklogError::CreateDir(e))?;
+        fs::create_dir_all(tmp_db.parent().unwrap()).map_err(WorklogError::CreateDir)?;
     }
     Ok(tmp_db)
 }
 
+#[must_use]
 pub fn tmp_dir() -> PathBuf {
     project_dirs().cache_dir().into()
 }
@@ -159,13 +166,12 @@ fn read(path: &Path) -> Result<ApplicationConfig, WorklogError> {
             path: path.into(),
             source,
         })?;
-    Ok(
         toml::from_str::<ApplicationConfig>(&contents).map_err(|source| {
             WorklogError::TomlParse {
                 path: path.into(),
-                source: source.into(),
+                source,
             }
-        })?,
+        },
     )
 }
 
@@ -206,7 +212,7 @@ pub fn load() -> Result<ApplicationConfig, WorklogError> {
         {
             create_configuration_file(&app_config, &config_path).map_err(|_src_err| {
                 WorklogError::ConfigFileCreation {
-                    path: config_path.into(),
+                    path: config_path,
                 }
             })?;
         }
@@ -217,6 +223,11 @@ pub fn load() -> Result<ApplicationConfig, WorklogError> {
     Ok(app_config)
 }
 
+///
+/// # Errors
+/// Returns an error if something fails
+/// # Panics
+/// If config file could not be created
 pub fn tmp_conf_load() -> Result<ApplicationConfig, WorklogError> {
     let mut application_config = load()?;
 
@@ -226,7 +237,7 @@ pub fn tmp_conf_load() -> Result<ApplicationConfig, WorklogError> {
         application_config.application_data.journal_data_file_name = tmp_journal_data_file_name().to_string_lossy().to_string();
         eprintln!("{}", application_config.application_data.journal_data_file_name);
         application_config.application_data.local_worklog = Some(tmp_local_worklog_dbms_file_name().unwrap().to_string_lossy().to_string());
-        create_configuration_file(&application_config, &config_file_name).expect(format!("Unable to create configuration file {}, with this content: {:?}", config_file_name.to_string_lossy(), application_config).as_str());
+        create_configuration_file(&application_config, &config_file_name).unwrap_or_else(|_| panic!("Unable to create configuration file {}, with this content: {:?}", config_file_name.to_string_lossy(), application_config));
         Ok(application_config)
     } else {
         panic!("The Jira token in the application configuration is invalid. You need to create a configuration file with a valid Jira token");

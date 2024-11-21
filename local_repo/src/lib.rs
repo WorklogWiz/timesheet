@@ -23,6 +23,7 @@ pub struct LocalWorklog {
 
 impl LocalWorklog {
     /// Converts a Jira `Worklog` entry into a `LocalWorklog` entry
+    #[must_use]
     pub fn from_worklog(worklog: &Worklog, issue_key: JiraKey) -> Self {
         LocalWorklog {
             issue_key,
@@ -45,10 +46,16 @@ pub struct LocalWorklogService {
 }
 
 impl LocalWorklogService {
+    ///
+    /// # Errors
+    /// Returns an error something goes wrong
     pub fn remove_entry(&self, wl: &Worklog) -> Result<(), WorklogError> {
         self.remove_entry_by_worklog_id(wl.id.as_str())?;
         Ok(())
     }
+    ///
+    /// # Errors
+    /// Returns an error something goes wrong
     pub fn remove_entry_by_worklog_id(&self, wl_id: &str) -> Result<(), WorklogError> {
         self.connection
             .execute("delete from worklog where id = ?1", params![wl_id])?;
@@ -57,6 +64,9 @@ impl LocalWorklogService {
 }
 
 impl LocalWorklogService {
+    ///
+    /// # Errors
+    /// Returns an error something goes wrong
     pub fn new(dbms_path: &Path) -> Result<Self, WorklogError> {
         let connection =
             Connection::open(dbms_path).map_err(|e| WorklogError::OpenDbms {
@@ -73,21 +83,25 @@ impl LocalWorklogService {
     }
 
     /// Adds a new entry into the local DBMS
+    ///
+    /// # Errors
+    /// Returns an error something goes wrong
     pub fn add_entry(&self, local_worklog: &LocalWorklog) -> Result<(), WorklogError> {
-        let i = self.connection.execute(
+        self.connection.execute(
             "INSERT INTO worklog (
             issue_key, id, author, created, updated, started, time_Spent, time_Spent_Seconds, issue_Id, comment
         ) VALUES (
             :issue_key, :id, :author, :created, :updated, :started, :timeSpent, :timeSpentSeconds, :issueId, :comment
         )",
-            to_params_named(local_worklog).map_err(|e| WorklogError::Sql(format!("Unable to convert parameters: {}", e)))?.to_slice().as_slice(),
+            to_params_named(local_worklog).map_err(|e| WorklogError::Sql(format!("Unable to convert parameters: {e}")))?.to_slice().as_slice(),
         ).map_err(|e| WorklogError::Sql(format!("Unable to insert into worklog: {e}")))?;
-        if i == 0 {
-            panic!("Insert failed");
-        }
+
         Ok(())
     }
 
+    ///
+    /// # Errors
+    /// Returns an error something goes wrong
     pub fn add_worklog_entries(&self, worklogs: Vec<LocalWorklog>) -> Result<(), WorklogError> {
         // Prepare the SQL insert statement
         let mut stmt = self.connection.prepare("INSERT INTO worklog (id, issue_key, issue_id, author, created, updated, started, time_spent, time_spent_seconds, comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")?;
@@ -110,20 +124,24 @@ impl LocalWorklogService {
         Ok(())
     }
 
+    ///
+    /// # Errors
+    /// Returns an error something goes wrong
     pub fn get_count(&self) -> Result<i64, WorklogError> {
         let mut stmt = self
             .connection
             .prepare("select count(*) from worklog")
             .map_err(|e| {
                 WorklogError::Sql(format!(
-                    "Unable to retrive count(*) from worklog: {}",
-                    e
-                ))
+                    "Unable to retrive count(*) from worklog: {e}" ))
             })?;
         let count = stmt.query_row([], |row| row.get(0))?;
         Ok(count)
     }
 
+    ///
+    /// # Errors
+    /// Returns an error something goes wrong
     pub fn purge_entire_local_worklog(&self) -> Result<(), WorklogError> {
         self.connection.execute("delete from worklog", [])?;
         Ok(())
@@ -134,16 +152,26 @@ impl LocalWorklogService {
         &self.dbms_path
     }
 
+    ///
+    /// # Errors
+    /// Returns an error something goes wrong
     pub fn find_unique_keys(&self) -> Result<Vec<String>, WorklogError> {
         let mut stmt = self
             .connection
             .prepare("SELECT DISTINCT(issue_key) FROM worklog")?;
         let issue_keys: Vec<String> = stmt
-            .query_map([], |row| Ok(row.get::<_, String>(0)?))?
+            .query_map([], |row| row.get::<_, String>(0))?
             .filter_map(Result::ok)
             .collect();
         Ok(issue_keys)
     }
+    ///
+    /// # Errors
+    /// Returns an error something goes wrong
+    ///
+    /// # Panics
+    /// If the worklog id could not be parsed into an integer
+    ///
     pub fn find_worklog_by_id(&self, worklog_id: &str) -> Result<LocalWorklog, WorklogError> {
         let mut stmt = self.connection.prepare("SELECT issue_key, id, author, created, updated, started, time_spent, time_spent_seconds, issue_id, comment FROM worklog WHERE id = ?1")?;
         let id: i32 = worklog_id.parse().expect("Invalid number");
@@ -164,6 +192,9 @@ impl LocalWorklogService {
         Ok(worklog)
     }
 
+    ///
+    /// # Errors
+    /// Returns an error something goes wrong
     pub fn find_worklogs_after(&self, start_datetime: DateTime<Local>) -> Result<Vec<LocalWorklog>, rusqlite::Error> {
         let mut stmt = self.connection.prepare(
             "SELECT issue_key, id, author, created, updated, started, time_spent, time_spent_seconds, issue_id, comment
@@ -190,8 +221,11 @@ impl LocalWorklogService {
         Ok(worklogs)
     }}
 
+///
+/// # Errors
+/// Returns an error something goes wrong
 pub fn create_local_worklog_schema(connection: &Connection) -> Result<(), WorklogError> {
-    let sql = r#"
+    let sql = r"
         create table if not exists worklog (
             id integer primary key not null,
             issue_key varchar(32),
@@ -204,7 +238,7 @@ pub fn create_local_worklog_schema(connection: &Connection) -> Result<(), Worklo
             time_spent_seconds intger,
             comment varchar(1024)
     );
-    "#;
+    ";
     connection.execute(sql, []).map_err(|e| {
         WorklogError::Sql(format!(
             "Unable to create table 'worklog': {e}"))

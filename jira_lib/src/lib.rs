@@ -151,10 +151,12 @@ pub struct JiraIssuesPage {
 pub struct JiraKey{ value: String }
 
 impl JiraKey {
+    ///
+    /// # Panics
+    /// If the supplied value is empty
+    #[must_use]
     pub fn new(input: &str) -> Self {
-        if input.is_empty() || input.trim().is_empty() {
-            panic!("JiraKey may not be empty!");
-        }
+        assert!(!(input.is_empty() || input.trim().is_empty()), "JiraKey may not be empty!");
         JiraKey { value: input.to_uppercase() }
     }
     #[must_use]
@@ -162,12 +164,18 @@ impl JiraKey {
         &self.value
     }
 
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.value
     }
 
+    #[must_use]
     pub fn len(&self) -> usize {
         self.value.len()
+    }
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.value.trim().len() == 0
     }
 }
 
@@ -912,7 +920,5 @@ mod tests {
     fn test_jira_key_uppercase() {
         let k1 = JiraKey::from("time-147");
         assert_eq!(k1.to_string(), "TIME-147".to_string());
-        let k2 = JiraKey::from("time-147");
-        assert_eq!(k2.as_str(), "time-147","This should fail!");
     }
 }

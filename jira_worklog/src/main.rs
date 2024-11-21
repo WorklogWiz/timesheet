@@ -14,7 +14,7 @@ use reqwest::StatusCode;
 use common::{config, date, WorklogError};
 use jira_lib::{JiraClient,  JiraKey, TimeTrackingConfiguration};
 use local_worklog::{LocalWorklog, LocalWorklogService};
-use worklog_lib::{ApplicationProductionRuntime, ApplicationRuntime};
+use worklog_lib::{ ApplicationRuntime};
 
 mod table_report;
 
@@ -164,7 +164,7 @@ async fn main() {
 
     configure_logging(&opts); // Handles the -v option
 
-    if let Ok(entry_count) = worklog_lib::migrate_csv_journal_to_local_worklog_dbms(ApplicationProductionRuntime::new().unwrap().as_ref(), None).await {
+    if let Ok(entry_count) = worklog_lib::migrate_csv_journal_to_local_worklog_dbms(&ApplicationRuntime::new_production().unwrap(), None).await {
         debug!("Migrated {} entries from CVS Journal to local work log DBMS", entry_count);
     } else {
         info!("No local CSV Journal entries migrated");
@@ -260,7 +260,7 @@ async fn main() {
 }
 
 async fn sync_subcommand(sync: Synchronisation) -> anyhow::Result<()> {
-    let runtime = ApplicationProductionRuntime::new()?;
+    let runtime = ApplicationRuntime::new_production()?;
     let start_after = sync.started.map(|s| date::str_to_date_time(&s).unwrap());
 
     let mut issue_keys_to_sync = sync.issues.clone();
@@ -498,8 +498,8 @@ fn get_jira_client(app_config: &config::ApplicationConfig) -> JiraClient {
 }
 
 /// Retrieves the application configuration file
-fn get_runtime() -> Box<dyn ApplicationRuntime> {
-    match  ApplicationProductionRuntime::new() {
+fn get_runtime() -> ApplicationRuntime {
+    match  ApplicationRuntime::new_production() {
         Ok(runtime) => { runtime },
         Err(err) => {
             println!(

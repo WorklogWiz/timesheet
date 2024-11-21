@@ -12,7 +12,7 @@ fn test_collect_authors() {
         issues: vec![JiraIssue {
             id: String::new(),
             self_url: String::new(),
-            key: JiraKey(String::new()),
+            key: JiraKey::from("key-1"),
             fields: JiraFields {
                 summary: "Rubbish".to_string(),
                 asset: Option::None,

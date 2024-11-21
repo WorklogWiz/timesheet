@@ -21,6 +21,7 @@ pub struct JournalCsv {
 }
 
 impl JournalCsv {
+    #[must_use]
     pub fn new(journal_file_name: PathBuf) -> Self {
         JournalCsv { journal_file_name }
     }

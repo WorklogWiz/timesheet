@@ -191,6 +191,9 @@ pub fn calculate_started_time(
     }
 }
 
+///
+/// # Errors
+/// Returns error if something fails
 pub fn parse_hour_and_minutes_to_seconds(time_str: &str) -> anyhow::Result<i32> {
     lazy_static! {
         static ref HH_MM_EXPR: Regex = Regex::new(r"^\d{2}:\d{2}$").unwrap();
