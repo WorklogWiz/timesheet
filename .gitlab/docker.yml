@@ -15,7 +15,7 @@
   script:
     - target=${ALT_ARCH}-unknown-${OS}-${KIT}
     - echo "Building intermediary image for ${OS}/${ARCH} from target/${target}/publish"
-    - docker login ${CI_REGISTRY} --username ${CI_REGISTRY_USER} --password ${CI_JOB_TOKEN}
+    - echo ${CI_JOB_TOKEN} | docker login ${CI_REGISTRY} --username ${CI_REGISTRY_USER} --password-stdin
     - docker buildx create --use
     - |
       for file in target/${target}/publish/*.Dockerfile; do
@@ -40,7 +40,7 @@
     - linux-docker-in-docker
   stage: deploy
   script:
-    - docker login ${CI_REGISTRY} --username ${CI_REGISTRY_USER} --password ${CI_JOB_TOKEN}
+    - echo ${CI_JOB_TOKEN} | docker login ${CI_REGISTRY} --username ${CI_REGISTRY_USER} --password-stdin
     - |
       tags=""
       for image_path in images/*; do
