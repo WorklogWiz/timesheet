@@ -9,7 +9,7 @@ extern crate core;
 use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
-use std::fmt::Formatter;
+use std::fmt::{Formatter};
 use std::process::exit;
 use std::time::Instant;
 
@@ -21,12 +21,12 @@ use log::{debug, info};
 use reqwest::header::HeaderMap;
 use reqwest::header::HeaderValue;
 use reqwest::{Client, StatusCode};
-use serde::de::DeserializeOwned;
-use serde::Deserialize;
+use serde::de::{DeserializeOwned, Visitor};
+use serde::{Deserialize, Deserializer};
 use serde::Serialize;
-
+use serde::de::{self};
 use common::config;
-use config::ApplicationConfig;
+use config::AppConfiguration;
 
 /// Holds the ULR of the Jira API to use
 pub const JIRA_URL: &str = "https://autostore.atlassian.net/rest/api/latest";
@@ -147,8 +147,11 @@ pub struct JiraIssuesPage {
     pub issues: Vec<JiraIssue>,
 }
 /// Represents a Jira issue key like for instance `TIME-148`
-#[derive(Debug, Deserialize, Serialize, Default, Eq, PartialEq, Clone)]
-pub struct JiraKey{ value: String }
+#[derive(Debug, Serialize, Default, Eq, PartialEq, Clone)]
+pub struct JiraKey{
+    #[serde(alias = "key")]
+    value: String
+}
 
 impl JiraKey {
     ///
@@ -207,6 +210,55 @@ impl PartialOrd for JiraKey {
     }
 }
 
+impl<'de> Deserialize<'de> for JiraKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct JiraKeyVisitor;
+
+        impl<'de> Visitor<'de> for JiraKeyVisitor {
+            type Value = JiraKey;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a string or a map with a value field")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<JiraKey, E>
+            where
+                E: de::Error,
+            {
+                Ok(JiraKey {
+                    value: value.to_string(),
+                })
+            }
+
+            fn visit_map<M>(self, mut map: M) -> Result<JiraKey, M::Error>
+            where
+                M: de::MapAccess<'de>,
+            {
+                let mut value = None;
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        "value" => {
+                            if value.is_some() {
+                                return Err(de::Error::duplicate_field("value"));
+                            }
+                            value = Some(map.next_value()?);
+                        }
+                        _ => {
+                            let _: de::IgnoredAny = map.next_value()?;
+                        }
+                    }
+                }
+                let value = value.ok_or_else(|| de::Error::missing_field("value"))?;
+                Ok(JiraKey { value })
+            }
+        }
+
+        deserializer.deserialize_any(JiraKeyVisitor)
+    }
+}
 
 /// Represents a jira issue
 #[derive(Debug, Deserialize, Serialize, Default)]
@@ -351,7 +403,7 @@ impl JiraClient {
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn from(cfg: &ApplicationConfig) -> Result<JiraClient, JiraError> {
+    pub fn from(cfg: &AppConfiguration) -> Result<JiraClient, JiraError> {
         JiraClient::new(&cfg.jira.jira_url, &cfg.jira.user, &cfg.jira.token)
     }
 
@@ -920,5 +972,11 @@ mod tests {
     fn test_jira_key_uppercase() {
         let k1 = JiraKey::from("time-147");
         assert_eq!(k1.to_string(), "TIME-147".to_string());
+    }
+
+    #[test]
+    fn test_deserialize_to_jira_issue() {
+        let json_data = include_str!("../tests/issue_time_63.json");
+        let jira_issue: JiraIssue = serde_json::from_str(json_data).unwrap();
     }
 }

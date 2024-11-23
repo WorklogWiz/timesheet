@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize, Serializer};
 
 use crate::date;
 
-pub mod journal_csv;
+pub mod csv;
 
 /// Represents the columns in the journal file, which is CSV formatted
 #[derive(Serialize, Deserialize, PartialEq, Clone)]

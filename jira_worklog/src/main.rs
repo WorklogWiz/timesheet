@@ -16,7 +16,7 @@ use jira_lib::{JiraClient,  JiraKey, TimeTrackingConfiguration};
 use local_worklog::{LocalWorklog, LocalWorklogService};
 use worklog_lib::{ ApplicationRuntime};
 
-mod table_report;
+mod table_report_weekly;
 
 #[derive(Parser)]
 /// Jira worklog utility - add, delete and list jira worklog entries
@@ -164,7 +164,7 @@ async fn main() {
 
     configure_logging(&opts); // Handles the -v option
 
-    if let Ok(entry_count) = worklog_lib::migrate_csv_journal_to_local_worklog_dbms(&ApplicationRuntime::new_production().unwrap(), None).await {
+    if let Ok(entry_count) = worklog_lib::migrate_csv_journal_to_local_worklog_dbms(None).await {
         debug!("Migrated {} entries from CVS Journal to local work log DBMS", entry_count);
     } else {
         info!("No local CSV Journal entries migrated");
@@ -205,7 +205,7 @@ async fn main() {
                     Err(e) => {
                         eprintln!(
                             "ERROR: Unable to load or create configuration file {}, reason:{}",
-                            config::config_file_name().to_string_lossy(),
+                            config::configuration_file_name().to_string_lossy(),
                             e
                         );
                         exit(4);
@@ -223,7 +223,7 @@ async fn main() {
                 config::save(&app_config).expect("Unable to save the application config");
                 println!(
                     "Configuration saved to {}",
-                    config::config_file_name().to_string_lossy()
+                    config::configuration_file_name().to_string_lossy()
                 );
                 exit(0);
             }
@@ -231,13 +231,13 @@ async fn main() {
                 Ok(()) => {
                     println!(
                         "Configuration file {} removed",
-                        config::config_file_name().to_string_lossy()
+                        config::configuration_file_name().to_string_lossy()
                     );
                 }
                 Err(e) => {
                     println!(
                         "ERROR:Unable to remove configuration file {} : {}",
-                        config::config_file_name().to_string_lossy(),
+                        config::configuration_file_name().to_string_lossy(),
                         e
                     );
                 }
@@ -292,6 +292,7 @@ async fn sync_subcommand(sync: Synchronisation) -> anyhow::Result<()> {
                 reason: e.to_string(),
             })?;
         // ... and insert them into our local data store
+        println!("Synchronising {} entries for time code {}", worklogs.len(), &issue_key);
         for worklog in worklogs {
             debug!("Removing and adding {:?}", &worklog);
 
@@ -300,10 +301,15 @@ async fn sync_subcommand(sync: Synchronisation) -> anyhow::Result<()> {
                 debug!("Unable to remove {:?}: {}", &worklog, e);
             }
 
+            debug!("Adding {} {:?}", &issue_key, &worklog );
+
             let local_worklog = LocalWorklog::from_worklog(&worklog, JiraKey::from(issue_key.clone()));
-            runtime
+            if let Err(err) = runtime
                 .get_local_worklog_service()
-                .add_entry(&local_worklog)?;
+                .add_entry(&local_worklog) {
+                eprintln!("Insert into database failed for {:?}, cause: {:?}", &local_worklog, err);
+                exit(4);
+            }
         }
     }
     Ok(())
@@ -379,10 +385,8 @@ async fn status_subcommand(status: Status) {
     println!();
     assert_eq!(worklogs.len(), count_before);
 
-    // Use whatever order the Jira issue keys are in the database
-    let issue_keys_ordered = worklog_service.find_unique_keys().unwrap().iter().map(|k| JiraKey::from(k.to_owned())).collect();
-    debug!("Reporting in this order: {:?}", issue_keys_ordered);
-    table_report::table_report(&worklogs, &issue_keys_ordered);
+
+    table_report_weekly::table_report_weekly(&worklogs);
 }
 #[allow(dead_code)]
 async fn fetch_worklog_entries_from_jira_for_key(jira_client: &JiraClient, start_after: Option<DateTime<Local>>, issue_key: &String) -> Vec<LocalWorklog> {
@@ -483,7 +487,7 @@ async fn add_subcommand(add: &mut Add) {
 }
 
 /// Creates the `JiraClient` instance based on the supplied parameters.
-fn get_jira_client(app_config: &config::ApplicationConfig) -> JiraClient {
+fn get_jira_client(app_config: &config::AppConfiguration) -> JiraClient {
     match JiraClient::new(
         &app_config.jira.jira_url,
         &app_config.jira.user,
@@ -514,7 +518,7 @@ fn get_runtime() -> ApplicationRuntime {
 fn list_config_and_exit() {
     println!(
         "Configuration file {}:\n",
-        config::config_file_name().to_string_lossy()
+        config::configuration_file_name().to_string_lossy()
     );
 
     match config::load() {

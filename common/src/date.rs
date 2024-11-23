@@ -1,14 +1,17 @@
 use anyhow::{bail, Context};
 use chrono::offset::TimeZone;
+use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, Weekday};
 use chrono::{
-    DateTime, Datelike, Days, Duration, Local, Month, NaiveDate, NaiveDateTime, NaiveTime,
-    ParseResult, Weekday,
+    Days, Month, NaiveDateTime, NaiveTime,
+    ParseResult,
 };
+
 use lazy_static::lazy_static;
 use num_traits::cast::FromPrimitive;
 use regex::Regex;
 use std::error;
 use std::fmt::{Display, Formatter};
+use std::ops::{Add, Sub};
 
 /// Parses a date, a time or a datetime, which has been supplied
 /// as:
@@ -193,7 +196,7 @@ pub fn calculate_started_time(
 
 ///
 /// # Errors
-/// Returns error if something fails
+/// Returns error if the input specification could not be parsed
 pub fn parse_hour_and_minutes_to_seconds(time_str: &str) -> anyhow::Result<i32> {
     lazy_static! {
         static ref HH_MM_EXPR: Regex = Regex::new(r"^\d{2}:\d{2}$").unwrap();
@@ -221,6 +224,19 @@ pub fn parse_hour_and_minutes_to_seconds(time_str: &str) -> anyhow::Result<i32> 
     } else {
         bail!("Invalid duration '{}' format. Expected HH:MM", time_str);
     }
+}
+
+#[must_use]
+pub fn first_date_in_week_for(dt: DateTime<Local>) -> DateTime<Local> {
+    let days = dt.weekday().num_days_from_monday();
+    dt.sub(Days::new(u64::from(days)))
+}
+
+#[must_use]
+pub fn last_date_in_week_for(dt: DateTime<Local>) -> DateTime<Local> {
+    // Monday is 0 and Sunday is 6
+    let days = 6 - dt.weekday().num_days_from_monday();
+    dt.add(Days::new(u64::from(days) ))
 }
 
 /// Splits a vector of day names and durations separated by ':' into
@@ -305,7 +321,7 @@ mod tests {
 
     #[test]
     fn test_parse_invalid_hour_and_minutes_to_seconds() {
-        if let Ok(seconds) = parse_hour_and_minutes_to_seconds("1:30") {
+        if let Ok(_seconds) = parse_hour_and_minutes_to_seconds("1:30") {
             panic!("Parsing '1:30' did not fail!");
         }
     }
@@ -513,5 +529,29 @@ mod tests {
         let hour = 45000 / 3600;
         let minutes = (45000 % 3600) / 60;
         println!("{hour}:{minutes}");
+    }
+
+    #[test]
+    fn test_datetimes_in_iso_week() {
+        let now = Local.with_ymd_and_hms(2024, 11, 22, 21, 36, 0);
+        let dates = datetimes_in_iso_week(now.unwrap());
+        assert_eq!(dates[0].weekday(), Weekday::Mon);
+        assert_eq!(dates[0].day(), 18);
+        assert_eq!(dates[6].weekday(), Weekday::Sun);
+        assert_eq!(dates[6].day(), 24);
+    }
+
+    #[test]
+    fn test_first_date_in_week_for() {
+        let now = Local.with_ymd_and_hms(2024, 11, 22, 21, 36, 0);
+        let first_date_in_week = first_date_in_week_for(now.unwrap());
+        assert_eq!(first_date_in_week.date_naive(), NaiveDate::from_ymd_opt(2024, 11, 18).unwrap());
+    }
+
+    #[test]
+    fn test_last_date_in_week_for() {
+        let now = Local.with_ymd_and_hms(2024, 11, 22, 21, 36, 0);
+        let last_date_in_week = last_date_in_week_for(now.unwrap());
+        assert_eq!(last_date_in_week.date_naive(), NaiveDate::from_ymd_opt(2024, 11, 24).unwrap());
     }
 }

@@ -1,5 +1,5 @@
 use chrono::{DateTime, Local};
-use common::config::ApplicationConfig;
+use common::config::AppConfiguration;
 use common::journal::Journal;
 use common::{config, WorklogError};
 use jira_lib::{JiraClient, JiraKey};
@@ -15,7 +15,7 @@ pub enum ApplicationRuntime {
 }
 
 pub struct RuntimeState {
-    app_config: ApplicationConfig,
+    app_config: AppConfiguration,
     jira_client: JiraClient,
     local_worklog_service: local_worklog::LocalWorklogService,
 }
@@ -68,7 +68,7 @@ impl ApplicationRuntime {
             }
         }
     }
-    pub fn get_application_configuration(&self) -> &ApplicationConfig {
+    pub fn get_application_configuration(&self) -> &AppConfiguration {
         &self.get_state().app_config
     }
 
@@ -87,7 +87,7 @@ impl ApplicationRuntime {
 
     /// Load configuration from disk. If there is no local worklog dbms path in the configuration
     /// file, use the one provided or revert to the system default
-    fn init_config(dbms_path: Option<&PathBuf>) -> Result<ApplicationConfig, WorklogError> {
+    fn init_config(dbms_path: Option<&PathBuf>) -> Result<AppConfiguration, WorklogError> {
         let mut app_config = config::load()?;
 
         // If there is no path to the local_repo database in the configuration file,
@@ -114,7 +114,7 @@ impl ApplicationRuntime {
 
     /// Initializes the runtime using the supplied application configuration
     fn init_runtime(
-        app_config: &ApplicationConfig,
+        app_config: &AppConfiguration,
     ) -> Result<(JiraClient, LocalWorklogService), WorklogError> {
         let jira_client = JiraClient::new(
             &app_config.jira.jira_url,
@@ -146,11 +146,8 @@ impl ApplicationRuntime {
 ///
 #[allow(clippy::cast_possible_wrap)]
 pub async fn migrate_csv_journal_to_local_worklog_dbms(
-    runtime: &ApplicationRuntime,
     start_after: Option<DateTime<Local>>,
 ) -> Result<i32, WorklogError> {
-    eprintln!("migrate_csv_journal_to_local_worklog_dbms() :- entering..");
-    debug!("Debug is working!!");
 
     let journal_file_name = config::journal_data_file_name();
     if !PathBuf::from(&journal_file_name).try_exists()? {
@@ -158,6 +155,7 @@ pub async fn migrate_csv_journal_to_local_worklog_dbms(
         return Ok(0);
     }
 
+    let runtime= ApplicationRuntime::new_production()?;
     // Find the unique keys in the local Journal
     let unique_keys = runtime.get_journal()
         .find_unique_keys()
@@ -206,7 +204,7 @@ pub async fn migrate_csv_journal_to_local_worklog_dbms(
 }
 
 /// Moves the local CSV journal file into a backup file
-fn move_local_journal_to_backup_file(app_config: &ApplicationConfig)
+fn move_local_journal_to_backup_file(app_config: &AppConfiguration)
  -> Result<PathBuf, WorklogError> {
 
     let old_path = PathBuf::from(&app_config.application_data.journal_data_file_name);

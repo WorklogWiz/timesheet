@@ -11,4 +11,5 @@ rusqlite = { version = "0", features = ["bundled", "chrono"] }
 common = { path = "../common" }
 serde = { workspace = true}
 jira_lib = { path = "../jira_lib"}
-serde_rusqlite = "0"
+#serde_rusqlite = "0"
+log = "0.4.22"

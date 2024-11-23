@@ -1,4 +1,4 @@
-use crate::journal::journal_csv::JournalCsv;
+use crate::journal::csv::JournalCsv;
 use crate::journal::Journal;
 use crate::WorklogError;
 use anyhow::Context;
@@ -17,7 +17,7 @@ const KEYCHAIN_SERVICE: &str = "com.autostoresystem.jira_worklog";
 /// Application configuration struct
 /// Holds the data we need to connect to Jira, write to the local journal and so on
 #[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
-pub struct ApplicationConfig {
+pub struct AppConfiguration {
     /// Holds the URL to the Jira instance we are running again.
     pub jira: Jira,
     /// This will ensure that the filename is created, even if the Toml file
@@ -84,7 +84,7 @@ impl Jira {
 }
 /// Filename holding the application configuration parameters
 #[must_use]
-pub fn config_file_name() -> PathBuf {
+pub fn configuration_file_name() -> PathBuf {
     project_dirs().preference_dir().into()
 }
 
@@ -155,7 +155,7 @@ fn project_dirs() -> ProjectDirs {
 }
 
 /// Reads the `Application` configuration struct from the supplied TOML file
-fn read(path: &Path) -> Result<ApplicationConfig, WorklogError> {
+fn read(path: &Path) -> Result<AppConfiguration, WorklogError> {
     let mut file = File::open(path).map_err(|source| WorklogError::ApplicationConfig {
         path: path.into(),
         source,
@@ -166,7 +166,7 @@ fn read(path: &Path) -> Result<ApplicationConfig, WorklogError> {
             path: path.into(),
             source,
         })?;
-        toml::from_str::<ApplicationConfig>(&contents).map_err(|source| {
+        toml::from_str::<AppConfiguration>(&contents).map_err(|source| {
             WorklogError::TomlParse {
                 path: path.into(),
                 source,
@@ -175,7 +175,7 @@ fn read(path: &Path) -> Result<ApplicationConfig, WorklogError> {
     )
 }
 
-fn create_configuration_file(cfg: &ApplicationConfig, path: &PathBuf) -> Result<()> {
+fn create_configuration_file(cfg: &AppConfiguration, path: &PathBuf) -> Result<()> {
     let directory = path.parent().unwrap();
     if !directory.try_exists()? {
         fs::create_dir_all(directory)?;
@@ -197,8 +197,8 @@ fn create_configuration_file(cfg: &ApplicationConfig, path: &PathBuf) -> Result<
 }
 
 #[allow(clippy::missing_errors_doc)]
-pub fn load() -> Result<ApplicationConfig, WorklogError> {
-    let config_path = config_file_name();
+pub fn load() -> Result<AppConfiguration, WorklogError> {
+    let config_path = configuration_file_name();
 
     let mut app_config = read(&config_path)?;
 
@@ -228,7 +228,7 @@ pub fn load() -> Result<ApplicationConfig, WorklogError> {
 /// Returns an error if something fails
 /// # Panics
 /// If config file could not be created
-pub fn tmp_conf_load() -> Result<ApplicationConfig, WorklogError> {
+pub fn tmp_conf_load() -> Result<AppConfiguration, WorklogError> {
     let mut application_config = load()?;
 
     if application_config.jira.has_valid_jira_token() {
@@ -245,25 +245,25 @@ pub fn tmp_conf_load() -> Result<ApplicationConfig, WorklogError> {
 }
 
 #[allow(clippy::missing_errors_doc)]
-pub fn save(cfg: &ApplicationConfig) -> Result<()> {
-    create_configuration_file(cfg, &config_file_name())
+pub fn save(cfg: &AppConfiguration) -> Result<()> {
+    create_configuration_file(cfg, &configuration_file_name())
 }
 
 #[allow(clippy::missing_errors_doc)]
 pub fn remove() -> io::Result<()> {
-    fs::remove_file(config_file_name().as_path())
+    fs::remove_file(configuration_file_name().as_path())
 }
 
 /// Loads the current application configuration file or creates new one with default values
 /// The location will be the system default as provided by `config_file_name()`
 #[allow(clippy::missing_errors_doc)]
-pub fn load_or_create() -> Result<ApplicationConfig, Box<dyn error::Error>> {
-    let p = config_file_name();
+pub fn load_or_create() -> Result<AppConfiguration, Box<dyn error::Error>> {
+    let p = configuration_file_name();
     if p.exists() && p.is_file() {
         Ok(load()?)
     } else {
-        let cfg = ApplicationConfig::default();
-        create_configuration_file(&cfg, &config_file_name())?;
+        let cfg = AppConfiguration::default();
+        create_configuration_file(&cfg, &configuration_file_name())?;
         Ok(cfg)
     }
 }
@@ -275,7 +275,7 @@ pub fn load_or_create() -> Result<ApplicationConfig, Box<dyn error::Error>> {
 ///   -a steinar.cook@autostoresystem.com -w secure_token_goes_here
 /// `
 #[cfg(target_os = "macos")]
-fn merge_jira_token_from_keychain(config: &mut ApplicationConfig) {
+fn merge_jira_token_from_keychain(config: &mut AppConfiguration) {
     use log::warn;
 
     debug!("MacOS: retrieving the Jira access token from the keychain ...");
@@ -302,7 +302,7 @@ fn merge_jira_token_from_keychain(config: &mut ApplicationConfig) {
 const JIRA_TOKEN_STORED_IN_MACOS_KEYCHAIN: &str = "*** stored in macos keychain ***";
 
 #[cfg(target_os = "macos")]
-fn migrate_jira_token_into_keychain(app_config: &mut ApplicationConfig) {
+fn migrate_jira_token_into_keychain(app_config: &mut AppConfiguration) {
     match secure_credentials::store_secure_token(
         KEYCHAIN_SERVICE,
         &app_config.jira.user,
@@ -327,8 +327,8 @@ fn migrate_jira_token_into_keychain(app_config: &mut ApplicationConfig) {
 }
 
 #[allow(clippy::missing_errors_doc)]
-pub fn application_config_to_string(cfg: &ApplicationConfig) -> Result<String> {
-    Ok(toml::to_string::<ApplicationConfig>(cfg)?)
+pub fn application_config_to_string(cfg: &AppConfiguration) -> Result<String> {
+    Ok(toml::to_string::<AppConfiguration>(cfg)?)
 }
 
 #[cfg(test)]
@@ -347,7 +347,7 @@ mod tests {
         journal_data_file_name = "journal"
         "#;
 
-        let app_config: ApplicationConfig = toml::from_str(toml_str).unwrap();
+        let app_config: AppConfiguration = toml::from_str(toml_str).unwrap();
         assert_eq!(
             app_config.application_data.journal_data_file_name,
             "journal"
@@ -365,7 +365,7 @@ mod tests {
         token = "rubbish"
         "#;
 
-        let app_config: ApplicationConfig = toml::from_str(toml_str).unwrap();
+        let app_config: AppConfiguration = toml::from_str(toml_str).unwrap();
         assert_eq!(
             app_config.application_data.journal_data_file_name,
             journal_data_file_name().to_string_lossy()
@@ -374,12 +374,12 @@ mod tests {
 
     #[test]
     fn test_write_and_read_toml_file() -> Result<(), Box<dyn error::Error>> {
-        let config_file_path = config_file_name().clone();
+        let config_file_path = configuration_file_name().clone();
         let file_name = config_file_path.file_name().unwrap();
 
         let tmp_config_file = std::env::temp_dir().join(file_name);
 
-        let cfg = ApplicationConfig::default();
+        let cfg = AppConfiguration::default();
         if cfg!(target_os = "macos") {
             assert!(&cfg
                 .application_data
@@ -418,7 +418,7 @@ mod tests {
 
     #[test]
     fn test_jira_valid_token() {
-        let mut app = ApplicationConfig::default();
+        let mut app = AppConfiguration::default();
         assert!(!app.jira.has_valid_jira_token(), "{}", app.jira.token);
 
         app.jira.token = JIRA_TOKEN_STORED_IN_MACOS_KEYCHAIN.to_string();
@@ -430,6 +430,6 @@ mod tests {
 
     #[test]
     fn test_tmp_conf_load() {
-        let config = tmp_conf_load().expect("Unable to create a temporary configuration");
+        let _config = tmp_conf_load().expect("Unable to create a temporary configuration");
     }
 }

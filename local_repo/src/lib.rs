@@ -1,9 +1,9 @@
 use chrono::{DateTime, Local};
 use common::WorklogError;
 use jira_lib::{JiraKey, Worklog};
-use rusqlite::{params, Connection};
+use log::debug;
+use rusqlite::{named_params, params, Connection};
 use serde::{Deserialize, Serialize};
-use serde_rusqlite::to_params_named;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Clone)]
@@ -68,11 +68,10 @@ impl LocalWorklogService {
     /// # Errors
     /// Returns an error something goes wrong
     pub fn new(dbms_path: &Path) -> Result<Self, WorklogError> {
-        let connection =
-            Connection::open(dbms_path).map_err(|e| WorklogError::OpenDbms {
-                path: dbms_path.to_string_lossy().into(),
-                reason: e.to_string(),
-            })?;
+        let connection = Connection::open(dbms_path).map_err(|e| WorklogError::OpenDbms {
+            path: dbms_path.to_string_lossy().into(),
+            reason: e.to_string(),
+        })?;
         // Creates the schema if needed
         create_local_worklog_schema(&connection)?;
 
@@ -87,14 +86,28 @@ impl LocalWorklogService {
     /// # Errors
     /// Returns an error something goes wrong
     pub fn add_entry(&self, local_worklog: &LocalWorklog) -> Result<(), WorklogError> {
-        self.connection.execute(
+        debug!("Adding {:?} to DBMS", &local_worklog);
+
+        let result = self.connection.execute(
             "INSERT INTO worklog (
             issue_key, id, author, created, updated, started, time_Spent, time_Spent_Seconds, issue_Id, comment
         ) VALUES (
             :issue_key, :id, :author, :created, :updated, :started, :timeSpent, :timeSpentSeconds, :issueId, :comment
         )",
-            to_params_named(local_worklog).map_err(|e| WorklogError::Sql(format!("Unable to convert parameters: {e}")))?.to_slice().as_slice(),
-        ).map_err(|e| WorklogError::Sql(format!("Unable to insert into worklog: {e}")))?;
+            named_params! {
+            ":id" : local_worklog.id,
+            ":issue_key": local_worklog.issue_key.to_string(), // No conversion needed
+            ":issueId": local_worklog.issueId,
+            ":author" : local_worklog.author,
+            ":created" : local_worklog.created.to_rfc3339(),
+            ":updated" : local_worklog.updated.to_rfc3339(),
+            ":started" : local_worklog.started.to_rfc3339(),
+            ":timeSpent" : local_worklog.timeSpent,
+            ":timeSpentSeconds": local_worklog.timeSpentSeconds,
+            ":comment" : local_worklog.comment
+            },).map_err(|e| WorklogError::Sql(format!("Unable to insert into worklog: {e}")))?;
+
+        debug!("With result {}", result);
 
         Ok(())
     }
@@ -132,8 +145,7 @@ impl LocalWorklogService {
             .connection
             .prepare("select count(*) from worklog")
             .map_err(|e| {
-                WorklogError::Sql(format!(
-                    "Unable to retrive count(*) from worklog: {e}" ))
+                WorklogError::Sql(format!("Unable to retrive count(*) from worklog: {e}"))
             })?;
         let count = stmt.query_row([], |row| row.get(0))?;
         Ok(count)
@@ -155,10 +167,11 @@ impl LocalWorklogService {
     ///
     /// # Errors
     /// Returns an error something goes wrong
+    // TODO: Replace Jira keys as String with the type JiraKey
     pub fn find_unique_keys(&self) -> Result<Vec<String>, WorklogError> {
         let mut stmt = self
             .connection
-            .prepare("SELECT DISTINCT(issue_key) FROM worklog")?;
+            .prepare("SELECT DISTINCT(issue_key) FROM worklog order by issue_key asc")?;
         let issue_keys: Vec<String> = stmt
             .query_map([], |row| row.get::<_, String>(0))?
             .filter_map(Result::ok)
@@ -177,7 +190,7 @@ impl LocalWorklogService {
         let id: i32 = worklog_id.parse().expect("Invalid number");
         let worklog = stmt.query_row(params![id], |row| {
             Ok(LocalWorklog {
-                issue_key: JiraKey::from(row.get::<_,String>(0)?),
+                issue_key: JiraKey::from(row.get::<_, String>(0)?),
                 id: row.get::<_, i32>(1)?.to_string(),
                 author: row.get(2)?,
                 created: row.get(3)?,
@@ -195,31 +208,36 @@ impl LocalWorklogService {
     ///
     /// # Errors
     /// Returns an error something goes wrong
-    pub fn find_worklogs_after(&self, start_datetime: DateTime<Local>) -> Result<Vec<LocalWorklog>, rusqlite::Error> {
+    pub fn find_worklogs_after(
+        &self,
+        start_datetime: DateTime<Local>,
+    ) -> Result<Vec<LocalWorklog>, rusqlite::Error> {
         let mut stmt = self.connection.prepare(
             "SELECT issue_key, id, author, created, updated, started, time_spent, time_spent_seconds, issue_id, comment
          FROM worklog
          WHERE started > ?1"
         )?;
 
-        let worklogs = stmt.query_map(params![start_datetime], |row| {
-            Ok(LocalWorklog {
-                issue_key: JiraKey::from(row.get::<_,String>(0)?),
-                id: row.get::<_, i32>(1)?.to_string(),
-                author: row.get(2)?,
-                created: row.get(3)?,
-                updated: row.get(4)?,
-                started: row.get(5)?,
-                timeSpent: row.get(6)?,
-                timeSpentSeconds: row.get(7)?,
-                issueId: row.get(8)?,
-                comment: row.get(9)?,
-            })
-        })?
+        let worklogs = stmt
+            .query_map(params![start_datetime], |row| {
+                Ok(LocalWorklog {
+                    issue_key: JiraKey::from(row.get::<_, String>(0)?),
+                    id: row.get::<_, i32>(1)?.to_string(),
+                    author: row.get(2)?,
+                    created: row.get(3)?,
+                    updated: row.get(4)?,
+                    started: row.get(5)?,
+                    timeSpent: row.get(6)?,
+                    timeSpentSeconds: row.get(7)?,
+                    issueId: row.get(8)?,
+                    comment: row.get(9)?,
+                })
+            })?
             .collect::<Result<Vec<_>, _>>()?;
 
         Ok(worklogs)
-    }}
+    }
+}
 
 ///
 /// # Errors
@@ -239,10 +257,9 @@ pub fn create_local_worklog_schema(connection: &Connection) -> Result<(), Worklo
             comment varchar(1024)
     );
     ";
-    connection.execute(sql, []).map_err(|e| {
-        WorklogError::Sql(format!(
-            "Unable to create table 'worklog': {e}"))
-    })?;
+    connection
+        .execute(sql, [])
+        .map_err(|e| WorklogError::Sql(format!("Unable to create table 'worklog': {e}")))?;
     Ok(())
 }
 
@@ -307,10 +324,15 @@ mod tests {
     }
 
     #[test]
-    fn test_find_worklogs_after() -> Result<(),WorklogError>{
+    fn test_find_worklogs_after() -> Result<(), WorklogError> {
         let rt = LocalWorklogService::new(&config::local_worklog_dbms_file_name())?;
-        let result = rt.find_worklogs_after(Local::now().checked_sub_days(Days::new(60)).unwrap())?;
-        assert!(!result.is_empty(), "No data found in local worklog dbms {}", config::local_worklog_dbms_file_name().to_string_lossy() );
+        let result =
+            rt.find_worklogs_after(Local::now().checked_sub_days(Days::new(60)).unwrap())?;
+        assert!(
+            !result.is_empty(),
+            "No data found in local worklog dbms {}",
+            config::local_worklog_dbms_file_name().to_string_lossy()
+        );
         assert!(result.len() >= 30);
         Ok(())
     }
