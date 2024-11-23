@@ -28,8 +28,8 @@ mod table_report_weekly;
 /// respectively.
 /// Duration may use either the period or the comma to separate the fractional part of a number.
 ///
-/// 7,5h or 7.5h both indicate 7 hours and 30 minutes
-/// 7:30 specifies 7 hours and 30 minutes
+/// 7,5h and 7.5h both indicate 7 hours and 30 minutes, and so does 7h30m
+/// 7:30 specifies 7 hours and 30 minutes.
 ///
 ///
 #[command(author, about)] // Read from Cargo.toml
@@ -352,14 +352,18 @@ async fn delete_subcommand(delete: &Del) {
         .delete_worklog(delete.issue_id.clone(), delete.worklog_id.clone())
         .await
     {
-        Ok(()) => println!("Jira work log id {} deleted", &delete.worklog_id),
+        Ok(()) => println!("Jira work log id {} deleted from Jira", &delete.worklog_id),
         Err(e) => {
             println!("An error occurred, worklog entry probably not deleted: {e}");
             exit(4);
         }
     }
-    runtime.get_local_worklog_service().remove_entry_by_worklog_id(delete.worklog_id.as_str()).unwrap();
-    println!("Removed entry {} from local journal", delete.worklog_id);
+    match runtime.get_local_worklog_service().remove_entry_by_worklog_id(delete.worklog_id.as_str()){
+        Ok(()) => {println!("Removed entry {} from local worklog", delete.worklog_id);}
+        Err(err) => {
+            panic!("Deletion from local worklog failed for worklog.id = '{}' : {err}", delete.worklog_id.as_str());
+        }
+    }
 }
 #[allow(clippy::unused_async)]
 async fn status_subcommand(status: Status) {
