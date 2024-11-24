@@ -37,30 +37,38 @@ Moved to autostore-tools repo on Sept 2, 2024
 Here is an overview of the dependencies, extracted from `Cargo.toml`:
 
 ```plantuml
-component core {
+component common {
     component date
     component journal
+    component config
 }
-component config
+
 component jira_lib
 component jira_worklog
 component jira_worklog_tui
-component journal_sql
-component local_worklog
+component local_repo
 component "rust-axum-backend" as Web
 component secure_credentials
+component worklog_lib
 
 jira_worklog ..> jira_lib
-jira_worklog ..> core
-jira_worklog ..> config
+jira_worklog ..> common
+jira_worklog ..> worklog_lib
+jira_worklog ..> local_repo
+
 jira_worklog_tui ..> jira_lib
-jira_worklog_tui ..> core
+jira_worklog_tui ..> common
 
-jira_lib ..> core
-core ..> secure_credentials
+local_repo ..> common
+local_repo ..> jira_lib
 
-local_worklog ..> core
+jira_lib ..> common
 
-config ..> local_worklog
-config ..> journal
+common ..> secure_credentials
+
+worklog_lib ..> common
+worklog_lib ..> jira_lib
+worklog_lib ..> local_repo
+
+
 ```
