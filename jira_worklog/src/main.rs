@@ -259,6 +259,7 @@ async fn main() {
     }
 }
 
+// TODO: Retrieve the information about each time code and save into the local database, which can be used for `status` command
 async fn sync_subcommand(sync: Synchronisation) -> anyhow::Result<()> {
     let runtime = ApplicationRuntime::new_production()?;
     let start_after = sync.started.map(|s| date::str_to_date_time(&s).unwrap());
@@ -369,13 +370,18 @@ async fn delete_subcommand(delete: &Del) {
 async fn status_subcommand(status: Status) {
     let worklog_service = LocalWorklogService::new(&config::local_worklog_dbms_file_name()).expect("Unable to create the local worklog servicer ");
 
+    let mut jira_keys_to_report = Vec::<JiraKey>::new();
+    if let Some(keys) = status.issues {
+        jira_keys_to_report.extend(keys.into_iter().map(JiraKey::from));
+    }
+
     let start_after = match status.after.map(|s| date::str_to_date_time(&s).unwrap()){
         None => { Local::now().checked_sub_days(Days::new(30)) },
         Some(date) => { Some(date) }
     };
 
     eprintln!("Locating local worklog entries after {}", start_after.expect("Must specify --after "));
-    let worklogs = match worklog_service.find_worklogs_after(start_after.unwrap()){
+    let worklogs = match worklog_service.find_worklogs_after(start_after.unwrap(), jira_keys_to_report){
         Ok(worklogs) => { worklogs}
         Err(e) => {
             eprintln!("Unable to retrieve worklogs from local work log database {e}");

@@ -207,21 +207,45 @@ impl LocalWorklogService {
 
     ///
     /// # Errors
-    /// Returns an error something goes wrong
+    /// Returns an error if something goes wrong
     pub fn find_worklogs_after(
         &self,
         start_datetime: DateTime<Local>,
+        keys: Vec<JiraKey>,
     ) -> Result<Vec<LocalWorklog>, rusqlite::Error> {
-        let mut stmt = self.connection.prepare(
+        // Base SQL query
+        let mut sql = String::from(
             "SELECT issue_key, id, author, created, updated, started, time_spent, time_spent_seconds, issue_id, comment
          FROM worklog
-         WHERE started > ?1"
-        )?;
+         WHERE started > ?1",
+        );
 
+        // Dynamic parameters for the query
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(start_datetime.to_rfc3339())];
+
+        // Add `issue_key` filter if `keys` is not empty
+        if !keys.is_empty() {
+            let placeholders = keys.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+            sql.push_str(&format!(" AND issue_key IN ({})", placeholders));
+
+            // Add owned `String` values to the parameters and cast to `Box<dyn ToSql>`
+            params.extend(
+                keys.into_iter()
+                    .map(|key| Box::new(key.value().to_string()) as Box<dyn rusqlite::ToSql>),
+            );
+        }
+
+        // Convert `params` to a slice of `&dyn ToSql`
+        let params_slice: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+
+        // Prepare the query
+        let mut stmt = self.connection.prepare(&sql)?;
+
+        // Execute the query and map results
         let worklogs = stmt
-            .query_map(params![start_datetime], |row| {
+            .query_map(params_slice.as_slice(), |row| {
                 Ok(LocalWorklog {
-                    issue_key: JiraKey::from(row.get::<_, String>(0)?),
+                    issue_key: JiraKey::new(&row.get::<_, String>(0)?),
                     id: row.get::<_, i32>(1)?.to_string(),
                     author: row.get(2)?,
                     created: row.get(3)?,
@@ -237,6 +261,7 @@ impl LocalWorklogService {
 
         Ok(worklogs)
     }
+
 }
 
 ///
@@ -327,7 +352,7 @@ mod tests {
     fn test_find_worklogs_after() -> Result<(), WorklogError> {
         let rt = LocalWorklogService::new(&config::local_worklog_dbms_file_name())?;
         let result =
-            rt.find_worklogs_after(Local::now().checked_sub_days(Days::new(60)).unwrap())?;
+            rt.find_worklogs_after(Local::now().checked_sub_days(Days::new(60)).unwrap(), vec![])?;
         assert!(
             !result.is_empty(),
             "No data found in local worklog dbms {}",
