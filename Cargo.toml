@@ -1,17 +1,20 @@
 
 [workspace]
 members = [
+    "common",
     "jira_lib",
     "jira_worklog",
     "jira_worklog_tui",
+    "local_repo",
     "rust-axum-backend",
     "secure_credentials",
+    "worklog_lib",
 ]
 # Set the resolver to "2" to match the 2021 edition
 resolver = "2"
 
 [workspace.package]
-version = "0.9.2"
+version = "0.9.3"
 
 [workspace.dependencies]
 tokio = { version = "1.*" }
@@ -22,5 +25,6 @@ serde_json = { version = "1" }
 log = "0.4"
 env_logger = "0.11.5"
 anyhow = "1"
-
+thiserror = "2"
+lazy_static = { version = "1.5" }
 

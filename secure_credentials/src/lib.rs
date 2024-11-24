@@ -1,8 +1,8 @@
-use std::error::Error;
 #[cfg(target_os = "macos")]
 use security_framework::os::macos::keychain::SecKeychain;
 #[cfg(target_os = "macos")]
 use security_framework::os::macos::passwords::find_generic_password;
+use std::error::Error;
 
 #[cfg(target_os = "macos")]
 /// Store the `token` into the macos Keychain for the provided `service` with the user account
@@ -14,8 +14,8 @@ use security_framework::os::macos::passwords::find_generic_password;
 pub fn store_secure_token(service: &str, account: &str, token: &str) -> Result<(), Box<dyn Error>> {
     // Add a generic password to the keychain
     SecKeychain::default()?.set_generic_password(
-        service,   // Service name (e.g., website or application identifier)
-        account,   // Account name (e.g., username or email)
+        service,          // Service name (e.g., website or application identifier)
+        account,          // Account name (e.g., username or email)
         token.as_bytes(), // Password or token data
     )?;
 

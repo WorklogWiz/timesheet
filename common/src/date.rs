@@ -1,14 +1,17 @@
-use std::error;
-use std::fmt::{Display, Formatter};
-
-use chrono::{
-    Datelike, DateTime, Days, Duration, Local, Month, NaiveDate, NaiveDateTime, NaiveTime,
-    ParseResult, Weekday,
-};
+use anyhow::{bail, Context};
 use chrono::offset::TimeZone;
+use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, Weekday};
+use chrono::{
+    Days, Month, NaiveDateTime, NaiveTime,
+    ParseResult,
+};
+
 use lazy_static::lazy_static;
 use num_traits::cast::FromPrimitive;
 use regex::Regex;
+use std::error;
+use std::fmt::{Display, Formatter};
+use std::ops::{Add, Sub};
 
 /// Parses a date, a time or a datetime, which has been supplied
 /// as:
@@ -101,7 +104,6 @@ pub struct TimeSpent {
 }
 
 impl TimeSpent {
-
     /// Parses strings describing a duration into `TimeSpent`
     /// Examples:
     ///  - `1,5d2,5h3m`
@@ -125,7 +127,7 @@ impl TimeSpent {
             ).unwrap();
         }
         // Parsing floating point, requires full stop as the decimal point delimiter
-        let s = s.to_lowercase().replace(',',".");
+        let s = s.to_lowercase().replace(',', ".");
         let cap = TIME_SPEC.captures(&s);
         match cap {
             // There seems to be a bug with Captures(), even with no match, it returns Some()
@@ -144,24 +146,20 @@ impl TimeSpent {
                     .map_or(0, |m| m.as_str().parse::<u32>().unwrap_or(0));
 
                 println!("Parsed time: {days} days, {hours} hours, {minutes} minutes");
-                let seconds: f32 =
-                    weeks * working_days_per_week  * work_hours_per_day  * 3600.0
-                        + days * work_hours_per_day * 3600.0
-                        + hours * 3600.0
-                        + minutes as f32 * 60.0;
+                let seconds: f32 = weeks * working_days_per_week * work_hours_per_day * 3600.0
+                    + days * work_hours_per_day * 3600.0
+                    + hours * 3600.0
+                    + minutes as f32 * 60.0;
                 Ok(TimeSpent {
                     time_spent: s.to_lowercase(),
                     time_spent_seconds: seconds as i32,
                 })
             }
-            _ => Err(Error::InvalidInput(format!("Could not obtain duration and unit from '{s}'"))),
+            _ => Err(Error::InvalidInput(format!(
+                "Could not obtain duration and unit from '{s}'"
+            ))),
         }
     }
-}
-
-#[must_use]
-pub fn to_jira_timestamp(datetime: &DateTime<Local>) -> String {
-    datetime.format("%Y-%m-%dT%H:%M:%S.000%z").to_string()
 }
 
 /// Calculates and verifies the starting point. If no starting point is given,
@@ -196,6 +194,51 @@ pub fn calculate_started_time(
     }
 }
 
+///
+/// # Errors
+/// Returns error if the input specification could not be parsed
+pub fn parse_hour_and_minutes_to_seconds(time_str: &str) -> anyhow::Result<i32> {
+    lazy_static! {
+        static ref HH_MM_EXPR: Regex = Regex::new(r"^\d{2}:\d{2}$").unwrap();
+    }
+    if !HH_MM_EXPR.is_match(time_str) {
+        bail!("{} cannot be parsed into hours and minutes", time_str);
+    }
+
+    // Split the string by ':' to get hours and minutes as strings
+    let parts: Vec<&str> = time_str.split(':').collect();
+
+    if parts.len() == 2 {
+        // Parse hours and minutes from the parts
+        let hours: i32 = parts[0]
+            .parse()
+            .with_context(|| format!("Unable to parse hours '{}' to i32", parts[0]))?;
+        let minutes: i32 = parts[1]
+            .parse()
+            .with_context(|| format!("Failed to parse minutes '{}' to i32", parts[1]))?;
+
+        // Convert hours and minutes to seconds
+        let total_seconds = (hours * 3600) + (minutes * 60);
+
+        Ok(total_seconds)
+    } else {
+        bail!("Invalid duration '{}' format. Expected HH:MM", time_str);
+    }
+}
+
+#[must_use]
+pub fn first_date_in_week_for(dt: DateTime<Local>) -> DateTime<Local> {
+    let days = dt.weekday().num_days_from_monday();
+    dt.sub(Days::new(u64::from(days)))
+}
+
+#[must_use]
+pub fn last_date_in_week_for(dt: DateTime<Local>) -> DateTime<Local> {
+    // Monday is 0 and Sunday is 6
+    let days = 6 - dt.weekday().num_days_from_monday();
+    dt.add(Days::new(u64::from(days) ))
+}
+
 /// Splits a vector of day names and durations separated by ':' into
 /// a vector of tuples, holding the Weekday and the duration
 /// Given for instance \["mon:1,5h"\] the resulting vector will be
@@ -203,7 +246,6 @@ pub fn calculate_started_time(
 #[allow(clippy::missing_panics_doc)]
 #[must_use]
 pub fn parse_worklog_durations(entries: Vec<String>) -> Vec<(Weekday, String)> {
-
     let mut result: Vec<(Weekday, String)> = Vec::new();
 
     // Iterates the pattern and extracts tuples of Weekday names and duration
@@ -272,6 +314,19 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_parse_hour_and_minutes_to_seconds() {
+        let seconds = parse_hour_and_minutes_to_seconds("01:30").unwrap();
+        assert_eq!(seconds, 5400);
+    }
+
+    #[test]
+    fn test_parse_invalid_hour_and_minutes_to_seconds() {
+        if let Ok(_seconds) = parse_hour_and_minutes_to_seconds("1:30") {
+            panic!("Parsing '1:30' did not fail!");
+        }
+    }
+
+    #[test]
     fn test_as_date_time() {
         let dt = NaiveDateTime::parse_from_str("2023-05-25T08:00", "%Y-%m-%dT%H:%M").unwrap();
         assert_eq!(
@@ -294,7 +349,6 @@ mod tests {
             .unwrap();
         assert_eq!(str_to_date_time("2023-05-25T20:59").unwrap(), dt);
     }
-
 
     #[test]
     fn test_time_spent() {
@@ -331,27 +385,26 @@ mod tests {
                 time_spent: "7h30m".to_string(),
                 time_spent_seconds: 27000
             },
-            TimeSpent::from_str("7h30m", 7.5, 5.0).unwrap());
+            TimeSpent::from_str("7h30m", 7.5, 5.0).unwrap()
+        );
 
         assert_eq!(
             TimeSpent {
                 time_spent: "1.5w0.5d7.5h30m".to_string(),
                 time_spent_seconds: 244_800
             },
-            TimeSpent::from_str("1.5w0.5d7.5h30m", 7.5, 5.0).unwrap());
-
+            TimeSpent::from_str("1.5w0.5d7.5h30m", 7.5, 5.0).unwrap()
+        );
     }
 
     #[test]
     fn test_captures_bug() {
         let r = Regex::new(r"\b\d+\b");
         // If this suddenly starts returning a "Some" value, the bug in Regex has been fixed
-        assert!(r.unwrap().captures("rubbish").is_none(), "Seems they have fixed the bug in regex captures()");
-    }
-
-    #[test]
-    fn test_to_jira_timestamp() {
-        _ = to_jira_timestamp(&str_to_date_time("2023-05-25").unwrap());
+        assert!(
+            r.unwrap().captures("rubbish").is_none(),
+            "Seems they have fixed the bug in regex captures()"
+        );
     }
 
     #[test]
@@ -448,18 +501,18 @@ mod tests {
 
     #[test]
     fn test_decimal_duration() {
-      match TimeSpent::from_str(
-            "1,2h",
-            7.5,
-            5.0) {
-          Ok(result) => {
-              assert_eq!(result.time_spent_seconds, 4320, "Invalid calculation of time spent");
-              println!("{} {}", result.time_spent_seconds, result.time_spent);
-          }
-          Err(e) => { panic!("{e}")}
-      }
-
-
+        match TimeSpent::from_str("1,2h", 7.5, 5.0) {
+            Ok(result) => {
+                assert_eq!(
+                    result.time_spent_seconds, 4320,
+                    "Invalid calculation of time spent"
+                );
+                println!("{} {}", result.time_spent_seconds, result.time_spent);
+            }
+            Err(e) => {
+                panic!("{e}")
+            }
+        }
     }
     #[test]
     fn test_date_and_timezone_conversion() {
@@ -476,5 +529,29 @@ mod tests {
         let hour = 45000 / 3600;
         let minutes = (45000 % 3600) / 60;
         println!("{hour}:{minutes}");
+    }
+
+    #[test]
+    fn test_datetimes_in_iso_week() {
+        let now = Local.with_ymd_and_hms(2024, 11, 22, 21, 36, 0);
+        let dates = datetimes_in_iso_week(now.unwrap());
+        assert_eq!(dates[0].weekday(), Weekday::Mon);
+        assert_eq!(dates[0].day(), 18);
+        assert_eq!(dates[6].weekday(), Weekday::Sun);
+        assert_eq!(dates[6].day(), 24);
+    }
+
+    #[test]
+    fn test_first_date_in_week_for() {
+        let now = Local.with_ymd_and_hms(2024, 11, 22, 21, 36, 0);
+        let first_date_in_week = first_date_in_week_for(now.unwrap());
+        assert_eq!(first_date_in_week.date_naive(), NaiveDate::from_ymd_opt(2024, 11, 18).unwrap());
+    }
+
+    #[test]
+    fn test_last_date_in_week_for() {
+        let now = Local.with_ymd_and_hms(2024, 11, 22, 21, 36, 0);
+        let last_date_in_week = last_date_in_week_for(now.unwrap());
+        assert_eq!(last_date_in_week.date_naive(), NaiveDate::from_ymd_opt(2024, 11, 24).unwrap());
     }
 }

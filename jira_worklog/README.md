@@ -1,18 +1,19 @@
 # The Jira worklog utility
 
 The `jira_worklog` utility allows you to enter your Jira worklog entries as easy and simple
-as possible from the command line.
+as possible from the command line. The main objective for this utility is speed. If you don't like 
+command line applications, don't use this tool :-)
 
-This utility will let you add your work log entries in less than 1s.
+This utility will let you add your work log entries in less than 1 second.
 
-A quick status report for the last 30 days typically executes in less than 2-3 seconds, unless
-the Jira project contains thousands of entries.
+A quick status report for the last 30 days typically executes in less than 1 second.
 
-All entries added to Jira will also be written to a local journal in CSV format.
+All entries added to Jira will also be written to a local Sqlite database, which allows reports to 
+be generated very fast.
 
-This journal is used for status reports if you omit the `--issues` option.
+This database is also used for status reports. 
 
-You may use Excel to read the CSV format, specifying ';' as the delimiter.
+The local database may be synchronised with Jira using the `sync` sub command.
 
 Disclaimer: Network latency and the response time of Jira is the main culprit of any delays
 
@@ -20,16 +21,18 @@ Disclaimer: Network latency and the response time of Jira is the main culprit of
 * [The Jira worklog utility](#the-jira-worklog-utility)
   * [Installation](#installation)
     * [Using `curl` to verify your security token](#using-curl-to-verify-your-security-token)
-    * [Installing on MacOS](#installing-on-macos)
+    * [Installing on macOS](#installing-on-macos)
     * [Notes on security](#notes-on-security)
-      * [MacOS specifics for the Jira Security token](#macos-specifics-for-the-jira-security-token)
+      * [macOS specifics for the Jira Security token](#macos-specifics-for-the-jira-security-token)
       * [Removing local configuration files](#removing-local-configuration-files)
   * [How to specify the duration](#how-to-specify-the-duration)
+    * [Local database file](#local-database-file)
   * [Examples](#examples)
     * [Adding worklog entries](#adding-worklog-entries)
     * [Status of your worklog entries](#status-of-your-worklog-entries)
     * [Create a status report from most used time codes](#create-a-status-report-from-most-used-time-codes)
     * [Removing entries](#removing-entries)
+    * [Synchronising the local database with Jira](#synchronising-the-local-database-with-jira)
     * [Listing all available time codes](#listing-all-available-time-codes)
     * [Debug](#debug)
 <!-- TOC -->
@@ -37,6 +40,9 @@ Disclaimer: Network latency and the response time of Jira is the main culprit of
 ````shell
 # Add one day of work to Jira issue TIME-94
 jira_worklog add -i time-94 -d 1d
+
+# Give me a status of all work log entries for the last 30 days
+jira_worklog status
 
 # Give me status for the last 30 days for time-94 and time-40
 jira_worklog status -i time-94 time-40
@@ -75,12 +81,12 @@ curl --request GET \
   --header 'Accept: application/json'
 ````
 
-### Installing on MacOS
+### Installing on macOS
 
 There are some extra security built into the macOS which prevents you from running potential malware.
 Consequently, you will see this error message if you attempt to run `jira_worklog`:
 
-![MacOS Unidentified Developer Screenshot](images/macos_error_unidentified_dev.png)
+![macOS Unidentified Developer Screenshot](images/macOS_error_unidentified_dev.png)
 
 To fix this:
 
@@ -101,15 +107,15 @@ See the table below for details.
 
 If you think your machine has been compromised, go to Jira account ira and "Revoke" the API key.
 
-#### MacOS specifics for the Jira Security token
-On MacOS, the Jira Security Access Token is stored in the built-in KeyChain.
+#### macOS specifics for the Jira Security token
+On macOS, the Jira Security Access Token is stored in the built-in KeyChain.
 
-When `jira_worklog` attempts to access your MacOS Keychain, this window will pop up.
+When `jira_worklog` attempts to access your macOS Keychain, this window will pop up.
 It is a good idea to press `Always Allow` to save you some time :-)
 ![](images/keychain_prompt.png)
 
 Here is a neat command to work with security tokens and passwords
-on MacOS:
+on macOS:
 ````shell
 # This will list the entire contents of the `jira_worklog` entry from the keychain
 security find-generic-password -s com.autostoresystem.jira_worklog -a your.name@company.com -g
@@ -118,13 +124,13 @@ security find-generic-password -s com.autostoresystem.jira_worklog -a your.name@
 #### Removing local configuration files
 You can remove your local configuration file using the command: `jira_worklog config --remove`
 
-| Operating system     | Config file location                                               |
-|----------------------|--------------------------------------------------------------------|
-| MacOs:               | `/Users/steinar/Library/Preferences/com.autostore.jira_worklog`    |
-| Windows:             | `C:\Users\Alice\AppData\Roaming\com.autostore\jira_worklog\config` |
-| Linux:               | `/home/steinar/.config/jira_worklog`                               |
+| Operating system     | Config file location                                                    |
+|----------------------|-------------------------------------------------------------------------|
+| macOS:               | `/Users/${USER}/Library/Preferences/com.autostore.jira_worklog`         |
+| Windows:             | `C:\Users\%USERNAME%\AppData\Roaming\com.autostore\jira_worklog\config` |
+| Linux:               | `/home/${USER}/.config/jira_worklog`                                    |
 
-Note! For MacOS: The Jira Security Access token stored in the Keychain, will not be deleted
+Note! For macOS: The Jira Security Access token stored in the Keychain, will not be deleted
 ## How to specify the duration
 
 You can specify the duration of your work using weeks, days, hours and minutes.
@@ -138,12 +144,21 @@ However, you may not specify fractions of minutes (for obvious reasons) :
 <number>w<number>d<number>h<integer number>m
 ````
 
-Here is an example using all the options possible
-
+Here is an example using all the possible options:
 ````shell
-# Specify a duration of 1 week, 2 days, 5 hours and 30min like this
+# Specify a duration of 1,5 week, 2,5 days, 5,25 hours and 30min like this
 jira_worklog add -i time-158 -d 1,5w2,5d5,25h30min
 ````
+### Local database file
+The local database file can be found here:
+
+| Operating System | Local Sqlite database file                                                       |
+|------------------|----------------------------------------------------------------------------------|
+| macOS            | /Users/${USER}/Library/Application Support/com.autostore.jira_worklog/worklog.db |
+| Windows          | C:\Users\%USERNAME%\AppData\Roaming\jira_worklog\worklog.db                      |
+| Linux            | /home/${LOGNAME}/.local/share/jira_worklog/worklog.db                            |
+
+NOTE! I have neither access to a Windows nor a Linux system, so the specified paths might not be correct. 
 
 ## Examples
 
@@ -201,101 +216,66 @@ jira_worklog status -i time-40 time-147 time-117 -a 2023-05-01
 This would give you something like this:
 
 `````shell
+Version: 0.9.3
 Issue    IssueId Id      Weekday Started                Time spent Comment
-TIME-117 167111  304691  Mon     2024-08-19 14:42 +0200 00:30
-TIME-117 167111  305981  Wed     2024-08-28 08:36 +0200 01:00
-TIME-117 167111  306255  Wed     2024-08-28 11:22 +0200 03:00
-TIME-117 167111  309851  Tue     2024-09-03 08:00 +0200 07:30      Multi grid workshop in Haugesund
-TIME-147 211874  309901  Mon     2024-09-02 08:00 +0200 07:30
-TIME-147 211874  309995  Wed     2024-09-04 08:00 +0200 07:30      PO role desc, DT architecture, time logging
-TIME-147 211874  310089  Thu     2024-09-06 01:21 +0200 07:30
-TIME-147 211874  310499  Fri     2024-09-06 08:00 +0200 07:30      Admin work, DT migration planning
-TIME-147 211874  310500  Fri     2024-09-06 08:00 +0200 03:00      jira_worklog
-TIME-147 211874  310501  Sat     2024-09-07 08:00 +0200 03:00      jira_worklog
-TIME-147 211874  310535  Sun     2024-09-08 07:43 +0200 01:00      Added monthly summary to worklog
-TIME-40  85002   304588  Mon     2024-08-05 08:00 +0200 07:30
-TIME-40  85002   304589  Tue     2024-08-06 08:00 +0200 07:30
-TIME-40  85002   304590  Wed     2024-08-07 08:00 +0200 07:30
-TIME-40  85002   304591  Thu     2024-08-08 08:00 +0200 07:30
-TIME-40  85002   304592  Fri     2024-08-09 08:00 +0200 07:30
-TIME-40  85002   303933  Mon     2024-08-12 09:00 +0200 10:00
-TIME-40  85002   304329  Tue     2024-08-13 08:00 +0200 08:00
-TIME-40  85002   304330  Wed     2024-08-14 08:00 +0200 10:00
-TIME-40  85002   304331  Thu     2024-08-15 08:00 +0200 07:30
-TIME-40  85002   304431  Fri     2024-08-16 08:00 +0200 06:00
-TIME-40  85002   304593  Sun     2024-08-18 16:00 +0200 01:00
-TIME-40  85002   305844  Mon     2024-08-19 08:00 +0200 07:30
-TIME-40  85002   305845  Tue     2024-08-20 08:00 +0200 07:30
-TIME-40  85002   305846  Wed     2024-08-21 08:00 +0200 07:30
-TIME-40  85002   305847  Thu     2024-08-22 08:00 +0200 07:30
-TIME-40  85002   305848  Fri     2024-08-23 08:00 +0200 07:30
-TIME-40  85002   305849  Sun     2024-08-25 08:00 +0200 04:00
-TIME-40  85002   305850  Mon     2024-08-26 08:00 +0200 07:30
-TIME-40  85002   305852  Tue     2024-08-27 08:00 +0200 07:30      Strategy workshop
-TIME-40  85002   305853  Tue     2024-08-27 08:00 +0200 03:00      Workshop part2
-TIME-40  85002   306261  Wed     2024-08-28 10:26 +0200 04:00      Meetings about admin
-TIME-40  85002   309850  Thu     2024-08-29 08:00 +0200 07:30
-TIME-40  85002   307325  Fri     2024-08-30 08:20 +0200 07:30      Walk and talk and product ownership
+TIME-147 211874  331947  Fri     2024-11-01 08:00 +0100 07:30      
+TIME-147 211874  332376  Mon     2024-11-04 09:21 +0100 07:30      
+TIME-147 211874  333744  Tue     2024-11-05 08:00 +0100 07:30      
+TIME-147 211874  333745  Wed     2024-11-06 08:00 +0100 07:30      
+TIME-147 211874  333746  Thu     2024-11-07 08:00 +0100 07:30      
+TIME-147 211874  333747  Fri     2024-11-08 08:00 +0100 07:30      
+TIME-147 211874  334641  Mon     2024-11-11 08:00 +0100 07:30      
+TIME-147 211874  334642  Tue     2024-11-12 08:00 +0100 07:30      
+TIME-147 211874  335773  Wed     2024-11-13 08:00 +0100 07:30      
+TIME-147 211874  335774  Thu     2024-11-14 08:00 +0100 04:00      
+TIME-147 211874  336668  Tue     2024-11-19 08:00 +0100 07:30      
+TIME-147 211874  337500  Tue     2024-11-19 08:00 +0100 07:30      
+TIME-147 211874  337501  Wed     2024-11-20 08:00 +0100 07:30      
+TIME-147 211874  337502  Thu     2024-11-21 08:00 +0100 07:30      Bla bla bla
+TIME-155 214674  336667  Mon     2024-11-18 08:00 +0100 05:00      Lysaker - Gardermoen - Vats
+TIME-166 219027  336669  Sat     2024-11-16 08:00 +0100 02:00      
+TIME-166 219027  336665  Sun     2024-11-17 08:00 +0100 01:00      
+TIME-166 219027  336666  Mon     2024-11-18 08:00 +0100 07:30      
 
-Date       Day  time-40  time-147 time-117   Total
--------------- -------- -------- -------- --------
-2024-08-05 Mon    07:30        -        -    07:30
-2024-08-06 Tue    07:30        -        -    07:30
-2024-08-07 Wed    07:30        -        -    07:30
-2024-08-08 Thu    07:30        -        -    07:30
-2024-08-09 Fri    07:30        -        -    07:30
--------------- -------- -------- -------- --------
-ISO Week 32       37:30    00:00    00:00    37:30
-============== ======== ======== ======== ========
+CW 44 from 2024-10-28 to 2024-11-03
+Time code         Mon   Tue   Wed   Thu   Fri   Sat   Sun Total
+--------------- ----- ----- ----- ----- ----- ----- ----- -----
+TIME-147          -     -     -     -   07:30   -     -   07:30
+TIME-155          -     -     -     -     -     -     -   00:00
+TIME-166          -     -     -     -     -     -     -   00:00
+--------------- ----- ----- ----- ----- ----- ----- ----- -----
+Week total        -     -     -     -   07:30   -     -   07:30
+=============== ===== ===== ===== ===== ===== ===== ===== =====
 
-Date       Day  time-40  time-147 time-117   Total
--------------- -------- -------- -------- --------
-2024-08-12 Mon    10:00        -        -    10:00
-2024-08-13 Tue    08:00        -        -    08:00
-2024-08-14 Wed    10:00        -        -    10:00
-2024-08-15 Thu    07:30        -        -    07:30
-2024-08-16 Fri    06:00        -        -    06:00
-2024-08-18 Sun    01:00        -        -    01:00
--------------- -------- -------- -------- --------
-ISO Week 33       42:30    00:00    00:00    42:30
-============== ======== ======== ======== ========
+CW 45 from 2024-11-04 to 2024-11-10
+Time code         Mon   Tue   Wed   Thu   Fri   Sat   Sun Total
+--------------- ----- ----- ----- ----- ----- ----- ----- -----
+TIME-147        07:30 07:30 07:30 07:30 07:30   -     -   37:30
+TIME-155          -     -     -     -     -     -     -   00:00
+TIME-166          -     -     -     -     -     -     -   00:00
+--------------- ----- ----- ----- ----- ----- ----- ----- -----
+Week total      07:30 07:30 07:30 07:30 07:30   -     -   37:30
+=============== ===== ===== ===== ===== ===== ===== ===== =====
 
-Date       Day  time-40  time-147 time-117   Total
--------------- -------- -------- -------- --------
-2024-08-19 Mon    07:30        -    00:30    08:00
-2024-08-20 Tue    07:30        -        -    07:30
-2024-08-21 Wed    07:30        -        -    07:30
-2024-08-22 Thu    07:30        -        -    07:30
-2024-08-23 Fri    07:30        -        -    07:30
-2024-08-25 Sun    04:00        -        -    04:00
--------------- -------- -------- -------- --------
-ISO Week 34       41:30    00:00    00:30    42:00
-============== ======== ======== ======== ========
+CW 46 from 2024-11-11 to 2024-11-17
+Time code         Mon   Tue   Wed   Thu   Fri   Sat   Sun Total
+--------------- ----- ----- ----- ----- ----- ----- ----- -----
+TIME-147        07:30 07:30 07:30 04:00   -     -     -   26:30
+TIME-155          -     -     -     -     -     -     -   00:00
+TIME-166          -     -     -     -     -   02:00 01:00 03:00
+--------------- ----- ----- ----- ----- ----- ----- ----- -----
+Week total      07:30 07:30 07:30 04:00   -   02:00 01:00 29:30
+=============== ===== ===== ===== ===== ===== ===== ===== =====
 
-Date       Day  time-40  time-147 time-117   Total
--------------- -------- -------- -------- --------
-2024-08-26 Mon    07:30        -        -    07:30
-2024-08-27 Tue    10:30        -        -    10:30
-2024-08-28 Wed    04:00        -    04:00    08:00
-2024-08-29 Thu    07:30        -        -    07:30
-2024-08-30 Fri    07:30        -        -    07:30
--------------- -------- -------- -------- --------
-ISO Week 35       37:00    00:00    04:00    41:00
-============== ======== ======== ======== ========
-
-Date       Day  time-40  time-147 time-117   Total
--------------- -------- -------- -------- --------
-2024-09-02 Mon        -    07:30        -    07:30
-2024-09-03 Tue        -        -    07:30    07:30
-2024-09-04 Wed        -    07:30        -    07:30
-2024-09-05 Thu        -    07:30        -    07:30
-2024-09-06 Fri        -    10:30        -    10:30
-2024-09-07 Sat        -    03:00        -    03:00
-2024-09-08 Sun        -    01:00        -    01:00
--------------- -------- -------- -------- --------
-ISO Week 36       00:00    37:00    07:30    44:30
-============== ======== ======== ======== ========
-
+CW 47 from 2024-11-18 to 2024-11-24
+Time code         Mon   Tue   Wed   Thu   Fri   Sat   Sun Total
+--------------- ----- ----- ----- ----- ----- ----- ----- -----
+TIME-147          -   15:00 07:30 07:30   -     -     -   30:00
+TIME-155        05:00   -     -     -     -     -     -   05:00
+TIME-166        07:30   -     -     -     -     -     -   07:30
+--------------- ----- ----- ----- ----- ----- ----- ----- -----
+Week total      12:30 15:00 07:30 07:30   -     -     -   42:30
+=============== ===== ===== ===== ===== ===== ===== ===== =====
 `````
 
 ### Create a status report from most used time codes
@@ -312,12 +292,38 @@ jira_worklog status
 We all make mistakes every now then. To remove an entry you need to specify the
 `issueId or key` and the `worklog id`:
 
-`````shell
+````shell
 # Removes a work log entry for issue TIME-94 with worklog id of 216626
 jira_worklog del -i time-94 -w 216626
-`````
+````
 
 The entry will also be removed from the local journal.
+
+### Synchronising the local database with Jira
+To ensure that your local database reflects the current content in Jira, you may use the sub-command `sync`.
+All unique time codes found in the local database, will be synchronised with Jira by downloading the data from
+Jira and replacing the data in the local database.
+
+````shell
+# Synchronise all time codes found in the local database going back 30 days
+jira_worklog sync
+
+# Synchronise the specified time codes going after the supplied start date
+jira_worklog sync -i time-155 -s 2024-10-01
+
+# Synchronise multiple time codes
+jira_worklog sync -i time-155 -i time-166 
+````
+
+The output looks something like this:
+````shell
+Old journal not found so return
+Synchronising work logs for these issues:
+        time-155
+        time-166
+Synchronising 1 entries for time code time-155
+Synchronising 3 entries for time code time-166
+````
 
 ### Listing all available time codes
 

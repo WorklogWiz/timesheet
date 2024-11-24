@@ -29,7 +29,7 @@ struct DummyService<T: ComplexService> {
     service: T,
 }
 
-impl <T: ComplexService> DummyService<T> {
+impl<T: ComplexService> DummyService<T> {
     fn invoke_service(&self) -> Result<String, Box<dyn Error>> {
         self.service.do_some_stuff()
     }
@@ -46,13 +46,12 @@ fn test_with_mock() -> Result<(), Box<dyn Error>> {
 }
 
 #[test]
-fn test_without_real() -> Result<(), Box<dyn Error>>{
+fn test_without_real() -> Result<(), Box<dyn Error>> {
     let dummy_service = DummyService {
-        service: RealComplexService{},
+        service: RealComplexService {},
     };
     assert_eq!(dummy_service.invoke_service()?, "Real service result");
     Ok(())
-
 }
 // We use the real service if we are not testing
 #[cfg(not(test))]
@@ -63,8 +62,10 @@ use RealComplexService as TheService;
 use MockComplexService as TheService;
 
 #[test]
-fn test_with_compile_flags() -> Result<(), Box<dyn Error>>{
-    let dummy_service = DummyService { service: TheService {} };
+fn test_with_compile_flags() -> Result<(), Box<dyn Error>> {
+    let dummy_service = DummyService {
+        service: TheService {},
+    };
     assert_eq!(dummy_service.invoke_service()?, "Mocked result");
     Ok(())
 }

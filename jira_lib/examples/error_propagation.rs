@@ -1,11 +1,11 @@
-use std::error::Error;
-use std::fmt::{Debug, Display, Formatter};
 use crate::MiddleEarth::NoService;
 use crate::UnderGround::HttpNotResponding;
+use std::error::Error;
+use std::fmt::{Debug, Display, Formatter};
 
 #[derive(Debug)]
 enum MiddleEarth {
-    NoService {source: UnderGround },
+    NoService { source: UnderGround },
 }
 
 impl From<UnderGround> for MiddleEarth {
@@ -16,17 +16,20 @@ impl From<UnderGround> for MiddleEarth {
     }
 }
 
-
 impl Display for MiddleEarth {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self { NoService { source } => { write!(f,"no service: {source}")} }
+        match self {
+            NoService { source } => {
+                write!(f, "no service: {source}")
+            }
+        }
     }
 }
 
 impl std::error::Error for MiddleEarth {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            NoService { source } => { Some(source) }
+            NoService { source } => Some(source),
         }
     }
 }
@@ -39,17 +42,16 @@ enum UnderGround {
 impl Display for UnderGround {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            UnderGround::HttpNotResponding(server) => { write!(f, "HTTP server at {} not responding", server)}
+            UnderGround::HttpNotResponding(server) => {
+                write!(f, "HTTP server at {} not responding", server)
+            }
         }
     }
 }
 
-impl std::error::Error for UnderGround {
-
-}
+impl std::error::Error for UnderGround {}
 
 fn main() {
-
     let x = middle_earth();
     match x {
         Ok(()) => {}
@@ -60,7 +62,7 @@ fn main() {
 }
 
 fn middle_earth() -> Result<(), MiddleEarth> {
-    underground().map_err(MiddleEarth::from)?;  // TODO: what if I need more context here?
+    underground().map_err(MiddleEarth::from)?; // TODO: what if I need more context here?
     Ok(())
 }
 
