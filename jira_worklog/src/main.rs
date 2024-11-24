@@ -259,7 +259,6 @@ async fn main() {
     }
 }
 
-// TODO: Retrieve the information about each time code and save into the local database, which can be used for `status` command
 async fn sync_subcommand(sync: Synchronisation) -> anyhow::Result<()> {
     let runtime = ApplicationRuntime::new_production()?;
     let start_after = sync.started.map(|s| date::str_to_date_time(&s).unwrap());
@@ -402,9 +401,13 @@ async fn status_subcommand(status: Status) {
     println!();
     assert_eq!(worklogs.len(), count_before);
 
-
+    // Prints the report
     table_report_weekly::table_report_weekly(&worklogs);
 
+    print_info_about_time_codes(worklog_service, jira_keys_to_report);
+}
+
+fn print_info_about_time_codes(worklog_service: LocalWorklogService, mut jira_keys_to_report: Vec<JiraKey>) {
     if jira_keys_to_report.is_empty() {
         jira_keys_to_report = worklog_service.find_unique_keys().unwrap_or_default().iter().map(|k| JiraKey::from(k.as_str())).collect();
     }
@@ -419,6 +422,7 @@ async fn status_subcommand(status: Status) {
         println!("{} {}", issue.issue_key, issue.summary);
     }
 }
+
 #[allow(dead_code)]
 async fn fetch_worklog_entries_from_jira_for_key(jira_client: &JiraClient, start_after: Option<DateTime<Local>>, issue_key: &String) -> Vec<LocalWorklog> {
      match jira_client
