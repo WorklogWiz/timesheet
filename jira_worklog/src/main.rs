@@ -283,7 +283,7 @@ async fn sync_subcommand(sync: Synchronisation) -> anyhow::Result<()> {
     );
 
     // Retrieve the work logs for each issue key specified on the command line
-    for issue_key in issue_keys_to_sync {
+    for issue_key in issue_keys_to_sync.iter() {
         let worklogs = runtime
             .get_jira_client()
             .get_worklogs_for_current_user(&issue_key, start_after)
@@ -313,6 +313,13 @@ async fn sync_subcommand(sync: Synchronisation) -> anyhow::Result<()> {
             }
         }
     }
+    let keys: Vec<JiraKey> = issue_keys_to_sync.iter().map(|s| JiraKey::from(s.as_str())).collect();
+    let issue_info = runtime.sync_jira_issue_information(&keys).await?;
+    println!();
+    for issue in issue_info {
+        println!("{:12} {}", issue.key, issue.fields.summary);
+    }
+
     Ok(())
 }
 
@@ -370,18 +377,18 @@ async fn delete_subcommand(delete: &Del) {
 async fn status_subcommand(status: Status) {
     let worklog_service = LocalWorklogService::new(&config::local_worklog_dbms_file_name()).expect("Unable to create the local worklog servicer ");
 
-    let mut jira_keys_to_report = Vec::<JiraKey>::new();
-    if let Some(keys) = status.issues {
-        jira_keys_to_report.extend(keys.into_iter().map(JiraKey::from));
-    }
-
     let start_after = match status.after.map(|s| date::str_to_date_time(&s).unwrap()){
         None => { Local::now().checked_sub_days(Days::new(30)) },
         Some(date) => { Some(date) }
     };
 
+    let mut jira_keys_to_report = Vec::<JiraKey>::new();
+    if let Some(keys) = status.issues {
+        jira_keys_to_report.extend(keys.into_iter().map(JiraKey::from));
+    }
+
     eprintln!("Locating local worklog entries after {}", start_after.expect("Must specify --after "));
-    let worklogs = match worklog_service.find_worklogs_after(start_after.unwrap(), jira_keys_to_report){
+    let worklogs = match worklog_service.find_worklogs_after(start_after.unwrap(), &jira_keys_to_report){
         Ok(worklogs) => { worklogs}
         Err(e) => {
             eprintln!("Unable to retrieve worklogs from local work log database {e}");
@@ -397,6 +404,20 @@ async fn status_subcommand(status: Status) {
 
 
     table_report_weekly::table_report_weekly(&worklogs);
+
+    if jira_keys_to_report.is_empty() {
+        jira_keys_to_report = worklog_service.find_unique_keys().unwrap_or_default().iter().map(|k| JiraKey::from(k.as_str())).collect();
+    }
+
+    debug!("Getting jira issue information for {:?}", &jira_keys_to_report);
+
+    let result = worklog_service.get_jira_issues_filtered_by_keys(jira_keys_to_report).expect("Unable to retrieve Jira Issue information");
+    debug!("Retrieved {} entries from jira_issue table", result.len());
+
+    println!();
+    for issue in result {
+        println!("{} {}", issue.issue_key, issue.summary);
+    }
 }
 #[allow(dead_code)]
 async fn fetch_worklog_entries_from_jira_for_key(jira_client: &JiraClient, start_after: Option<DateTime<Local>>, issue_key: &String) -> Vec<LocalWorklog> {

@@ -91,6 +91,8 @@ pub fn table_report_weekly(
         // Move to next week
         current_monday +=  Duration::weeks(1);
     }
+    debug!("Table report done");
+
 }
 
 fn print_week_total(current_monday: &mut DateTime<Local>, sunday: DateTime<Local>, total_per_week_day: &mut BTreeMap<NaiveDate, i32>) {

@@ -1,6 +1,6 @@
 use chrono::{DateTime, Local};
 use common::WorklogError;
-use jira_lib::{JiraKey, Worklog};
+use jira_lib::{JiraIssue, JiraKey, Worklog};
 use log::debug;
 use rusqlite::{named_params, params, Connection};
 use serde::{Deserialize, Serialize};
@@ -19,6 +19,12 @@ pub struct LocalWorklog {
     pub timeSpentSeconds: i32,
     pub issueId: String, // Numeric FK to issue
     pub comment: Option<String>,
+}
+
+#[derive(Debug, Serialize,Deserialize,Eq, PartialEq, Clone)]
+pub struct JiraIssueInfo {
+    pub issue_key: JiraKey,
+    pub summary: String,
 }
 
 impl LocalWorklog {
@@ -43,6 +49,61 @@ impl LocalWorklog {
 pub struct LocalWorklogService {
     dbms_path: PathBuf,
     connection: Connection,
+}
+
+impl LocalWorklogService {
+    pub fn get_jira_issues_filtered_by_keys(&self,
+        keys: Vec<JiraKey>,
+    ) -> Result<Vec<JiraIssueInfo>, WorklogError> {
+        if keys.is_empty() {
+            // Return an empty vector if no keys are provided
+            return Ok(Vec::new());
+        }
+
+        debug!("selecting jira_issue from database for keys {:?}", keys);
+
+        // Build the `IN` clause dynamically
+        let placeholders = keys.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+        let sql = format!(
+            "SELECT issue_key, summary
+         FROM jira_issue
+         WHERE issue_key IN ({})",
+            placeholders
+        );
+
+        // Prepare the parameters for the query
+        let params: Vec<String> = keys.iter().map(|key| key.to_string()).collect();
+
+        let mut stmt = self.connection.prepare(&sql)?;
+
+        let issues = stmt
+            .query_map(rusqlite::params_from_iter(params), |row| {
+                Ok(JiraIssueInfo {
+                    issue_key: JiraKey::new(&row.get::<_, String>(0)?),
+                    summary: row.get(1)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        Ok(issues)
+    }
+}
+
+impl LocalWorklogService {
+
+    pub fn add_jira_issues(&self, jira_issues: &Vec<JiraIssue>) -> Result<(),WorklogError> {
+        let mut stmt = self.connection.prepare(
+            "INSERT INTO jira_issue (issue_key, summary)
+         VALUES (?1, ?2)
+         ON CONFLICT(issue_key) DO UPDATE SET summary = excluded.summary",
+        )?;
+        for issue in jira_issues {
+            if let Err(e) = stmt.execute(params![issue.key.to_string(), issue.fields.summary]) {
+                panic!("Unable to insert jira_issue({},{}): {}", issue.key, issue.fields.summary,e);
+            }
+        }
+        Ok(())
+    }
 }
 
 impl LocalWorklogService {
@@ -211,7 +272,7 @@ impl LocalWorklogService {
     pub fn find_worklogs_after(
         &self,
         start_datetime: DateTime<Local>,
-        keys: Vec<JiraKey>,
+        keys: &Vec<JiraKey>,
     ) -> Result<Vec<LocalWorklog>, rusqlite::Error> {
         // Base SQL query
         let mut sql = String::from(
@@ -285,6 +346,15 @@ pub fn create_local_worklog_schema(connection: &Connection) -> Result<(), Worklo
     connection
         .execute(sql, [])
         .map_err(|e| WorklogError::Sql(format!("Unable to create table 'worklog': {e}")))?;
+
+    let sql = r"
+    create table if not exists jira_issue (
+        issue_key varchar(32) primary key,
+        summary varchar(1024)
+    );
+    ";
+    connection.execute(sql, []).map_err(|e| WorklogError::Sql(format!("Unable to create table 'jira_issue': {e}")))?;
+
     Ok(())
 }
 
@@ -293,10 +363,11 @@ mod tests {
     use super::*;
     use chrono::{Days, Local};
     use common::config;
+    use jira_lib::JiraFields;
 
     pub fn setup() -> Result<LocalWorklogService, WorklogError> {
         let tmp_db = config::tmp_local_worklog_dbms_file_name()
-            .map_err(|e| WorklogError::CreateFile("temp file".to_string()))?;
+            .map_err(|_e| WorklogError::CreateFile("temp file".to_string()))?;
 
         let local_worklog_service = LocalWorklogService::new(&tmp_db)?;
         Ok(local_worklog_service)
@@ -304,7 +375,7 @@ mod tests {
 
     #[test]
     fn test_open_dbms() -> Result<(), WorklogError> {
-        let local_worklog_service = setup()?;
+        let _local_worklog_service = setup()?;
         Ok(())
     }
 
@@ -313,7 +384,7 @@ mod tests {
         let worklog = LocalWorklog {
             issue_key: JiraKey::from("ABC-123"),
             id: "1".to_string(),
-            author: "John Doe".to_string(),
+            author: "Ola Dunk".to_string(),
             created: Local::now(),
             updated: Local::now(),
             started: Local::now(),
@@ -344,7 +415,7 @@ mod tests {
         };
         let worklog_service = setup()?;
         worklog_service.add_worklog_entries(vec![worklog])?;
-        let result = worklog_service.find_worklog_by_id("1")?;
+        let _result = worklog_service.find_worklog_by_id("1")?;
         Ok(())
     }
 
@@ -359,6 +430,39 @@ mod tests {
             config::local_worklog_dbms_file_name().to_string_lossy()
         );
         assert!(result.len() >= 30);
+        Ok(())
+    }
+
+    #[test]
+    fn test_add_jira_issues() -> Result<(), WorklogError> {
+        let lws = setup()?;
+        // Example JiraIssue data
+        let issues = vec![
+            JiraIssue {
+                id: "1".to_string(),
+                self_url: "https://example.com/issue/1".to_string(),
+                key: JiraKey::new("ISSUE-1"),
+                worklogs: vec![],
+                fields: JiraFields {
+                    summary: "This is the first issue.".to_string(),
+                    asset: None
+                },
+            },
+            JiraIssue {
+                id: "2".to_string(),
+                self_url: "https://example.com/issue/2".to_string(),
+                key: JiraKey::new("ISSUE-2"),
+                worklogs: vec![],
+                fields: JiraFields {
+                    summary: "This is the second issue.".to_string(),
+                    asset: None
+                },
+            },
+        ];
+        let _result = lws.add_jira_issues(&issues)?;
+        let issues = lws.get_jira_issues_filtered_by_keys(vec![JiraKey::from("ISSUE-1"), JiraKey::from("Issue-2")])?;
+        assert_eq!(issues.len(), 2);
+
         Ok(())
     }
 }

@@ -2,7 +2,7 @@ use chrono::{DateTime, Local};
 use common::config::AppConfiguration;
 use common::journal::Journal;
 use common::{config, WorklogError};
-use jira_lib::{JiraClient, JiraKey};
+use jira_lib::{JiraClient, JiraIssue, JiraKey};
 use local_worklog::{LocalWorklog, LocalWorklogService};
 use log::{debug, info, warn};
 use std::fs;
@@ -11,7 +11,7 @@ use std::rc::Rc;
 
 pub enum ApplicationRuntime {
     Production(RuntimeState),
-    Test(RuntimeState)
+    Test(RuntimeState),
 }
 
 pub struct RuntimeState {
@@ -33,7 +33,7 @@ impl ApplicationRuntime {
         Ok(ApplicationRuntime::Production(RuntimeState {
             app_config,
             jira_client,
-            local_worklog_service
+            local_worklog_service,
         }))
     }
 
@@ -43,14 +43,14 @@ impl ApplicationRuntime {
     pub fn new_test() -> Result<Self, WorklogError> {
         let app_config = config::tmp_conf_load()?;
         debug!(
-        "Creating runtime with this ApplicationConfig {:?}",
-        &app_config
-    );
+            "Creating runtime with this ApplicationConfig {:?}",
+            &app_config
+        );
         let (jira_client, local_worklog_service) = Self::init_runtime(&app_config)?;
         let test_runtime = ApplicationRuntime::Test(RuntimeState {
             app_config,
             jira_client,
-            local_worklog_service
+            local_worklog_service,
         });
         // Empty the database, if a previous run has left any data
         test_runtime
@@ -62,10 +62,7 @@ impl ApplicationRuntime {
 
     fn get_state(&self) -> &RuntimeState {
         match self {
-            ApplicationRuntime::Production(state) |
-            ApplicationRuntime::Test(state) => {
-                state
-            }
+            ApplicationRuntime::Production(state) | ApplicationRuntime::Test(state) => state,
         }
     }
     pub fn get_application_configuration(&self) -> &AppConfiguration {
@@ -121,7 +118,7 @@ impl ApplicationRuntime {
             &app_config.jira.user,
             &app_config.jira.token,
         )
-            .map_err(|e| WorklogError::JiraClient { msg: e.to_string() })?;
+        .map_err(|e| WorklogError::JiraClient { msg: e.to_string() })?;
 
         // Creates the Path to the local worklog DBMS
         let path = PathBuf::from(
@@ -136,8 +133,24 @@ impl ApplicationRuntime {
         let local_worklog_service = LocalWorklogService::new(&path)?;
         Ok((jira_client, local_worklog_service))
     }
-}
 
+    pub async fn sync_jira_issue_information(
+        &self,
+        issue_keys: &[JiraKey],
+    ) -> Result<Vec<JiraIssue>, WorklogError> {
+        let jira_issues = self
+            .get_jira_client()
+            .get_issues_for_single_project("TIME".to_string())
+            .await;
+        let result: Vec<JiraIssue> = jira_issues
+            .into_iter()
+            .filter(|issue| issue_keys.contains(&issue.key))
+            .collect();
+
+        self.get_local_worklog_service().add_jira_issues(&result)?;
+        Ok(result)
+    }
+}
 
 /// Migrates the data from the local journal into the local work log dbms by retrieving the
 /// unique jira keys found in the journal and then downloading them from Jira.
@@ -148,16 +161,16 @@ impl ApplicationRuntime {
 pub async fn migrate_csv_journal_to_local_worklog_dbms(
     start_after: Option<DateTime<Local>>,
 ) -> Result<i32, WorklogError> {
-
     let journal_file_name = config::journal_data_file_name();
     if !PathBuf::from(&journal_file_name).try_exists()? {
         eprintln!("Old journal not found so return");
         return Ok(0);
     }
 
-    let runtime= ApplicationRuntime::new_production()?;
+    let runtime = ApplicationRuntime::new_production()?;
     // Find the unique keys in the local Journal
-    let unique_keys = runtime.get_journal()
+    let unique_keys = runtime
+        .get_journal()
         .find_unique_keys()
         .map_err(|e| WorklogError::UniqueKeys(e.to_string()))?;
 
@@ -169,7 +182,8 @@ pub async fn migrate_csv_journal_to_local_worklog_dbms(
         let key_copy = key.clone();
         debug!("Retrieving worklogs for current user for key {}", &key);
 
-        let work_logs = runtime.get_jira_client()
+        let work_logs = runtime
+            .get_jira_client()
             .get_worklogs_for_current_user(&key_copy, start_after)
             .await
             .map_err(|e| WorklogError::JiraResponse {
@@ -182,14 +196,19 @@ pub async fn migrate_csv_journal_to_local_worklog_dbms(
         debug!(
             "Inserting {} entries into the local worklog database {}",
             work_logs.len(),
-            runtime.get_local_worklog_service().get_dbms_path().to_string_lossy()
+            runtime
+                .get_local_worklog_service()
+                .get_dbms_path()
+                .to_string_lossy()
         );
 
         for wl in work_logs {
-
             let local_worklog = LocalWorklog::from_worklog(&wl, JiraKey::from(key.clone()));
             debug!("Adding {:?} to local worklog DBMS", &local_worklog);
-            if let Err(error) = runtime.get_local_worklog_service().add_entry(&local_worklog){
+            if let Err(error) = runtime
+                .get_local_worklog_service()
+                .add_entry(&local_worklog)
+            {
                 warn!("Failed to insert {:?} : {}", local_worklog, error);
                 info!("Continuing with next entry");
             }
@@ -204,36 +223,47 @@ pub async fn migrate_csv_journal_to_local_worklog_dbms(
 }
 
 /// Moves the local CSV journal file into a backup file
-fn move_local_journal_to_backup_file(app_config: &AppConfiguration)
- -> Result<PathBuf, WorklogError> {
-
+fn move_local_journal_to_backup_file(
+    app_config: &AppConfiguration,
+) -> Result<PathBuf, WorklogError> {
     let old_path = PathBuf::from(&app_config.application_data.journal_data_file_name);
-    eprintln!("Checking to see if {} exists {:?}", &old_path.to_string_lossy(), &old_path.try_exists());
+    eprintln!(
+        "Checking to see if {} exists {:?}",
+        &old_path.to_string_lossy(),
+        &old_path.try_exists()
+    );
 
     match old_path.try_exists() {
         Ok(true) => {
             debug!(
-                    "An existing journal found at {}, migrating to local DBMS in {}",
-                    &old_path.to_string_lossy(),
-                    &app_config
-                        .application_data
-                        .local_worklog
-                        .as_ref()
-                        .unwrap()
-                );
+                "An existing journal found at {}, migrating to local DBMS in {}",
+                &old_path.to_string_lossy(),
+                &app_config.application_data.local_worklog.as_ref().unwrap()
+            );
 
             let mut new_path = old_path.clone();
-            new_path.set_file_name(config::JOURNAL_CSV_FILE_NAME.to_string().replace(".csv", "-backup.csv"));
+            new_path.set_file_name(
+                config::JOURNAL_CSV_FILE_NAME
+                    .to_string()
+                    .replace(".csv", "-backup.csv"),
+            );
             fs::rename(&old_path, &new_path)?;
             eprintln!("Renamed to {}", &new_path.clone().to_string_lossy());
 
             Ok(new_path) // Migration performed
-        },
-        Ok(false) => {        debug!("No CSV journal file found, continuing as normal. Everything OK");
-            Err(WorklogError::FileNotFound(old_path.to_string_lossy().to_string())) // No migration required
+        }
+        Ok(false) => {
+            debug!("No CSV journal file found, continuing as normal. Everything OK");
+            Err(WorklogError::FileNotFound(
+                old_path.to_string_lossy().to_string(),
+            )) // No migration required
         }
         Err(err) => {
-            panic!("Unable to check if file {} exists: {}", old_path.to_string_lossy(), err);
+            panic!(
+                "Unable to check if file {} exists: {}",
+                old_path.to_string_lossy(),
+                err
+            );
         }
     }
 }
@@ -267,7 +297,6 @@ mod tests {
         Ok(())
     }
 
-
     #[test]
     fn test_runtimes() -> anyhow::Result<(), WorklogError> {
         let test_runtime = ApplicationRuntime::new_test()?;
@@ -290,6 +319,17 @@ mod tests {
             test_runtime.get_local_worklog_service().get_dbms_path(),
             prod_runtime.get_local_worklog_service().get_dbms_path()
         );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_sync_jira_issue_information() -> anyhow::Result<(), WorklogError> {
+        let runtime = ApplicationRuntime::new_test()?;
+        let time_147 = JiraKey::from("TIME-147");
+        let result: Vec<JiraIssue> = runtime
+            .sync_jira_issue_information(&vec![time_147.clone()])
+            .await?;
+        assert_eq!(result[0].key, time_147);
         Ok(())
     }
 }
