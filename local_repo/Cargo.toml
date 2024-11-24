@@ -1,0 +1,15 @@
+[package]
+name = "local_worklog"
+edition = "2021"
+version.workspace = true
+
+[dependencies]
+anyhow = { workspace = true}
+thiserror = {workspace = true}
+chrono = { workspace = true}
+rusqlite = { version = "0", features = ["bundled", "chrono"] }
+common = { path = "../common" }
+jira_lib = { path = "../jira_lib"}
+serde = { workspace = true}
+#serde_rusqlite = "0"
+log = "0.4.22"

@@ -1,11 +1,11 @@
 use axum::{
+    response::{Html, Json},
     routing::get,
     Router,
-    response::{Html, Json},
 };
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddr;
-use tower_http::cors::{CorsLayer, Any};
+use tower_http::cors::{Any, CorsLayer};
 
 #[derive(Serialize)]
 struct Message {
@@ -20,12 +20,15 @@ async fn api() -> Json<Message> {
     use chrono::Local;
 
     Json(Message {
-        message: format!("Hello from Rust at {}", Local::now().format("%Y-%m-%d %H:%M:%S")),
+        message: format!(
+            "Hello from Rust at {}",
+            Local::now().format("%Y-%m-%d %H:%M:%S")
+        ),
     })
 }
 use serde_json::json;
 
-#[derive(Serialize, Deserialize,Debug)]
+#[derive(Serialize, Deserialize, Debug)]
 struct Timesheet {
     projects: Vec<String>,
     hours: Vec<Vec<u32>>, // 2D array for hours worked per day and per project
@@ -69,7 +72,6 @@ async fn post_timesheet(Json(payload): Json<Timesheet>) -> impl IntoResponse {
         })),
     )
 }
-
 
 #[tokio::main]
 async fn main() {

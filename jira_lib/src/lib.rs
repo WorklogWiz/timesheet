@@ -9,25 +9,24 @@ extern crate core;
 use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
-use std::fmt::Formatter;
+use std::fmt::{Formatter};
 use std::process::exit;
 use std::time::Instant;
+
 use base64::prelude::*;
 use base64::Engine;
 use chrono::{DateTime, Days, Local, Months, NaiveDateTime, NaiveTime, TimeZone, Utc};
-use config::Application;
 use futures::StreamExt;
 use log::{debug, info};
 use reqwest::header::HeaderMap;
 use reqwest::header::HeaderValue;
 use reqwest::{Client, StatusCode};
-use serde::de::DeserializeOwned;
-use serde::Deserialize;
+use serde::de::{DeserializeOwned, Visitor};
+use serde::{Deserialize, Deserializer};
 use serde::Serialize;
-
-pub mod config;
-pub mod journal;
-pub mod date;
+use serde::de::{self};
+use common::config;
+use config::AppConfiguration;
 
 /// Holds the ULR of the Jira API to use
 pub const JIRA_URL: &str = "https://autostore.atlassian.net/rest/api/latest";
@@ -94,7 +93,7 @@ pub struct Worklog {
     pub started: DateTime<Utc>,
     pub timeSpent: String,
     pub timeSpentSeconds: i32,
-    pub issueId: String,    // Numeric FK to issue
+    pub issueId: String, // Numeric FK to issue
     pub comment: Option<String>,
 }
 
@@ -148,28 +147,116 @@ pub struct JiraIssuesPage {
     pub issues: Vec<JiraIssue>,
 }
 /// Represents a Jira issue key like for instance `TIME-148`
-#[derive(Debug, Deserialize, Serialize, Default, Eq, PartialEq, Clone)]
-pub struct JiraKey(pub String);
+#[derive(Debug, Serialize, Default, Eq, PartialEq, Clone)]
+pub struct JiraKey{
+    #[serde(alias = "key")]
+    value: String
+}
 
 impl JiraKey {
+    ///
+    /// # Panics
+    /// If the supplied value is empty
+    #[must_use]
+    pub fn new(input: &str) -> Self {
+        assert!(!(input.is_empty() || input.trim().is_empty()), "JiraKey may not be empty!");
+        JiraKey { value: input.to_uppercase() }
+    }
     #[must_use]
     pub fn value(&self) -> &str {
-        &self.0
+        &self.value
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.value
+    }
+
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.value.len()
+    }
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.value.trim().len() == 0
     }
 }
+
+impl From<String> for JiraKey {
+    fn from(s: String) -> Self {
+        JiraKey::new(&s)
+    }
+}
+
+impl From<&str> for JiraKey {
+    fn from(value: &str) -> Self {
+        JiraKey::new(value)
+    }
+}
+
 impl fmt::Display for JiraKey {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
+        write!(f, "{}", self.value)
     }
 }
 impl Ord for JiraKey {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.0.to_uppercase().cmp(&other.0.to_uppercase())
+        self.value.cmp(&other.value)
     }
 }
 impl PartialOrd for JiraKey {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+impl<'de> Deserialize<'de> for JiraKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct JiraKeyVisitor;
+
+        impl<'de> Visitor<'de> for JiraKeyVisitor {
+            type Value = JiraKey;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a string or a map with a value field")
+            }
+
+            fn visit_str<E>(self, value: &str) -> Result<JiraKey, E>
+            where
+                E: de::Error,
+            {
+                Ok(JiraKey {
+                    value: value.to_string(),
+                })
+            }
+
+            fn visit_map<M>(self, mut map: M) -> Result<JiraKey, M::Error>
+            where
+                M: de::MapAccess<'de>,
+            {
+                let mut value = None;
+                while let Some(key) = map.next_key()? {
+                    match key {
+                        "value" => {
+                            if value.is_some() {
+                                return Err(de::Error::duplicate_field("value"));
+                            }
+                            value = Some(map.next_value()?);
+                        }
+                        _ => {
+                            let _: de::IgnoredAny = map.next_value()?;
+                        }
+                    }
+                }
+                let value = value.ok_or_else(|| de::Error::missing_field("value"))?;
+                Ok(JiraKey { value })
+            }
+        }
+
+        deserializer.deserialize_any(JiraKeyVisitor)
     }
 }
 
@@ -249,7 +336,8 @@ impl fmt::Display for JiraError {
             JiraError::WorklogNotFound(issue, worklog_id) => {
                 write!(
                     f,
-                    "Worklog entry with issue_key: {issue} and worklog_id: {worklog_id} not found")
+                    "Worklog entry with issue_key: {issue} and worklog_id: {worklog_id} not found"
+                )
             }
             JiraError::ReqwestError(e) => {
                 write!(
@@ -274,6 +362,7 @@ impl Error for JiraError {
 
 /// Convenience method to create a `JiraClient` instance. It will load parameters
 /// from the .toml file on disk and set up everything for you.
+// TODO: rewrite this to get rid of the dependency on common::config
 #[must_use]
 #[allow(clippy::missing_panics_doc)]
 pub fn create_jira_client() -> JiraClient {
@@ -314,8 +403,8 @@ impl JiraClient {
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn from(cfg: &Application) -> Result<JiraClient, JiraError> {
-        JiraClient::new(&cfg.jira.jira_url,&cfg.jira.user, &cfg.jira.token)
+    pub fn from(cfg: &AppConfiguration) -> Result<JiraClient, JiraError> {
+        JiraClient::new(&cfg.jira.jira_url, &cfg.jira.user, &cfg.jira.token)
     }
 
     fn create_http_client(user_name: &str, token: &str) -> Result<reqwest::Client, reqwest::Error> {
@@ -453,7 +542,11 @@ impl JiraClient {
     // the only way I can get away from the dreaded compiler error:
     //     | |__________________`self` escapes the associated function body here
     //     |                    argument requires that `'1` must outlive `'static`
-    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+    #[allow(
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_possible_wrap
+    )]
     async fn static_get_issues_for_single_project(
         http_client: &Client,
         project_key: String,
@@ -498,7 +591,11 @@ impl JiraClient {
     }
 
     #[allow(clippy::missing_errors_doc)]
-    #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation, clippy::cast_possible_wrap)]
+    #[allow(
+        clippy::cast_sign_loss,
+        clippy::cast_possible_truncation,
+        clippy::cast_possible_wrap
+    )]
     pub async fn get_worklogs_for(
         http_client: &Client,
         issue_key: String,
@@ -673,7 +770,7 @@ impl JiraClient {
                     let issues: Vec<JiraIssue> = issues
                         .into_iter()
                         .filter(|issue| {
-                            filter.is_empty() || !filter.is_empty() && filter.contains(&issue.key.0)
+                            filter.is_empty() || !filter.is_empty() && filter.contains(&issue.key.value)
                         })
                         .collect();
                     debug!("Filtered {} issues for {}", issues.len(), &project.key);
@@ -688,7 +785,7 @@ impl JiraClient {
                             };
                         debug!(
                             "Issue {} has {} worklog entries",
-                            issue.key.0,
+                            issue.key.value,
                             worklogs.len()
                         );
                         issue.worklogs.append(&mut worklogs);
@@ -761,8 +858,6 @@ impl JiraClient {
         body: String,
         http_status_code: StatusCode,
     ) -> Result<T, StatusCode> {
-
-
         let response = http_client
             .post(url.clone())
             .body(body)
@@ -868,8 +963,20 @@ mod tests {
 
     #[test]
     fn test_jira_key() {
-        let k1 = JiraKey("TIME-40".to_string());
-        let k2 = JiraKey("TIME-40".to_string());
+        let k1 = JiraKey::from("TIME-40");
+        let k2 = JiraKey::from("TIME-40");
         assert_eq!(&k1, &k2, "Seems JiraKey does not compare by value");
+    }
+
+    #[test]
+    fn test_jira_key_uppercase() {
+        let k1 = JiraKey::from("time-147");
+        assert_eq!(k1.to_string(), "TIME-147".to_string());
+    }
+
+    #[test]
+    fn test_deserialize_to_jira_issue() {
+        let json_data = include_str!("../tests/issue_time_63.json");
+        let jira_issue: JiraIssue = serde_json::from_str(json_data).unwrap();
     }
 }
