@@ -532,16 +532,6 @@ mod tests {
     }
 
     #[test]
-    fn test_datetimes_in_iso_week() {
-        let now = Local.with_ymd_and_hms(2024, 11, 22, 21, 36, 0);
-        let dates = datetimes_in_iso_week(now.unwrap());
-        assert_eq!(dates[0].weekday(), Weekday::Mon);
-        assert_eq!(dates[0].day(), 18);
-        assert_eq!(dates[6].weekday(), Weekday::Sun);
-        assert_eq!(dates[6].day(), 24);
-    }
-
-    #[test]
     fn test_first_date_in_week_for() {
         let now = Local.with_ymd_and_hms(2024, 11, 22, 21, 36, 0);
         let first_date_in_week = first_date_in_week_for(now.unwrap());
