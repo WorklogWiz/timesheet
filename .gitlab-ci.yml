@@ -1,34 +1,137 @@
-variables:
-  PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/559/packages"
+.merge-request-rule: &merge-request-rule-cfg
+  if: $CI_PIPELINE_SOURCE == "merge_request_event"
 
-build:win64-msvc:
-  stage: build
-  image: $CI_REGISTRY/autostore/ci/rust-msvc:240909
-  tags:
-    - docker-windows-2022
+.push-branch-rule: &push-branch-rule-cfg
+  if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PIPELINE_SOURCE == "push"
+
+workflow:
+  rules:
+    # This line is to facilitate easier merging with the baseline
+    - if: $CI_PROJECT_NAME == "rust-baseline"
+      when: never
+    - <<: *merge-request-rule-cfg
+      variables:
+        MR_PRERELEASE: "yes"
+    - <<: *push-branch-rule-cfg
+
+include:
+  - "/.gitlab/rust.yml"
+  - "/.gitlab/docker.yml"
+  - "/.gitlab/semantic-release.yml"
+
+pre:next-semantic-release-version:
+  extends: .next-semantic-release-version
+
+build:linux:
+  extends: .rust-linux-builder
+  needs:
+    - pre:next-semantic-release-version
+  parallel:
+    matrix:
+      - OS: linux
+        KIT: [musl,gnu]
+        ARCH: [x86_64,aarch64]
   script:
-    - $env:RUSTFLAGS="-Ctarget-feature=+crt-static"
-    - cargo build --release
-    - Get-ChildItem target/release
-    - mv target/release/jira_worklog* .
+    - |
+      target=${ARCH}-unknown-${OS}-${KIT}
+      cargo_exit=0
+      cargo zigbuild --release --target=${target} --message-format=json 1> rustc-messages.json || cargo_exit=$?
+      if [ $cargo_exit -ne 0 ]; then
+        jq -r 'select(.reason == "compiler-message") | .message | select(.level == "error" or .level == "warning") | .rendered' rustc-messages.json
+        exit 1
+      else
+        jq -r 'select(.reason == "compiler-artifact" and .executable != null) | .executable' rustc-messages.json \
+        | sed 's/ (bin)$//' | while IFS= read -r binary; do
+            mkdir -p target/${target}/publish
+            cp "$binary" target/${target}/publish
+            if [ -e "${binary}.Dockerfile" ]; then
+              cp "${binary}.Dockerfile" target/${target}/publish
+            fi
+          done
+      fi
   artifacts:
     paths:
-      - jira_worklog.exe
-    expire_in: 14 days
+      - target/${ARCH}-unknown-${OS}-${KIT}/publish
 
-deploy:win64-msvc:
-  stage: deploy
-  image: alpine:latest
-  tags:
-    - linux-docker
-  dependencies:
-    - build:win64-msvc
-  rules:
-    - if: '$CI_COMMIT_TAG =~ /^v?\d+\.\d+\.\d+$/'
+build:windows:
+  extends: .rust-windows-builder
+  needs:
+    - pre:next-semantic-release-version
+  parallel:
+    matrix:
+      - OS: windows
+        KIT: [msvc]
+        ARCH: [x86_64]
   script:
-    - apk add curl
-    - >
-      curl
-      --header "JOB-TOKEN: ${CI_JOB_TOKEN}"
-      --upload-file ./jira_worklog.exe
-      "${PACKAGE_REGISTRY_URL}/generic/jira_worklog/${CI_COMMIT_TAG:1}/jira_worklog.exe"
+    - Invoke-WebRequest https://github.com/protocolbuffers/protobuf/releases/download/v28.0/protoc-28.0-win64.zip -OutFile .\protoc.zip
+    - Expand-Archive .\protoc.zip .\
+    - $env:PROTOC="$PWD\bin\protoc.exe"
+    - |
+      $ErrorActionPreference = "Stop"
+      $target="${env:ARCH}-pc-${env:OS}-${env:KIT}"
+      cargo build --release --target=${target} --message-format=json 1> rustc-messages.json
+      if ($LASTEXITCODE -ne 0) {
+        $messages = Get-Content rustc-messages.json | ForEach-Object {
+            $json = $_ | ConvertFrom-Json
+            if ($json.reason -eq "compiler-message" -and ($json.message.level -eq "error" -or $json.message.level -eq "warning")) {
+                $json.message.rendered
+            }
+        }
+        $messages | ForEach-Object { Write-Output $_ }
+        exit 1
+      } else {
+        $binaries = Get-Content rustc-messages.json | ForEach-Object {
+            $json = $_ | ConvertFrom-Json
+            if ($json.reason -eq "compiler-artifact" -and $json.executable) {
+                $json.executable
+            }
+        }
+        foreach ($binary in $binaries) {
+            $_ = New-Item -ItemType Directory -Path "target/${target}/publish" -Force
+            $binary = $binary -replace ' \(bin\)$', ''
+            Copy-Item $binary -Destination "target/${target}/publish"
+            if (Test-Path "${binary}.Dockerfile") {
+              Copy-Item "${binary}.Dockerfile" -Destination "target/${target}/publish"
+            }
+        }
+      }
+  artifacts:
+    paths:
+      - target/${ARCH}-pc-${OS}-${KIT}/publish
+
+test:test-and-coverage:
+  extends: .test-and-coverage
+  needs:
+    - pre:next-semantic-release-version
+
+test:sonar-scanner:
+  extends: .sonar-scanner
+  needs:
+    - test:test-and-coverage
+
+build:docker:
+  extends: .build:docker
+  needs:
+    - build:linux
+  rules:
+    - <<: *push-branch-rule-cfg
+      when: always
+
+release:docker:
+  extends: .release:docker
+  needs:
+    - pre:next-semantic-release-version
+    - build:docker
+  rules:
+    - <<: *push-branch-rule-cfg
+      when: always
+
+post:semantic-release:
+  extends: .semantic-release
+  needs:
+    - build:linux
+    - build:windows
+    - test:sonar-scanner
+  rules:
+    - <<: *push-branch-rule-cfg
+      when: always

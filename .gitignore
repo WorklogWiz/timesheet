@@ -1,6 +1,9 @@
-/target
+target/
+*.profraw
+.VERSION
+.scannerwork/
+clippy-report.json
+coverage.lcov
 .idea
 .DS_Store
-Cargo.lock
 /config.backup
-/jira_worklog_etl/README.md
