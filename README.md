@@ -8,14 +8,6 @@ Rust learning project to extract and update hours logged in Jira.
 * `jira_worklog_etl` - command line utility to extract all Jira worklogs for all issues for all projects not marked as private and shove them
    and shove them into the Postgresql database
 
-## How to build on Linux
-
-```shell
-sudo apt install cargo
-sudo apt install libssl-dev
-./build_linux.sh
-```
-
 ## How to build on MacOS
 
 The script `build.sh` will compile all the binaries and upload them
