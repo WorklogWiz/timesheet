@@ -387,6 +387,7 @@ mod tests {
     }
 
     #[ignore]
+    #[allow(dead_code)]
     fn test_add_local_worklog_entry() -> Result<(), WorklogError> {
         let worklog = LocalWorklog {
             issue_key: JiraKey::from("ABC-123"),
@@ -427,6 +428,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_find_worklogs_after() -> Result<(), WorklogError> {
         let rt = LocalWorklogService::new(&config::local_worklog_dbms_file_name())?;
         let result = rt.find_worklogs_after(

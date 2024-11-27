@@ -983,6 +983,6 @@ mod tests {
     #[test]
     fn test_deserialize_to_jira_issue() {
         let json_data = include_str!("../tests/issue_time_63.json");
-        let jira_issue: JiraIssue = serde_json::from_str(json_data).unwrap();
+        let _jira_issue: JiraIssue = serde_json::from_str(json_data).unwrap();
     }
 }

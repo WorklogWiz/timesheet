@@ -34,7 +34,8 @@
         // Docker extension
         "ms-azuretools.vscode-docker",
         // Debugger for native code
-        "vadimcn.vscode-lldb"
+        "vadimcn.vscode-lldb",
+        "eamodio.gitlens"
       ],
       "settings": {
         "terminal.integrated.defaultProfile.linux": "zsh",

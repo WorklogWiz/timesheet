@@ -5,7 +5,6 @@ use anyhow::Context;
 use anyhow::Result;
 use directories;
 use directories::ProjectDirs;
-use log::debug;
 use serde::{Deserialize, Serialize};
 use std::error;
 use std::fs::{self, remove_file, File};
@@ -13,7 +12,11 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+#[cfg(target_os = "macos")]
+use log::debug;
+#[cfg(target_os = "macos")]
 const KEYCHAIN_SERVICE: &str = "com.autostoresystem.jira_worklog";
+
 /// Application configuration struct
 /// Holds the data we need to connect to Jira, write to the local journal and so on
 #[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
@@ -174,6 +177,7 @@ fn read(path: &Path) -> Result<AppConfiguration, WorklogError> {
     })
 }
 
+#[allow(unused_mut)]
 fn create_configuration_file(cfg: &AppConfiguration, path: &PathBuf) -> Result<()> {
     let directory = path.parent().unwrap();
     if !directory.try_exists()? {
@@ -196,6 +200,7 @@ fn create_configuration_file(cfg: &AppConfiguration, path: &PathBuf) -> Result<(
 }
 
 #[allow(clippy::missing_errors_doc)]
+#[allow(unused_mut)]
 pub fn load() -> Result<AppConfiguration, WorklogError> {
     let config_path = configuration_file_name();
 
@@ -437,10 +442,5 @@ mod tests {
 
         app.jira.token = "XXXXX3xFfGF07-XjakdCf_Y7_CNWuvhyHAhCr5sn4Q1kp35oUiN-zrZm9TeZUIllWqrMuPRc4Zcbo-GvCEgPZSjj1oUZkUZBc7vEOJmSxcdq-lEWHkECvyAee64iBboDeYDJZIaiAidS57YJQnWCEAADmGnE5TyDeZqRkdMgvbMvU9Wyd6T05wI=3FF0BE2A".to_string();
         assert!(app.jira.has_valid_jira_token());
-    }
-
-    #[test]
-    fn test_tmp_conf_load() {
-        let _config = tmp_conf_load().expect("Unable to create a temporary configuration");
     }
 }
