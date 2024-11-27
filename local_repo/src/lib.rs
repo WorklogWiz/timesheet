@@ -51,12 +51,28 @@ pub struct LocalWorklogService {
     connection: Connection,
 }
 
+
 impl LocalWorklogService {
+
+    pub fn add_jira_issues(&self, jira_issues: &Vec<JiraIssue>) -> Result<(),WorklogError> {
+        let mut stmt = self.connection.prepare(
+            "INSERT INTO jira_issue (issue_key, summary)
+         VALUES (?1, ?2)
+         ON CONFLICT(issue_key) DO UPDATE SET summary = excluded.summary",
+        )?;
+        for issue in jira_issues {
+            if let Err(e) = stmt.execute(params![issue.key.to_string(), issue.fields.summary]) {
+                panic!("Unable to insert jira_issue({},{}): {}", issue.key, issue.fields.summary,e);
+            }
+        }
+        Ok(())
+    }
+
 
     #[allow(clippy::missing_errors_doc)]
     pub fn get_jira_issues_filtered_by_keys(
         &self,
-        keys: &Vec<JiraKey>,
+                                            keys: &Vec<JiraKey>,
     ) -> Result<Vec<JiraIssueInfo>, WorklogError> {
         if keys.is_empty() {
             // Return an empty vector if no keys are provided
@@ -88,31 +104,7 @@ impl LocalWorklogService {
 
         Ok(issues)
     }
-}
 
-impl LocalWorklogService {
-
-    #[allow(clippy::missing_panics_doc)]
-    #[allow(clippy::missing_errors_doc)]
-    pub fn add_jira_issues(&self, jira_issues: &Vec<JiraIssue>) -> Result<(), WorklogError> {
-        let mut stmt = self.connection.prepare(
-            "INSERT INTO jira_issue (issue_key, summary)
-         VALUES (?1, ?2)
-         ON CONFLICT(issue_key) DO UPDATE SET summary = excluded.summary",
-        )?;
-        for issue in jira_issues {
-            if let Err(e) = stmt.execute(params![issue.key.to_string(), issue.fields.summary]) {
-                panic!(
-                    "Unable to insert jira_issue({},{}): {}",
-                    issue.key, issue.fields.summary, e
-                );
-            }
-        }
-        Ok(())
-    }
-}
-
-impl LocalWorklogService {
     ///
     /// # Errors
     /// Returns an error something goes wrong
@@ -431,10 +423,8 @@ mod tests {
     #[ignore]
     fn test_find_worklogs_after() -> Result<(), WorklogError> {
         let rt = LocalWorklogService::new(&config::local_worklog_dbms_file_name())?;
-        let result = rt.find_worklogs_after(
-            Local::now().checked_sub_days(Days::new(60)).unwrap(),
-            &vec!(),
-        )?;
+        let result =
+            rt.find_worklogs_after(Local::now().checked_sub_days(Days::new(60)).unwrap(), &vec![])?;
         assert!(
             !result.is_empty(),
             "No data found in local worklog dbms {}",
