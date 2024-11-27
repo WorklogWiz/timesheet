@@ -27,7 +27,6 @@ if [[ ! -d "$WINDOWS_DIR" ]]; then
   mkdir "$WINDOWS_DIR"
 fi
 
-
 cp target/release/jira_worklog $DEPLOY_DIR/MacOs
 cp target/x86_64-pc-windows-gnu/release/jira_worklog.exe $DEPLOY_DIR/Windows/jira_worklog.exe
 cp jira_worklog/README.pdf $DEPLOY_DIR

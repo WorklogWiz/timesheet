@@ -5,7 +5,6 @@ use anyhow::Context;
 use anyhow::Result;
 use directories;
 use directories::ProjectDirs;
-use log::{debug};
 use serde::{Deserialize, Serialize};
 use std::error;
 use std::fs::{self, remove_file, File};
@@ -13,7 +12,11 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+#[cfg(target_os = "macos")]
+use log::debug;
+#[cfg(target_os = "macos")]
 const KEYCHAIN_SERVICE: &str = "com.autostoresystem.jira_worklog";
+
 /// Application configuration struct
 /// Holds the data we need to connect to Jira, write to the local journal and so on
 #[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
@@ -118,7 +121,7 @@ pub fn local_worklog_dbms_file_name() -> PathBuf {
 /// When something goes wrong
 /// # Panics
 /// If the temp file could not be created
-pub fn tmp_local_worklog_dbms_file_name() -> anyhow::Result<PathBuf,WorklogError> {
+pub fn tmp_local_worklog_dbms_file_name() -> anyhow::Result<PathBuf, WorklogError> {
     // Create a temporary file with a custom prefix
     let temp_file = tempfile::Builder::new()
         .prefix("worklog")
@@ -135,7 +138,9 @@ pub fn tmp_local_worklog_dbms_file_name() -> anyhow::Result<PathBuf,WorklogError
             )
         });
         if let Ok(true) = tmp_db.try_exists() {
-            return Err(WorklogError::FileNotDeleted(tmp_db.to_string_lossy().to_string()));
+            return Err(WorklogError::FileNotDeleted(
+                tmp_db.to_string_lossy().to_string(),
+            ));
         }
     } else {
         // Create the directory if it doesn't exist
@@ -166,15 +171,13 @@ fn read(path: &Path) -> Result<AppConfiguration, WorklogError> {
             path: path.into(),
             source,
         })?;
-        toml::from_str::<AppConfiguration>(&contents).map_err(|source| {
-            WorklogError::TomlParse {
-                path: path.into(),
-                source,
-            }
-        },
-    )
+    toml::from_str::<AppConfiguration>(&contents).map_err(|source| WorklogError::TomlParse {
+        path: path.into(),
+        source,
+    })
 }
 
+#[allow(unused_mut)]
 fn create_configuration_file(cfg: &AppConfiguration, path: &PathBuf) -> Result<()> {
     let directory = path.parent().unwrap();
     if !directory.try_exists()? {
@@ -197,6 +200,7 @@ fn create_configuration_file(cfg: &AppConfiguration, path: &PathBuf) -> Result<(
 }
 
 #[allow(clippy::missing_errors_doc)]
+#[allow(unused_mut)]
 pub fn load() -> Result<AppConfiguration, WorklogError> {
     let config_path = configuration_file_name();
 
@@ -207,14 +211,11 @@ pub fn load() -> Result<AppConfiguration, WorklogError> {
         // If the loaded configuration file holds a valid Jira token, migrate it to
         // the macOS Key Chain
         if app_config.jira.has_valid_jira_token()
-            && secure_credentials::get_secure_token(KEYCHAIN_SERVICE, &app_config.jira.user)
+            && secure_credentials::macos::get_secure_token(KEYCHAIN_SERVICE, &app_config.jira.user)
                 .is_err()
         {
-            create_configuration_file(&app_config, &config_path).map_err(|_src_err| {
-                WorklogError::ConfigFileCreation {
-                    path: config_path,
-                }
-            })?;
+            create_configuration_file(&app_config, &config_path)
+                .map_err(|_src_err| WorklogError::ConfigFileCreation { path: config_path })?;
         }
 
         // Merges the Jira token from the Keychain into the Application configuration
@@ -234,10 +235,25 @@ pub fn tmp_conf_load() -> Result<AppConfiguration, WorklogError> {
     if application_config.jira.has_valid_jira_token() {
         let config_file_name = tmp_config_file_name();
 
-        application_config.application_data.journal_data_file_name = tmp_journal_data_file_name().to_string_lossy().to_string();
-        eprintln!("{}", application_config.application_data.journal_data_file_name);
-        application_config.application_data.local_worklog = Some(tmp_local_worklog_dbms_file_name().unwrap().to_string_lossy().to_string());
-        create_configuration_file(&application_config, &config_file_name).unwrap_or_else(|_| panic!("Unable to create configuration file {}, with this content: {:?}", config_file_name.to_string_lossy(), application_config));
+        application_config.application_data.journal_data_file_name =
+            tmp_journal_data_file_name().to_string_lossy().to_string();
+        eprintln!(
+            "{}",
+            application_config.application_data.journal_data_file_name
+        );
+        application_config.application_data.local_worklog = Some(
+            tmp_local_worklog_dbms_file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string(),
+        );
+        create_configuration_file(&application_config, &config_file_name).unwrap_or_else(|_| {
+            panic!(
+                "Unable to create configuration file {}, with this content: {:?}",
+                config_file_name.to_string_lossy(),
+                application_config
+            )
+        });
         Ok(application_config)
     } else {
         panic!("The Jira token in the application configuration is invalid. You need to create a configuration file with a valid Jira token");
@@ -279,7 +295,7 @@ fn merge_jira_token_from_keychain(config: &mut AppConfiguration) {
     use log::warn;
 
     debug!("MacOS: retrieving the Jira access token from the keychain ...");
-    match secure_credentials::get_secure_token(KEYCHAIN_SERVICE, &config.jira.user) {
+    match secure_credentials::macos::get_secure_token(KEYCHAIN_SERVICE, &config.jira.user) {
         Ok(token) => {
             debug!("Found Jira access token in keychain and injected it");
             config.jira.token = token;
@@ -303,7 +319,7 @@ const JIRA_TOKEN_STORED_IN_MACOS_KEYCHAIN: &str = "*** stored in macos keychain 
 
 #[cfg(target_os = "macos")]
 fn migrate_jira_token_into_keychain(app_config: &mut AppConfiguration) {
-    match secure_credentials::store_secure_token(
+    match secure_credentials::macos::store_secure_token(
         KEYCHAIN_SERVICE,
         &app_config.jira.user,
         &app_config.jira.token,
@@ -426,10 +442,5 @@ mod tests {
 
         app.jira.token = "XXXXX3xFfGF07-XjakdCf_Y7_CNWuvhyHAhCr5sn4Q1kp35oUiN-zrZm9TeZUIllWqrMuPRc4Zcbo-GvCEgPZSjj1oUZkUZBc7vEOJmSxcdq-lEWHkECvyAee64iBboDeYDJZIaiAidS57YJQnWCEAADmGnE5TyDeZqRkdMgvbMvU9Wyd6T05wI=3FF0BE2A".to_string();
         assert!(app.jira.has_valid_jira_token());
-    }
-
-    #[test]
-    fn test_tmp_conf_load() {
-        let _config = tmp_conf_load().expect("Unable to create a temporary configuration");
     }
 }

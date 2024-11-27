@@ -46,14 +46,14 @@ pub enum WorklogError {
     ConfigFileCreation { path: PathBuf },
     #[error("Error creating Jira client: {msg}")]
     JiraClient { msg: String },
-    #[error("Jira request failed: {msg} : {reason}" )]
-    JiraResponse{ msg: String, reason: String},
+    #[error("Jira request failed: {msg} : {reason}")]
+    JiraResponse { msg: String, reason: String },
     #[error("Unable to open journal file {0}")]
     OpenJournal(String),
     #[error("Unable to open DBMS in file {path}: {reason}")]
-    OpenDbms { path: String, reason: String},
+    OpenDbms { path: String, reason: String },
     #[error("Unable to create file: {0}")]
-    CreateFile (String),
+    CreateFile(String),
     #[error("SQL dbms error: {0}")]
     Sql(String),
     #[error("Unable to delete file {0}, are you sure it is not locked?")]
@@ -73,4 +73,3 @@ impl From<rusqlite::Error> for WorklogError {
         WorklogError::Sql(format!("Sqlite error {err}"))
     }
 }
-

@@ -1,0 +1,36 @@
+branches:
+  - name: master
+plugins:
+  - - '@semantic-release/commit-analyzer'
+    - preset: conventionalcommits
+      parserOpts:
+        - BREAKING CHANGE
+        - BREAKING CHANGES
+  - - '@semantic-release/release-notes-generator'
+    - preset: conventionalcommits
+      parserOpts:
+        - BREAKING CHANGE
+        - BREAKING CHANGES
+  - - '@semantic-release/changelog'
+    - changelogFile: CHANGELOG.md
+  - - '@semantic-release/exec'
+    - verifyReleaseCmd: "echo ${nextRelease.version} > .VERSION"
+      #prepareCmd: "./.gitlab/releaserc-scripts/prepare.sh"
+  #
+  # If you want the ChangeLog to be committed to the repository along with updated Cargo
+  # artifacts, then uncomment this section
+  #
+  #- - '@semantic-release/git'
+  #  - assets:
+  #      - '**/Cargo.toml'
+  #      - '**/Cargo.lock'
+  #      - CHANGELOG.md
+  #
+  # If you want to release to gitlab, you can adjust this to your needs, you can prepare the
+  # package in the exec:prepareCmd above
+  #- - '@semantic-release/gitlab'
+  #  - gitlabUrl: https://as-git.autostoresystem.com
+  #    assets:
+  #      - path: 'my-package.zip'
+  #        target: generic_package
+  #        label: my-package

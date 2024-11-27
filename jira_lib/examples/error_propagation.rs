@@ -43,7 +43,7 @@ impl Display for UnderGround {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             UnderGround::HttpNotResponding(server) => {
-                write!(f, "HTTP server at {} not responding", server)
+                write!(f, "HTTP server at {server} not responding")
             }
         }
     }

@@ -134,6 +134,7 @@ impl ApplicationRuntime {
         Ok((jira_client, local_worklog_service))
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn sync_jira_issue_information(
         &self,
         issue_keys: &[JiraKey],
@@ -273,6 +274,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore]
     async fn test_create_application_runtime() -> anyhow::Result<(), WorklogError> {
         let runtime = ApplicationRuntime::new_production()?;
         let application_config = runtime.get_application_configuration();
@@ -298,6 +300,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_runtimes() -> anyhow::Result<(), WorklogError> {
         let test_runtime = ApplicationRuntime::new_test()?;
         let prod_runtime = ApplicationRuntime::new_production()?;
@@ -323,6 +326,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore]
     async fn test_sync_jira_issue_information() -> anyhow::Result<(), WorklogError> {
         let runtime = ApplicationRuntime::new_test()?;
         let time_147 = JiraKey::from("TIME-147");

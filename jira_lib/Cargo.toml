@@ -26,7 +26,8 @@ env_logger = "0.11.5"
 
 # csv = "1.3"
 #regex = "1"
-num-traits = "0.2.19"
 aquamarine = "0.6.0"
-anyhow = {workspace = true}
 config = "0.14.1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+openssl = { version = "0.10", features = ["vendored"] }

@@ -1,10 +1,7 @@
 use anyhow::{bail, Context};
 use chrono::offset::TimeZone;
 use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, Weekday};
-use chrono::{
-    Days, Month, NaiveDateTime, NaiveTime,
-    ParseResult,
-};
+use chrono::{Days, Month, NaiveDateTime, NaiveTime, ParseResult};
 
 use lazy_static::lazy_static;
 use num_traits::cast::FromPrimitive;
@@ -236,7 +233,7 @@ pub fn first_date_in_week_for(dt: DateTime<Local>) -> DateTime<Local> {
 pub fn last_date_in_week_for(dt: DateTime<Local>) -> DateTime<Local> {
     // Monday is 0 and Sunday is 6
     let days = 6 - dt.weekday().num_days_from_monday();
-    dt.add(Days::new(u64::from(days) ))
+    dt.add(Days::new(u64::from(days)))
 }
 
 /// Splits a vector of day names and durations separated by ':' into
@@ -535,13 +532,19 @@ mod tests {
     fn test_first_date_in_week_for() {
         let now = Local.with_ymd_and_hms(2024, 11, 22, 21, 36, 0);
         let first_date_in_week = first_date_in_week_for(now.unwrap());
-        assert_eq!(first_date_in_week.date_naive(), NaiveDate::from_ymd_opt(2024, 11, 18).unwrap());
+        assert_eq!(
+            first_date_in_week.date_naive(),
+            NaiveDate::from_ymd_opt(2024, 11, 18).unwrap()
+        );
     }
 
     #[test]
     fn test_last_date_in_week_for() {
         let now = Local.with_ymd_and_hms(2024, 11, 22, 21, 36, 0);
         let last_date_in_week = last_date_in_week_for(now.unwrap());
-        assert_eq!(last_date_in_week.date_naive(), NaiveDate::from_ymd_opt(2024, 11, 24).unwrap());
+        assert_eq!(
+            last_date_in_week.date_naive(),
+            NaiveDate::from_ymd_opt(2024, 11, 24).unwrap()
+        );
     }
 }

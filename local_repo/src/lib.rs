@@ -21,7 +21,7 @@ pub struct LocalWorklog {
     pub comment: Option<String>,
 }
 
-#[derive(Debug, Serialize,Deserialize,Eq, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 pub struct JiraIssueInfo {
     pub issue_key: JiraKey,
     pub summary: String,
@@ -51,10 +51,10 @@ pub struct LocalWorklogService {
     connection: Connection,
 }
 
-
 impl LocalWorklogService {
-
-    pub fn add_jira_issues(&self, jira_issues: &Vec<JiraIssue>) -> Result<(),WorklogError> {
+    #[allow(clippy::missing_panics_doc)]
+    #[allow(clippy::missing_errors_doc)]
+    pub fn add_jira_issues(&self, jira_issues: &Vec<JiraIssue>) -> Result<(), WorklogError> {
         let mut stmt = self.connection.prepare(
             "INSERT INTO jira_issue (issue_key, summary)
          VALUES (?1, ?2)
@@ -62,14 +62,19 @@ impl LocalWorklogService {
         )?;
         for issue in jira_issues {
             if let Err(e) = stmt.execute(params![issue.key.to_string(), issue.fields.summary]) {
-                panic!("Unable to insert jira_issue({},{}): {}", issue.key, issue.fields.summary,e);
+                panic!(
+                    "Unable to insert jira_issue({},{}): {}",
+                    issue.key, issue.fields.summary, e
+                );
             }
         }
         Ok(())
     }
 
-    pub fn get_jira_issues_filtered_by_keys(&self,
-                                            keys: Vec<JiraKey>,
+    #[allow(clippy::missing_errors_doc)]
+    pub fn get_jira_issues_filtered_by_keys(
+        &self,
+        keys: &Vec<JiraKey>,
     ) -> Result<Vec<JiraIssueInfo>, WorklogError> {
         if keys.is_empty() {
             // Return an empty vector if no keys are provided
@@ -83,12 +88,11 @@ impl LocalWorklogService {
         let sql = format!(
             "SELECT issue_key, summary
          FROM jira_issue
-         WHERE issue_key IN ({})",
-            placeholders
+         WHERE issue_key IN ({placeholders})"
         );
 
         // Prepare the parameters for the query
-        let params: Vec<String> = keys.iter().map(|key| key.to_string()).collect();
+        let params: Vec<String> = keys.iter().map(ToString::to_string).collect();
 
         let mut stmt = self.connection.prepare(&sql)?;
 
@@ -119,9 +123,7 @@ impl LocalWorklogService {
             .execute("delete from worklog where id = ?1", params![wl_id])?;
         Ok(())
     }
-}
 
-impl LocalWorklogService {
     ///
     /// # Errors
     /// Returns an error something goes wrong
@@ -269,7 +271,7 @@ impl LocalWorklogService {
     pub fn find_worklogs_after(
         &self,
         start_datetime: DateTime<Local>,
-        keys: &Vec<JiraKey>,
+        keys: &[JiraKey],
     ) -> Result<Vec<LocalWorklog>, rusqlite::Error> {
         // Base SQL query
         let mut sql = String::from(
@@ -284,17 +286,17 @@ impl LocalWorklogService {
         // Add `issue_key` filter if `keys` is not empty
         if !keys.is_empty() {
             let placeholders = keys.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
-            sql.push_str(&format!(" AND issue_key IN ({})", placeholders));
+            sql.push_str(&format!(" AND issue_key IN ({placeholders})"));
 
             // Add owned `String` values to the parameters and cast to `Box<dyn ToSql>`
             params.extend(
-                keys.into_iter()
+                keys.iter()
                     .map(|key| Box::new(key.value().to_string()) as Box<dyn rusqlite::ToSql>),
             );
         }
 
         // Convert `params` to a slice of `&dyn ToSql`
-        let params_slice: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        let params_slice: Vec<&dyn rusqlite::ToSql> = params.iter().map(AsRef::as_ref).collect();
 
         // Prepare the query
         let mut stmt = self.connection.prepare(&sql)?;
@@ -319,7 +321,6 @@ impl LocalWorklogService {
 
         Ok(worklogs)
     }
-
 }
 
 ///
@@ -350,7 +351,9 @@ pub fn create_local_worklog_schema(connection: &Connection) -> Result<(), Worklo
         summary varchar(1024)
     );
     ";
-    connection.execute(sql, []).map_err(|e| WorklogError::Sql(format!("Unable to create table 'jira_issue': {e}")))?;
+    connection
+        .execute(sql, [])
+        .map_err(|e| WorklogError::Sql(format!("Unable to create table 'jira_issue': {e}")))?;
 
     Ok(())
 }
@@ -377,6 +380,7 @@ mod tests {
     }
 
     #[ignore]
+    #[allow(dead_code)]
     fn test_add_local_worklog_entry() -> Result<(), WorklogError> {
         let worklog = LocalWorklog {
             issue_key: JiraKey::from("ABC-123"),
@@ -417,10 +421,13 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn test_find_worklogs_after() -> Result<(), WorklogError> {
         let rt = LocalWorklogService::new(&config::local_worklog_dbms_file_name())?;
-        let result =
-            rt.find_worklogs_after(Local::now().checked_sub_days(Days::new(60)).unwrap(), &vec![])?;
+        let result = rt.find_worklogs_after(
+            Local::now().checked_sub_days(Days::new(60)).unwrap(),
+            &vec![],
+        )?;
         assert!(
             !result.is_empty(),
             "No data found in local worklog dbms {}",
@@ -442,7 +449,7 @@ mod tests {
                 worklogs: vec![],
                 fields: JiraFields {
                     summary: "This is the first issue.".to_string(),
-                    asset: None
+                    asset: None,
                 },
             },
             JiraIssue {
@@ -452,12 +459,15 @@ mod tests {
                 worklogs: vec![],
                 fields: JiraFields {
                     summary: "This is the second issue.".to_string(),
-                    asset: None
+                    asset: None,
                 },
             },
         ];
-        let _result = lws.add_jira_issues(&issues)?;
-        let issues = lws.get_jira_issues_filtered_by_keys(vec![JiraKey::from("ISSUE-1"), JiraKey::from("Issue-2")])?;
+        lws.add_jira_issues(&issues)?;
+        let issues = lws.get_jira_issues_filtered_by_keys(&vec![
+            JiraKey::from("ISSUE-1"),
+            JiraKey::from("Issue-2"),
+        ])?;
         assert_eq!(issues.len(), 2);
 
         Ok(())

@@ -1,17 +1,15 @@
 # The Jira worklog utility
 
 The `jira_worklog` utility allows you to enter your Jira worklog entries as easy and simple
-as possible from the command line. The main objective for this utility is speed. If you don't like 
-command line applications, don't use this tool :-)
+as possible from the command line. The main objective for this utility is speed. If you don't like command line applications, don't use this tool :-)
 
 This utility will let you add your work log entries in less than 1 second.
 
 A quick status report for the last 30 days typically executes in less than 1 second.
 
-All entries added to Jira will also be written to a local Sqlite database, which allows reports to 
-be generated very fast.
+All entries added to Jira will also be written to a local Sqlite database, which allows reports to be generated very fast.
 
-This database is also used for status reports. 
+This database is also used for status reports.
 
 The local database may be synchronised with Jira using the `sync` sub command.
 
@@ -101,7 +99,7 @@ This should solve the problem.
 
 ### Notes on security
 
-The configuration file is stored without encryption in a location, 
+The configuration file is stored without encryption in a location,
 which depends on the operating system you are using.
 See the table below for details.
 
@@ -158,7 +156,7 @@ The local database file can be found here:
 | Windows          | C:\Users\%USERNAME%\AppData\Roaming\jira_worklog\worklog.db                      |
 | Linux            | /home/${LOGNAME}/.local/share/jira_worklog/worklog.db                            |
 
-NOTE! I have neither access to a Windows nor a Linux system, so the specified paths might not be correct. 
+NOTE! I have neither access to a Windows nor a Linux system, so the specified paths might not be correct.
 
 ## Examples
 
@@ -218,24 +216,24 @@ This would give you something like this:
 `````shell
 Version: 0.9.3
 Issue    IssueId Id      Weekday Started                Time spent Comment
-TIME-147 211874  331947  Fri     2024-11-01 08:00 +0100 07:30      
-TIME-147 211874  332376  Mon     2024-11-04 09:21 +0100 07:30      
-TIME-147 211874  333744  Tue     2024-11-05 08:00 +0100 07:30      
-TIME-147 211874  333745  Wed     2024-11-06 08:00 +0100 07:30      
-TIME-147 211874  333746  Thu     2024-11-07 08:00 +0100 07:30      
-TIME-147 211874  333747  Fri     2024-11-08 08:00 +0100 07:30      
-TIME-147 211874  334641  Mon     2024-11-11 08:00 +0100 07:30      
-TIME-147 211874  334642  Tue     2024-11-12 08:00 +0100 07:30      
-TIME-147 211874  335773  Wed     2024-11-13 08:00 +0100 07:30      
-TIME-147 211874  335774  Thu     2024-11-14 08:00 +0100 04:00      
-TIME-147 211874  336668  Tue     2024-11-19 08:00 +0100 07:30      
-TIME-147 211874  337500  Tue     2024-11-19 08:00 +0100 07:30      
-TIME-147 211874  337501  Wed     2024-11-20 08:00 +0100 07:30      
+TIME-147 211874  331947  Fri     2024-11-01 08:00 +0100 07:30
+TIME-147 211874  332376  Mon     2024-11-04 09:21 +0100 07:30
+TIME-147 211874  333744  Tue     2024-11-05 08:00 +0100 07:30
+TIME-147 211874  333745  Wed     2024-11-06 08:00 +0100 07:30
+TIME-147 211874  333746  Thu     2024-11-07 08:00 +0100 07:30
+TIME-147 211874  333747  Fri     2024-11-08 08:00 +0100 07:30
+TIME-147 211874  334641  Mon     2024-11-11 08:00 +0100 07:30
+TIME-147 211874  334642  Tue     2024-11-12 08:00 +0100 07:30
+TIME-147 211874  335773  Wed     2024-11-13 08:00 +0100 07:30
+TIME-147 211874  335774  Thu     2024-11-14 08:00 +0100 04:00
+TIME-147 211874  336668  Tue     2024-11-19 08:00 +0100 07:30
+TIME-147 211874  337500  Tue     2024-11-19 08:00 +0100 07:30
+TIME-147 211874  337501  Wed     2024-11-20 08:00 +0100 07:30
 TIME-147 211874  337502  Thu     2024-11-21 08:00 +0100 07:30      Bla bla bla
 TIME-155 214674  336667  Mon     2024-11-18 08:00 +0100 05:00      Lysaker - Gardermoen - Vats
-TIME-166 219027  336669  Sat     2024-11-16 08:00 +0100 02:00      
-TIME-166 219027  336665  Sun     2024-11-17 08:00 +0100 01:00      
-TIME-166 219027  336666  Mon     2024-11-18 08:00 +0100 07:30      
+TIME-166 219027  336669  Sat     2024-11-16 08:00 +0100 02:00
+TIME-166 219027  336665  Sun     2024-11-17 08:00 +0100 01:00
+TIME-166 219027  336666  Mon     2024-11-18 08:00 +0100 07:30
 
 CW 44 from 2024-10-28 to 2024-11-03
 Time code         Mon   Tue   Wed   Thu   Fri   Sat   Sun Total
@@ -312,7 +310,7 @@ jira_worklog sync
 jira_worklog sync -i time-155 -s 2024-10-01
 
 # Synchronise multiple time codes
-jira_worklog sync -i time-155 -i time-166 
+jira_worklog sync -i time-155 -i time-166
 ````
 
 The output looks something like this:
