@@ -134,6 +134,7 @@ impl ApplicationRuntime {
         Ok((jira_client, local_worklog_service))
     }
 
+    #[allow(clippy::missing_errors_doc)]
     pub async fn sync_jira_issue_information(
         &self,
         issue_keys: &[JiraKey],

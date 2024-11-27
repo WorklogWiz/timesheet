@@ -52,9 +52,11 @@ pub struct LocalWorklogService {
 }
 
 impl LocalWorklogService {
+
+    #[allow(clippy::missing_errors_doc)]
     pub fn get_jira_issues_filtered_by_keys(
         &self,
-        keys: Vec<JiraKey>,
+        keys: &Vec<JiraKey>,
     ) -> Result<Vec<JiraIssueInfo>, WorklogError> {
         if keys.is_empty() {
             // Return an empty vector if no keys are provided
@@ -68,12 +70,10 @@ impl LocalWorklogService {
         let sql = format!(
             "SELECT issue_key, summary
          FROM jira_issue
-         WHERE issue_key IN ({})",
-            placeholders
-        );
+         WHERE issue_key IN ({placeholders})");
 
         // Prepare the parameters for the query
-        let params: Vec<String> = keys.iter().map(|key| key.to_string()).collect();
+        let params: Vec<String> = keys.iter().map(ToString::to_string).collect();
 
         let mut stmt = self.connection.prepare(&sql)?;
 
@@ -91,6 +91,9 @@ impl LocalWorklogService {
 }
 
 impl LocalWorklogService {
+
+    #[allow(clippy::missing_panics_doc)]
+    #[allow(clippy::missing_errors_doc)]
     pub fn add_jira_issues(&self, jira_issues: &Vec<JiraIssue>) -> Result<(), WorklogError> {
         let mut stmt = self.connection.prepare(
             "INSERT INTO jira_issue (issue_key, summary)
@@ -275,7 +278,7 @@ impl LocalWorklogService {
     pub fn find_worklogs_after(
         &self,
         start_datetime: DateTime<Local>,
-        keys: &Vec<JiraKey>,
+        keys: &[JiraKey],
     ) -> Result<Vec<LocalWorklog>, rusqlite::Error> {
         // Base SQL query
         let mut sql = String::from(
@@ -290,17 +293,17 @@ impl LocalWorklogService {
         // Add `issue_key` filter if `keys` is not empty
         if !keys.is_empty() {
             let placeholders = keys.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
-            sql.push_str(&format!(" AND issue_key IN ({})", placeholders));
+            sql.push_str(&format!(" AND issue_key IN ({placeholders})"));
 
             // Add owned `String` values to the parameters and cast to `Box<dyn ToSql>`
             params.extend(
-                keys.into_iter()
+                keys.iter()
                     .map(|key| Box::new(key.value().to_string()) as Box<dyn rusqlite::ToSql>),
             );
         }
 
         // Convert `params` to a slice of `&dyn ToSql`
-        let params_slice: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        let params_slice: Vec<&dyn rusqlite::ToSql> = params.iter().map(AsRef::as_ref).collect();
 
         // Prepare the query
         let mut stmt = self.connection.prepare(&sql)?;
@@ -465,8 +468,8 @@ mod tests {
                 },
             },
         ];
-        let _result = lws.add_jira_issues(&issues)?;
-        let issues = lws.get_jira_issues_filtered_by_keys(vec![
+        lws.add_jira_issues(&issues)?;
+        let issues = lws.get_jira_issues_filtered_by_keys(&vec![
             JiraKey::from("ISSUE-1"),
             JiraKey::from("Issue-2"),
         ])?;

@@ -287,10 +287,10 @@ async fn sync_subcommand(sync: Synchronisation) -> anyhow::Result<()> {
     );
 
     // Retrieve the work logs for each issue key specified on the command line
-    for issue_key in issue_keys_to_sync.iter() {
+    for issue_key in &issue_keys_to_sync {
         let worklogs = runtime
             .get_jira_client()
-            .get_worklogs_for_current_user(&issue_key, start_after)
+            .get_worklogs_for_current_user(issue_key, start_after)
             .await
             .map_err(|e| WorklogError::JiraResponse {
                 msg: format!("unable to get worklogs for current user {e}").to_string(),
@@ -434,11 +434,11 @@ async fn status_subcommand(status: Status) {
     // Prints the report
     table_report_weekly::table_report_weekly(&worklogs);
 
-    print_info_about_time_codes(worklog_service, jira_keys_to_report);
+    print_info_about_time_codes(&worklog_service, jira_keys_to_report);
 }
 
 fn print_info_about_time_codes(
-    worklog_service: LocalWorklogService,
+    worklog_service: &LocalWorklogService,
     mut jira_keys_to_report: Vec<JiraKey>,
 ) {
     if jira_keys_to_report.is_empty() {
@@ -456,7 +456,7 @@ fn print_info_about_time_codes(
     );
 
     let result = worklog_service
-        .get_jira_issues_filtered_by_keys(jira_keys_to_report)
+        .get_jira_issues_filtered_by_keys(&jira_keys_to_report)
         .expect("Unable to retrieve Jira Issue information");
     debug!("Retrieved {} entries from jira_issue table", result.len());
 
