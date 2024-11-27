@@ -5,7 +5,7 @@ use anyhow::Context;
 use anyhow::Result;
 use directories;
 use directories::ProjectDirs;
-use log::{debug};
+use log::debug;
 use serde::{Deserialize, Serialize};
 use std::error;
 use std::fs::{self, remove_file, File};
@@ -118,7 +118,7 @@ pub fn local_worklog_dbms_file_name() -> PathBuf {
 /// When something goes wrong
 /// # Panics
 /// If the temp file could not be created
-pub fn tmp_local_worklog_dbms_file_name() -> anyhow::Result<PathBuf,WorklogError> {
+pub fn tmp_local_worklog_dbms_file_name() -> anyhow::Result<PathBuf, WorklogError> {
     // Create a temporary file with a custom prefix
     let temp_file = tempfile::Builder::new()
         .prefix("worklog")
@@ -135,7 +135,9 @@ pub fn tmp_local_worklog_dbms_file_name() -> anyhow::Result<PathBuf,WorklogError
             )
         });
         if let Ok(true) = tmp_db.try_exists() {
-            return Err(WorklogError::FileNotDeleted(tmp_db.to_string_lossy().to_string()));
+            return Err(WorklogError::FileNotDeleted(
+                tmp_db.to_string_lossy().to_string(),
+            ));
         }
     } else {
         // Create the directory if it doesn't exist
@@ -166,13 +168,10 @@ fn read(path: &Path) -> Result<AppConfiguration, WorklogError> {
             path: path.into(),
             source,
         })?;
-        toml::from_str::<AppConfiguration>(&contents).map_err(|source| {
-            WorklogError::TomlParse {
-                path: path.into(),
-                source,
-            }
-        },
-    )
+    toml::from_str::<AppConfiguration>(&contents).map_err(|source| WorklogError::TomlParse {
+        path: path.into(),
+        source,
+    })
 }
 
 fn create_configuration_file(cfg: &AppConfiguration, path: &PathBuf) -> Result<()> {
@@ -210,11 +209,8 @@ pub fn load() -> Result<AppConfiguration, WorklogError> {
             && secure_credentials::get_secure_token(KEYCHAIN_SERVICE, &app_config.jira.user)
                 .is_err()
         {
-            create_configuration_file(&app_config, &config_path).map_err(|_src_err| {
-                WorklogError::ConfigFileCreation {
-                    path: config_path,
-                }
-            })?;
+            create_configuration_file(&app_config, &config_path)
+                .map_err(|_src_err| WorklogError::ConfigFileCreation { path: config_path })?;
         }
 
         // Merges the Jira token from the Keychain into the Application configuration
@@ -234,10 +230,25 @@ pub fn tmp_conf_load() -> Result<AppConfiguration, WorklogError> {
     if application_config.jira.has_valid_jira_token() {
         let config_file_name = tmp_config_file_name();
 
-        application_config.application_data.journal_data_file_name = tmp_journal_data_file_name().to_string_lossy().to_string();
-        eprintln!("{}", application_config.application_data.journal_data_file_name);
-        application_config.application_data.local_worklog = Some(tmp_local_worklog_dbms_file_name().unwrap().to_string_lossy().to_string());
-        create_configuration_file(&application_config, &config_file_name).unwrap_or_else(|_| panic!("Unable to create configuration file {}, with this content: {:?}", config_file_name.to_string_lossy(), application_config));
+        application_config.application_data.journal_data_file_name =
+            tmp_journal_data_file_name().to_string_lossy().to_string();
+        eprintln!(
+            "{}",
+            application_config.application_data.journal_data_file_name
+        );
+        application_config.application_data.local_worklog = Some(
+            tmp_local_worklog_dbms_file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string(),
+        );
+        create_configuration_file(&application_config, &config_file_name).unwrap_or_else(|_| {
+            panic!(
+                "Unable to create configuration file {}, with this content: {:?}",
+                config_file_name.to_string_lossy(),
+                application_config
+            )
+        });
         Ok(application_config)
     } else {
         panic!("The Jira token in the application configuration is invalid. You need to create a configuration file with a valid Jira token");

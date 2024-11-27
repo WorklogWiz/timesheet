@@ -9,24 +9,24 @@ extern crate core;
 use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
-use std::fmt::{Formatter};
+use std::fmt::Formatter;
 use std::process::exit;
 use std::time::Instant;
 
 use base64::prelude::*;
 use base64::Engine;
 use chrono::{DateTime, Days, Local, Months, NaiveDateTime, NaiveTime, TimeZone, Utc};
+use common::config;
+use config::AppConfiguration;
 use futures::StreamExt;
 use log::{debug, info};
 use reqwest::header::HeaderMap;
 use reqwest::header::HeaderValue;
 use reqwest::{Client, StatusCode};
-use serde::de::{DeserializeOwned, Visitor};
-use serde::{Deserialize, Deserializer};
-use serde::Serialize;
 use serde::de::{self};
-use common::config;
-use config::AppConfiguration;
+use serde::de::{DeserializeOwned, Visitor};
+use serde::Serialize;
+use serde::{Deserialize, Deserializer};
 
 /// Holds the ULR of the Jira API to use
 pub const JIRA_URL: &str = "https://autostore.atlassian.net/rest/api/latest";
@@ -148,9 +148,9 @@ pub struct JiraIssuesPage {
 }
 /// Represents a Jira issue key like for instance `TIME-148`
 #[derive(Debug, Serialize, Default, Eq, PartialEq, Clone)]
-pub struct JiraKey{
+pub struct JiraKey {
     #[serde(alias = "key")]
-    value: String
+    value: String,
 }
 
 impl JiraKey {
@@ -159,8 +159,13 @@ impl JiraKey {
     /// If the supplied value is empty
     #[must_use]
     pub fn new(input: &str) -> Self {
-        assert!(!(input.is_empty() || input.trim().is_empty()), "JiraKey may not be empty!");
-        JiraKey { value: input.to_uppercase() }
+        assert!(
+            !(input.is_empty() || input.trim().is_empty()),
+            "JiraKey may not be empty!"
+        );
+        JiraKey {
+            value: input.to_uppercase(),
+        }
     }
     #[must_use]
     pub fn value(&self) -> &str {
@@ -770,7 +775,8 @@ impl JiraClient {
                     let issues: Vec<JiraIssue> = issues
                         .into_iter()
                         .filter(|issue| {
-                            filter.is_empty() || !filter.is_empty() && filter.contains(&issue.key.value)
+                            filter.is_empty()
+                                || !filter.is_empty() && filter.contains(&issue.key.value)
                         })
                         .collect();
                     debug!("Filtered {} issues for {}", issues.len(), &project.key);

@@ -20,9 +20,7 @@ use std::collections::BTreeMap;
 /// Week total      12:30 15:00 07:30 07:30   -     -     -   42:30
 /// =============== ===== ===== ===== ===== ===== ===== ===== =====
 /// ````
-pub fn table_report_weekly(
-    worklog_entries: &[LocalWorklog],
-) {
+pub fn table_report_weekly(worklog_entries: &[LocalWorklog]) {
     // Holds the accumulated work hours per date and then per issue key
     let mut daily_totals_for_all_jira_key: BTreeMap<&JiraKey, BTreeMap<NaiveDate, i32>> =
         BTreeMap::new();
@@ -30,10 +28,10 @@ pub fn table_report_weekly(
 
     // Iterates all work logs and accumulates them by date, Jira issue key
     for e in worklog_entries {
-         daily_totals_for_all_jira_key
+        daily_totals_for_all_jira_key
             .entry(&e.issue_key)
             //.or_insert_with(BTreeMap::<NaiveDate, i32>::new)
-             .or_default()
+            .or_default()
             .entry(e.started.date_naive())
             .and_modify(|sum| *sum += e.timeSpentSeconds)
             .or_insert(e.timeSpentSeconds);
@@ -65,8 +63,11 @@ pub fn table_report_weekly(
             let mut week_total_per_time_code = 0;
             while current_date <= sunday {
                 let spent_seconds = date_spent_map.get(&current_date.date_naive()).unwrap_or(&0);
-                week_total_per_time_code +=  spent_seconds;
-                total_per_week_day.entry(current_date.date_naive()).and_modify(|total| *total += spent_seconds).or_insert(*spent_seconds);
+                week_total_per_time_code += spent_seconds;
+                total_per_week_day
+                    .entry(current_date.date_naive())
+                    .and_modify(|total| *total += spent_seconds)
+                    .or_insert(*spent_seconds);
 
                 let hh_mm_string = date::seconds_to_hour_and_min(spent_seconds);
                 print!(
@@ -78,7 +79,7 @@ pub fn table_report_weekly(
                     }
                 );
 
-                current_date +=  Duration::days(1);
+                current_date += Duration::days(1);
             }
             println!(" {:5}", seconds_to_hour_and_min(&week_total_per_time_code));
         }
@@ -89,19 +90,24 @@ pub fn table_report_weekly(
         print_week_total(&mut current_monday, sunday, &mut total_per_week_day);
 
         // Move to next week
-        current_monday +=  Duration::weeks(1);
+        current_monday += Duration::weeks(1);
     }
     debug!("Table report done");
-
 }
 
-fn print_week_total(current_monday: &mut DateTime<Local>, sunday: DateTime<Local>, total_per_week_day: &mut BTreeMap<NaiveDate, i32>) {
+fn print_week_total(
+    current_monday: &mut DateTime<Local>,
+    sunday: DateTime<Local>,
+    total_per_week_day: &mut BTreeMap<NaiveDate, i32>,
+) {
     print!("{:15}", "Week total");
     let mut current_date = *current_monday;
     let mut week_total = 0;
 
     while current_date <= sunday {
-        let seconds = total_per_week_day.get(&current_date.date_naive()).unwrap_or(&0);
+        let seconds = total_per_week_day
+            .get(&current_date.date_naive())
+            .unwrap_or(&0);
         week_total += *seconds;
         let output = if *seconds > 0 {
             seconds_to_hour_and_min(seconds)
@@ -138,7 +144,6 @@ fn find_min_max_started(worklogs: &[LocalWorklog]) -> Option<(DateTime<Local>, D
     Some(min_max)
 }
 
-
 fn print_weekly_table_header() {
     println!(
         "{:15} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5} {:>5}",
@@ -147,8 +152,6 @@ fn print_weekly_table_header() {
 
     print_single_dashed_line();
 }
-
-
 
 fn print_single_dashed_line() {
     println!(

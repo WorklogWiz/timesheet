@@ -12,9 +12,9 @@ use log::{debug, info};
 use reqwest::StatusCode;
 
 use common::{config, date, WorklogError};
-use jira_lib::{JiraClient,  JiraKey, TimeTrackingConfiguration};
+use jira_lib::{JiraClient, JiraKey, TimeTrackingConfiguration};
 use local_worklog::{LocalWorklog, LocalWorklogService};
-use worklog_lib::{ ApplicationRuntime};
+use worklog_lib::ApplicationRuntime;
 
 mod table_report_weekly;
 
@@ -165,7 +165,10 @@ async fn main() {
     configure_logging(&opts); // Handles the -v option
 
     if let Ok(entry_count) = worklog_lib::migrate_csv_journal_to_local_worklog_dbms(None).await {
-        debug!("Migrated {} entries from CVS Journal to local work log DBMS", entry_count);
+        debug!(
+            "Migrated {} entries from CVS Journal to local work log DBMS",
+            entry_count
+        );
     } else {
         info!("No local CSV Journal entries migrated");
     }
@@ -268,7 +271,9 @@ async fn sync_subcommand(sync: Synchronisation) -> anyhow::Result<()> {
         issue_keys_to_sync = runtime.get_local_worklog_service().find_unique_keys()?;
     }
     if issue_keys_to_sync.is_empty() {
-        eprintln!("No issue keys to synchronise supplied on commandline or found in the local dbms");
+        eprintln!(
+            "No issue keys to synchronise supplied on commandline or found in the local dbms"
+        );
         exit(4);
     }
 
@@ -292,7 +297,11 @@ async fn sync_subcommand(sync: Synchronisation) -> anyhow::Result<()> {
                 reason: e.to_string(),
             })?;
         // ... and insert them into our local data store
-        println!("Synchronising {} entries for time code {}", worklogs.len(), &issue_key);
+        println!(
+            "Synchronising {} entries for time code {}",
+            worklogs.len(),
+            &issue_key
+        );
         for worklog in worklogs {
             debug!("Removing and adding {:?}", &worklog);
 
@@ -301,18 +310,26 @@ async fn sync_subcommand(sync: Synchronisation) -> anyhow::Result<()> {
                 debug!("Unable to remove {:?}: {}", &worklog, e);
             }
 
-            debug!("Adding {} {:?}", &issue_key, &worklog );
+            debug!("Adding {} {:?}", &issue_key, &worklog);
 
-            let local_worklog = LocalWorklog::from_worklog(&worklog, JiraKey::from(issue_key.clone()));
+            let local_worklog =
+                LocalWorklog::from_worklog(&worklog, JiraKey::from(issue_key.clone()));
             if let Err(err) = runtime
                 .get_local_worklog_service()
-                .add_entry(&local_worklog) {
-                eprintln!("Insert into database failed for {:?}, cause: {:?}", &local_worklog, err);
+                .add_entry(&local_worklog)
+            {
+                eprintln!(
+                    "Insert into database failed for {:?}, cause: {:?}",
+                    &local_worklog, err
+                );
                 exit(4);
             }
         }
     }
-    let keys: Vec<JiraKey> = issue_keys_to_sync.iter().map(|s| JiraKey::from(s.as_str())).collect();
+    let keys: Vec<JiraKey> = issue_keys_to_sync
+        .iter()
+        .map(|s| JiraKey::from(s.as_str()))
+        .collect();
     let issue_info = runtime.sync_jira_issue_information(&keys).await?;
     println!();
     for issue in issue_info {
@@ -365,20 +382,29 @@ async fn delete_subcommand(delete: &Del) {
             exit(4);
         }
     }
-    match runtime.get_local_worklog_service().remove_entry_by_worklog_id(delete.worklog_id.as_str()){
-        Ok(()) => {println!("Removed entry {} from local worklog", delete.worklog_id);}
+    match runtime
+        .get_local_worklog_service()
+        .remove_entry_by_worklog_id(delete.worklog_id.as_str())
+    {
+        Ok(()) => {
+            println!("Removed entry {} from local worklog", delete.worklog_id);
+        }
         Err(err) => {
-            panic!("Deletion from local worklog failed for worklog.id = '{}' : {err}", delete.worklog_id.as_str());
+            panic!(
+                "Deletion from local worklog failed for worklog.id = '{}' : {err}",
+                delete.worklog_id.as_str()
+            );
         }
     }
 }
 #[allow(clippy::unused_async)]
 async fn status_subcommand(status: Status) {
-    let worklog_service = LocalWorklogService::new(&config::local_worklog_dbms_file_name()).expect("Unable to create the local worklog servicer ");
+    let worklog_service = LocalWorklogService::new(&config::local_worklog_dbms_file_name())
+        .expect("Unable to create the local worklog servicer ");
 
-    let start_after = match status.after.map(|s| date::str_to_date_time(&s).unwrap()){
-        None => { Local::now().checked_sub_days(Days::new(30)) },
-        Some(date) => { Some(date) }
+    let start_after = match status.after.map(|s| date::str_to_date_time(&s).unwrap()) {
+        None => Local::now().checked_sub_days(Days::new(30)),
+        Some(date) => Some(date),
     };
 
     let mut jira_keys_to_report = Vec::<JiraKey>::new();
@@ -386,14 +412,18 @@ async fn status_subcommand(status: Status) {
         jira_keys_to_report.extend(keys.into_iter().map(JiraKey::from));
     }
 
-    eprintln!("Locating local worklog entries after {}", start_after.expect("Must specify --after "));
-    let worklogs = match worklog_service.find_worklogs_after(start_after.unwrap(), &jira_keys_to_report){
-        Ok(worklogs) => { worklogs}
-        Err(e) => {
-            eprintln!("Unable to retrieve worklogs from local work log database {e}");
-            exit(4);
-        }
-    };
+    eprintln!(
+        "Locating local worklog entries after {}",
+        start_after.expect("Must specify --after ")
+    );
+    let worklogs =
+        match worklog_service.find_worklogs_after(start_after.unwrap(), &jira_keys_to_report) {
+            Ok(worklogs) => worklogs,
+            Err(e) => {
+                eprintln!("Unable to retrieve worklogs from local work log database {e}");
+                exit(4);
+            }
+        };
 
     eprintln!("Found {} local worklog entries", worklogs.len());
     let count_before = worklogs.iter().len();
@@ -407,14 +437,27 @@ async fn status_subcommand(status: Status) {
     print_info_about_time_codes(worklog_service, jira_keys_to_report);
 }
 
-fn print_info_about_time_codes(worklog_service: LocalWorklogService, mut jira_keys_to_report: Vec<JiraKey>) {
+fn print_info_about_time_codes(
+    worklog_service: LocalWorklogService,
+    mut jira_keys_to_report: Vec<JiraKey>,
+) {
     if jira_keys_to_report.is_empty() {
-        jira_keys_to_report = worklog_service.find_unique_keys().unwrap_or_default().iter().map(|k| JiraKey::from(k.as_str())).collect();
+        jira_keys_to_report = worklog_service
+            .find_unique_keys()
+            .unwrap_or_default()
+            .iter()
+            .map(|k| JiraKey::from(k.as_str()))
+            .collect();
     }
 
-    debug!("Getting jira issue information for {:?}", &jira_keys_to_report);
+    debug!(
+        "Getting jira issue information for {:?}",
+        &jira_keys_to_report
+    );
 
-    let result = worklog_service.get_jira_issues_filtered_by_keys(jira_keys_to_report).expect("Unable to retrieve Jira Issue information");
+    let result = worklog_service
+        .get_jira_issues_filtered_by_keys(jira_keys_to_report)
+        .expect("Unable to retrieve Jira Issue information");
     debug!("Retrieved {} entries from jira_issue table", result.len());
 
     println!();
@@ -424,19 +467,24 @@ fn print_info_about_time_codes(worklog_service: LocalWorklogService, mut jira_ke
 }
 
 #[allow(dead_code)]
-async fn fetch_worklog_entries_from_jira_for_key(jira_client: &JiraClient, start_after: Option<DateTime<Local>>, issue_key: &String) -> Vec<LocalWorklog> {
-     match jira_client
+async fn fetch_worklog_entries_from_jira_for_key(
+    jira_client: &JiraClient,
+    start_after: Option<DateTime<Local>>,
+    issue_key: &String,
+) -> Vec<LocalWorklog> {
+    match jira_client
         .get_worklogs_for_current_user(issue_key, start_after)
         .await
     {
         Ok(result) => {
             let mut work_logs = vec![];
             for worklog in result {
-                let local_worklog = LocalWorklog::from_worklog(&worklog, JiraKey::from(issue_key.as_str()));
+                let local_worklog =
+                    LocalWorklog::from_worklog(&worklog, JiraKey::from(issue_key.as_str()));
                 work_logs.push(local_worklog);
             }
             work_logs
-        },
+        }
         Err(e) => match e {
             StatusCode::NOT_FOUND => {
                 eprintln!("Issue {issue_key} not found");
@@ -513,7 +561,8 @@ async fn add_subcommand(add: &mut Add) {
         exit(4);
     }
     // Writes the added worklog items to our local journal
-    if let Err(e) = runtime.get_local_worklog_service()
+    if let Err(e) = runtime
+        .get_local_worklog_service()
         .add_worklog_entries(added_worklog_items)
     {
         eprintln!("Failed to add worklog entries to local data store: {e}");
@@ -538,11 +587,10 @@ fn get_jira_client(app_config: &config::AppConfiguration) -> JiraClient {
 
 /// Retrieves the application configuration file
 fn get_runtime() -> ApplicationRuntime {
-    match  ApplicationRuntime::new_production() {
-        Ok(runtime) => { runtime },
+    match ApplicationRuntime::new_production() {
+        Ok(runtime) => runtime,
         Err(err) => {
-            println!(
-                "Unable to load application runtime configuration {err}");
+            println!("Unable to load application runtime configuration {err}");
             println!("Create it with: jira_worklog config --user <EMAIL> --token <JIRA_TOKEN>");
             println!("See 'config' subcommand for more details");
             exit(4);
@@ -568,9 +616,7 @@ fn list_config_and_exit() {
     exit(0);
 }
 
-fn issue_and_entry_report(
-    entries: &[LocalWorklog],
-) {
+fn issue_and_entry_report(entries: &[LocalWorklog]) {
     println!(
         "{:8} {:7} {:7} {:<7} {:22} {:10} Comment",
         "Issue", "IssueId", "Id", "Weekday", "Started", "Time spent",
@@ -729,7 +775,7 @@ async fn add_single_entry(
         issue_key, &result.id
     );
 
-     LocalWorklog::from_worklog(&result, JiraKey::from(issue_key))
+    LocalWorklog::from_worklog(&result, JiraKey::from(issue_key))
 }
 
 fn configure_logging(opts: &Opts) {
@@ -768,4 +814,3 @@ pub fn print_sum_per_week(sum_per_week: &mut i32, week: u32) {
     println!("{:=<23}", "");
     println!();
 }
-
