@@ -427,6 +427,17 @@ async fn status_subcommand(status: Status) {
 
     eprintln!("Found {} local worklog entries", worklogs.len());
     let count_before = worklogs.iter().len();
+    if count_before == 0 {
+        eprintln!(r"ERROR: No data available in your local database for report generation.
+
+        You should consider synchronising your relevant time codes in your local database
+        with jira using this command sample command, replacing issues time-147 and time-166
+        with whatever is relevant for you:
+
+        jira_worklog sync -i time-147 time-166
+        ");
+        exit(2);
+    }
     issue_and_entry_report(&worklogs);
     println!();
     assert_eq!(worklogs.len(), count_before);

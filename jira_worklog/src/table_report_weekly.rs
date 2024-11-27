@@ -6,6 +6,7 @@ use local_worklog::LocalWorklog;
 use log::debug;
 use std::cmp;
 use std::collections::BTreeMap;
+use std::process::exit;
 
 /// Prints summary tables like this:
 /// ````
@@ -20,7 +21,13 @@ use std::collections::BTreeMap;
 /// Week total      12:30 15:00 07:30 07:30   -     -     -   42:30
 /// =============== ===== ===== ===== ===== ===== ===== ===== =====
 /// ````
-pub fn table_report_weekly(worklog_entries: &[LocalWorklog]) {
+pub fn table_report_weekly(
+    worklog_entries: &[LocalWorklog],
+) {
+    if worklog_entries.is_empty() {
+        eprintln!("No worklog entries to create report from!");
+        return;
+    }
     // Holds the accumulated work hours per date and then per issue key
     let mut daily_totals_for_all_jira_key: BTreeMap<&JiraKey, BTreeMap<NaiveDate, i32>> =
         BTreeMap::new();
@@ -168,7 +175,7 @@ fn print_double_dashed_line() {
 
 #[cfg(test)]
 mod tests {
-    use crate::table_report_weekly::find_min_max_started;
+    use crate::table_report_weekly::{find_min_max_started, table_report_weekly};
     use chrono::{Days, Local};
     use jira_lib::JiraKey;
     use local_worklog::LocalWorklog;
@@ -224,5 +231,11 @@ mod tests {
         } else {
             println!("No worklogs available.");
         }
+    }
+
+    #[test]
+    fn test_table_report_weekly() {
+        let _report_weekly = table_report_weekly(&[]);
+
     }
 }
