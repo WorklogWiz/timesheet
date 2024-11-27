@@ -1,5 +1,5 @@
 #[cfg(target_os = "macos")]
-use secure_credentials::get_secure_token;
+use secure_credentials::macos::get_secure_token;
 
 #[allow(unused_variables)]
 fn main() {

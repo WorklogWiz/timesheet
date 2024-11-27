@@ -211,7 +211,7 @@ pub fn load() -> Result<AppConfiguration, WorklogError> {
         // If the loaded configuration file holds a valid Jira token, migrate it to
         // the macOS Key Chain
         if app_config.jira.has_valid_jira_token()
-            && secure_credentials::get_secure_token(KEYCHAIN_SERVICE, &app_config.jira.user)
+            && secure_credentials::macos::get_secure_token(KEYCHAIN_SERVICE, &app_config.jira.user)
                 .is_err()
         {
             create_configuration_file(&app_config, &config_path)
@@ -295,7 +295,7 @@ fn merge_jira_token_from_keychain(config: &mut AppConfiguration) {
     use log::warn;
 
     debug!("MacOS: retrieving the Jira access token from the keychain ...");
-    match secure_credentials::get_secure_token(KEYCHAIN_SERVICE, &config.jira.user) {
+    match secure_credentials::macos::get_secure_token(KEYCHAIN_SERVICE, &config.jira.user) {
         Ok(token) => {
             debug!("Found Jira access token in keychain and injected it");
             config.jira.token = token;
@@ -319,7 +319,7 @@ const JIRA_TOKEN_STORED_IN_MACOS_KEYCHAIN: &str = "*** stored in macos keychain 
 
 #[cfg(target_os = "macos")]
 fn migrate_jira_token_into_keychain(app_config: &mut AppConfiguration) {
-    match secure_credentials::store_secure_token(
+    match secure_credentials::macos::store_secure_token(
         KEYCHAIN_SERVICE,
         &app_config.jira.user,
         &app_config.jira.token,

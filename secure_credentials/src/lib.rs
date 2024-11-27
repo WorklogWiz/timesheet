@@ -1,2 +1,2 @@
 #[cfg(target_os = "macos")]
-mod token;
+pub mod macos;
