@@ -1,0 +1,11 @@
+.commitlint:
+  stage: .pre
+  image: node:23-alpine3.20
+  tags:
+    - linux-docker
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  script:
+    - apk add --no-cache git
+    - npm install -g @commitlint/cli @commitlint/config-conventional;
+    - npx commitlint -V --from $CI_MERGE_REQUEST_DIFF_BASE_SHA
