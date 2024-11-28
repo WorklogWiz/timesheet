@@ -3,10 +3,16 @@
 
 Rust learning project to extract and update hours logged in Jira.
 
+The project consists of the following modules:
+
+* `common` - common types shared between various 
 * `jira_lib` - library with various functions to retrieve data from Jira
 * `jira_worklog` - command line utility to register logged hours into Jira
-* `jira_worklog_etl` - command line utility to extract all Jira worklogs for all issues for all projects not marked as private and shove them
-   and shove them into the Postgresql database
+* `jira_worklog_tui` - text user interface utility as an alternative to `jira_worklog`
+* `local_repo` - Sqlite DBMS repository
+* `rust-axum-backend` - attempt to create a backend for a web based interface
+* `secure_credentials` - secure credentials for macOS clients
+* `worklog_lib` - common functionality to be shared between the various clients
 
 ## How to build on MacOS
 
