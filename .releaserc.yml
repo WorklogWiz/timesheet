@@ -15,6 +15,9 @@ plugins:
     - changelogFile: CHANGELOG.md
   - - '@semantic-release/exec'
     - verifyReleaseCmd: "echo ${nextRelease.version} > .VERSION"
+      #
+      # This script transforms the collected artifacts and puts them in a releasable form
+      #
       prepareCmd: "./.gitlab/releaserc-scripts/prepare.sh ${nextRelease.version}"
   #
   # If you want the ChangeLog to be committed to the repository along with updated Cargo
@@ -26,6 +29,7 @@ plugins:
   #      - '**/Cargo.lock'
   #      - CHANGELOG.md
   #
+
   # If you want to release to gitlab, you can adjust this to your needs, you can prepare the
   # package in the exec:prepareCmd above
   - - '@semantic-release/gitlab'
