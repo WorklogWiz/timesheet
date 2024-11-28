@@ -147,6 +147,7 @@ pub struct JiraIssuesPage {
     pub issues: Vec<JiraIssue>,
 }
 /// Represents a Jira issue key like for instance `TIME-148`
+/// This struct is typically known as a "value object" in other programming languages.
 #[derive(Debug, Serialize, Default, Eq, PartialEq, Clone)]
 pub struct JiraKey {
     #[serde(alias = "key")]
