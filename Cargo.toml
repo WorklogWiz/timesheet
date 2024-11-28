@@ -14,6 +14,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
+# This number should be bumped automagically when using semver and "commitlint" on GitLab
 version = "0.10.0"
 
 [workspace.dependencies]
