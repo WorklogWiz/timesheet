@@ -15,9 +15,13 @@ workflow:
     - <<: *push-branch-rule-cfg
 
 include:
+  - "/.gitlab/commitlint.yml"
   - "/.gitlab/rust.yml"
   - "/.gitlab/docker.yml"
   - "/.gitlab/semantic-release.yml"
+
+pre:commitlint:
+  extends: .commitlint
 
 pre:next-semantic-release-version:
   extends: .next-semantic-release-version
