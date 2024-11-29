@@ -6,7 +6,6 @@ use local_worklog::LocalWorklog;
 use log::debug;
 use std::cmp;
 use std::collections::BTreeMap;
-use std::process::exit;
 
 /// Prints summary tables like this:
 /// ````
