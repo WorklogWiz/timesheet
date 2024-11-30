@@ -6,7 +6,6 @@ use env_logger::Env;
 use log::{debug, Level};
 use thiserror::Error;
 
-pub mod config;
 pub mod date;
 pub mod journal;
 

@@ -426,7 +426,6 @@ dependencies = [
  "anyhow",
  "chrono",
  "csv",
- "directories",
  "env_logger",
  "lazy_static",
  "log",
@@ -434,9 +433,7 @@ dependencies = [
  "rand",
  "regex",
  "rusqlite",
- "secure_credentials",
  "serde",
- "tempfile",
  "thiserror 2.0.3",
  "toml",
 ]
@@ -1233,7 +1230,6 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "chrono-tz",
- "common",
  "config",
  "env_logger",
  "futures",
@@ -1271,13 +1267,14 @@ name = "jira_worklog_tui"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "common",
  "crossterm",
  "dockerfile",
  "futures",
  "jira_lib",
+ "local_worklog",
  "ratatui",
  "tokio",
+ "worklog_lib",
 ]
 
 [[package]]
@@ -3000,10 +2997,15 @@ dependencies = [
  "anyhow",
  "chrono",
  "common",
+ "directories",
  "jira_lib",
  "local_worklog",
  "log",
+ "secure_credentials",
+ "serde",
+ "tempfile",
  "tokio",
+ "toml",
 ]
 
 [[package]]

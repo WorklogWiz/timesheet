@@ -1,9 +1,9 @@
 use env_logger::Env;
 use futures::{stream, StreamExt};
-use jira_lib::JiraIssuesPage;
+use jira_lib::models::issue::IssuesPage;
 use lazy_static::lazy_static;
 use reqwest::Client;
-use std::time::Duration;
+use std::{env, time::Duration};
 use tokio::time::Instant;
 
 lazy_static! {
@@ -310,32 +310,42 @@ async fn main() {
         "https://autostore.atlassian.net/rest/api/latest/search?jql=project%3D%22TRQ%22%20and%20resolution%3DUnresolved&startAt=1400&maxResults=100&fields=summary,customfield_10904",
     ];
 
-    let http_client = jira_lib::create_jira_client().http_client;
+    if let (Ok(host), Ok(user), Ok(token)) = (
+        env::var("JIRA_HOST"),
+        env::var("JIRA_USER"),
+        env::var("JIRA_TOKEN"),
+    ) {
+        let http_client = jira_lib::Jira::new(
+            &format!("{host}/rest/api/latest"),
+            &user,
+            &token).expect("Error initializing jira client")
+            .http_client;
 
-    /*    print!("Retrieving 50 Jira issues...");
-        let elapsed = loop_wait(&urls, &http_client).await;
-        println!("Retrieved in {}ms", elapsed.as_millis());
-    */
-    let start = Instant::now();
-    let _result = buffered_get_pages(&http_client, &urls).await;
-    print!("Buffered retrieval took {}ms", start.elapsed().as_millis());
+        /*    print!("Retrieving 50 Jira issues...");
+            let elapsed = loop_wait(&urls, &http_client).await;
+            println!("Retrieved in {}ms", elapsed.as_millis());
+        */
+        let start = Instant::now();
+        let _result = buffered_get_pages(&http_client, &urls).await;
+        print!("Buffered retrieval took {}ms", start.elapsed().as_millis());
+    }
 }
 
 async fn _loop_wait(urls: &[&str], http_client: &Client) -> Duration {
     let start = Instant::now();
     for url in urls.iter().copied().take(50) {
         let response = http_client.get(url).send().await.unwrap();
-        let _issue = response.json::<JiraIssuesPage>().await.unwrap();
+        let _issue = response.json::<IssuesPage>().await.unwrap();
     }
 
     start.elapsed()
 }
 
-async fn buffered_get_pages(http_client: &Client, urls: &[&str]) -> Vec<JiraIssuesPage> {
-    let futures_result: Vec<JiraIssuesPage> = stream::iter(urls.iter().copied().take(50))
+async fn buffered_get_pages(http_client: &Client, urls: &[&str]) -> Vec<IssuesPage> {
+    let futures_result: Vec<IssuesPage> = stream::iter(urls.iter().copied().take(50))
         .map(|url| async move {
             let response = http_client.get(url).send().await.unwrap();
-            response.json::<JiraIssuesPage>().await.unwrap()
+            response.json::<IssuesPage>().await.unwrap()
         })
         .buffer_unordered(40)
         .collect()

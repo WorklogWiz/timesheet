@@ -1,11 +1,11 @@
+use std::{cmp, collections::BTreeMap};
+
 use chrono::{DateTime, Datelike, Days, Duration, Local, NaiveDate};
-use common::date;
-use common::date::seconds_to_hour_and_min;
-use jira_lib::JiraKey;
-use local_worklog::LocalWorklog;
 use log::debug;
-use std::cmp;
-use std::collections::BTreeMap;
+
+use common::date::{self, seconds_to_hour_and_min};
+use jira_lib::models::core::JiraKey;
+use local_worklog::LocalWorklog;
 
 /// Prints summary tables like this:
 /// ````
@@ -20,9 +20,7 @@ use std::collections::BTreeMap;
 /// Week total      12:30 15:00 07:30 07:30   -     -     -   42:30
 /// =============== ===== ===== ===== ===== ===== ===== ===== =====
 /// ````
-pub fn table_report_weekly(
-    worklog_entries: &[LocalWorklog],
-) {
+pub fn table_report_weekly(worklog_entries: &[LocalWorklog]) {
     if worklog_entries.is_empty() {
         eprintln!("No worklog entries to create report from!");
         return;
@@ -176,7 +174,7 @@ fn print_double_dashed_line() {
 mod tests {
     use crate::table_report_weekly::{find_min_max_started, table_report_weekly};
     use chrono::{Days, Local};
-    use jira_lib::JiraKey;
+    use jira_lib::models::core::JiraKey;
     use local_worklog::LocalWorklog;
     use std::ops::Sub;
 
@@ -234,7 +232,6 @@ mod tests {
 
     #[test]
     fn test_table_report_weekly() {
-        let _report_weekly = table_report_weekly(&[]);
-
+        table_report_weekly(&[]);
     }
 }

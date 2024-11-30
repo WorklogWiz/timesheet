@@ -4,9 +4,6 @@
 //!
 //! Many of the types have been declared specifically for the purpose of work log management,
 //! and are hence not generic.
-extern crate core;
-
-use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
 use std::fmt::Formatter;
@@ -15,24 +12,32 @@ use std::time::Instant;
 
 use base64::prelude::*;
 use base64::Engine;
-use chrono::{DateTime, Days, Local, Months, NaiveDateTime, NaiveTime, TimeZone, Utc};
-use common::config;
-use config::AppConfiguration;
+use chrono::{DateTime, Days, Local, Months, NaiveDateTime, NaiveTime, TimeZone};
 use futures::StreamExt;
 use log::{debug, info};
 use reqwest::header::HeaderMap;
 use reqwest::header::HeaderValue;
 use reqwest::{Client, StatusCode};
-use serde::de::{self};
-use serde::de::{DeserializeOwned, Visitor};
-use serde::Serialize;
-use serde::{Deserialize, Deserializer};
+
+use config::JiraClientConfiguration;
+use models::{
+    issue::{Issue, IssuesPage},
+    project::{JiraProjectsPage, Project},
+    setting::{GlobalSettings, TimeTrackingConfiguration},
+    user::User,
+    worklog::{Insert, Worklog, WorklogsPage},
+};
+
+use serde::de::DeserializeOwned;
+
+pub mod config;
+pub mod models;
 
 /// Holds the ULR of the Jira API to use
 pub const JIRA_URL: &str = "https://autostore.atlassian.net/rest/api/latest";
 const FUTURE_BUFFER_SIZE: usize = 20;
-#[cfg_attr(doc, aquamarine::aquamarine)]
 
+#[cfg_attr(doc, aquamarine::aquamarine)]
 ///
 /// ```mermaid
 /// graph LR
@@ -42,286 +47,6 @@ const FUTURE_BUFFER_SIZE: usize = 20;
 ///      a -. inject mermaid.js .-> r
 ///      end
 /// ```
-
-/// Represents the global Jira settings
-#[derive(Debug, Serialize, Deserialize)]
-#[allow(non_snake_case)]
-#[allow(clippy::struct_excessive_bools)]
-pub struct GlobalSettings {
-    votingEnabled: bool,
-    watchingEnabled: bool,
-    unassignedIssuesAllowed: bool,
-    subTasksEnabled: bool,
-    issueLinkingEnabled: bool,
-    timeTrackingEnabled: bool,
-    attachmentsEnabled: bool,
-    timeTrackingConfiguration: TimeTrackingConfiguration,
-}
-
-/// Represents the time tracking configuration settings retrieved from Jira
-#[derive(Debug, Serialize, Deserialize)]
-#[allow(non_snake_case)]
-pub struct TimeTrackingConfiguration {
-    /// Holds the number of work hours per day, typically 7.5 in Norway
-    pub workingHoursPerDay: f32,
-    /// Number of work days per week, typically 5.0
-    pub workingDaysPerWeek: f32,
-    /// What time format is used
-    pub timeFormat: String,
-    /// What is the default unit
-    pub defaultUnit: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[allow(non_snake_case)]
-pub struct WorklogsPage {
-    pub startAt: i32,
-    #[serde(alias = "maxResults")]
-    pub max_results: i32,
-    pub total: i32,
-    pub worklogs: Vec<Worklog>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, PartialOrd)]
-#[allow(non_snake_case)]
-pub struct Worklog {
-    pub id: String,
-    // "557058:189520f0-d1fb-4a0d-b555-bc44ec1f4ebc"
-    pub author: Author,
-    pub created: DateTime<Utc>,
-    pub updated: DateTime<Utc>,
-    pub started: DateTime<Utc>,
-    pub timeSpent: String,
-    pub timeSpentSeconds: i32,
-    pub issueId: String, // Numeric FK to issue
-    pub comment: Option<String>,
-}
-
-/// Represents the author (user) of a worklog item
-#[derive(Debug, Deserialize, Serialize, PartialOrd, PartialEq, Eq, Hash, Clone)]
-#[allow(non_snake_case)]
-pub struct Author {
-    pub accountId: String,
-    pub emailAddress: Option<String>,
-    pub displayName: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[allow(non_snake_case)]
-pub struct JiraProjectsPage {
-    pub nextPage: Option<String>,
-    pub startAt: i32,
-    pub maxResults: i32,
-    pub total: Option<i32>,
-    pub isLast: Option<bool>,
-    pub values: Vec<JiraProject>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Default)]
-pub struct JiraProject {
-    /// Unique numeric identity of a jira project
-    pub id: String,
-    /// The jira project key, typically a short upper-case abbreviation
-    pub key: String,
-    /// The name of the jira project
-    pub name: String,
-    #[serde(alias = "self")]
-    pub url: String,
-    #[serde(alias = "isPrivate")]
-    pub is_private: bool,
-    #[serde(skip)] // Added after Deserializing
-    /// Collection of issues belonging to the jira project
-    pub issues: Vec<JiraIssue>,
-}
-
-/// Represents a page of Jira issues retrieved from Jira
-#[derive(Debug, Deserialize, Serialize)]
-#[allow(non_snake_case)]
-pub struct JiraIssuesPage {
-    #[serde(alias = "startAt")]
-    pub start_at: i32,
-    #[serde(alias = "maxResults")]
-    pub max_results: i32,
-    pub total: Option<i32>,
-    pub isLast: Option<bool>,
-    pub issues: Vec<JiraIssue>,
-}
-/// Represents a Jira issue key like for instance `TIME-148`
-/// This struct is typically known as a "value object" in other programming languages.
-#[derive(Debug, Serialize, Default, Eq, PartialEq, Clone)]
-pub struct JiraKey {
-    #[serde(alias = "key")]
-    value: String,
-}
-
-impl JiraKey {
-    ///
-    /// # Panics
-    /// If the supplied value is empty
-    #[must_use]
-    pub fn new(input: &str) -> Self {
-        assert!(
-            !(input.is_empty() || input.trim().is_empty()),
-            "JiraKey may not be empty!"
-        );
-        JiraKey {
-            value: input.to_uppercase(),
-        }
-    }
-    #[must_use]
-    pub fn value(&self) -> &str {
-        &self.value
-    }
-
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.value
-    }
-
-    #[must_use]
-    pub fn len(&self) -> usize {
-        self.value.len()
-    }
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        self.value.trim().len() == 0
-    }
-}
-
-impl From<String> for JiraKey {
-    fn from(s: String) -> Self {
-        JiraKey::new(&s)
-    }
-}
-
-impl From<&str> for JiraKey {
-    fn from(value: &str) -> Self {
-        JiraKey::new(value)
-    }
-}
-
-impl fmt::Display for JiraKey {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.value)
-    }
-}
-impl Ord for JiraKey {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.value.cmp(&other.value)
-    }
-}
-impl PartialOrd for JiraKey {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<'de> Deserialize<'de> for JiraKey {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct JiraKeyVisitor;
-
-        impl<'de> Visitor<'de> for JiraKeyVisitor {
-            type Value = JiraKey;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a string or a map with a value field")
-            }
-
-            fn visit_str<E>(self, value: &str) -> Result<JiraKey, E>
-            where
-                E: de::Error,
-            {
-                Ok(JiraKey {
-                    value: value.to_string(),
-                })
-            }
-
-            fn visit_map<M>(self, mut map: M) -> Result<JiraKey, M::Error>
-            where
-                M: de::MapAccess<'de>,
-            {
-                let mut value = None;
-                while let Some(key) = map.next_key()? {
-                    match key {
-                        "value" => {
-                            if value.is_some() {
-                                return Err(de::Error::duplicate_field("value"));
-                            }
-                            value = Some(map.next_value()?);
-                        }
-                        _ => {
-                            let _: de::IgnoredAny = map.next_value()?;
-                        }
-                    }
-                }
-                let value = value.ok_or_else(|| de::Error::missing_field("value"))?;
-                Ok(JiraKey { value })
-            }
-        }
-
-        deserializer.deserialize_any(JiraKeyVisitor)
-    }
-}
-
-/// Represents a jira issue
-#[derive(Debug, Deserialize, Serialize, Default)]
-pub struct JiraIssue {
-    /// Numeric id of the jira issue
-    pub id: String, // Numeric id
-    #[serde(alias = "self")]
-    pub self_url: String,
-    /// The key of the jira issue, typically used and referenced by the user.
-    pub key: JiraKey,
-
-    /// Holds the work logs after deserializing them from Jira
-    #[serde(skip)] // Added after deserializing
-    pub worklogs: Vec<Worklog>,
-    pub fields: JiraFields,
-}
-
-/// Holds the Jira custom field `customfield_10904`
-#[derive(Debug, Deserialize, Serialize, Default)]
-#[allow(non_snake_case)]
-pub struct JiraFields {
-    pub summary: String,
-    #[serde(alias = "customfield_10904")]
-    pub asset: Option<JiraAsset>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Default)]
-#[allow(non_snake_case)]
-pub struct JiraAsset {
-    #[serde(alias = "self")]
-    pub url: String,
-    pub id: String,
-    pub value: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-#[allow(non_snake_case)]
-pub struct WorklogInsert {
-    pub comment: String,
-    pub started: String,
-    pub timeSpentSeconds: i32,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct JiraUser {
-    #[serde(alias = "self")]
-    pub self_url: String,
-    #[serde(alias = "accountId")]
-    pub account_id: String,
-    #[serde(alias = "emailAddress")]
-    pub email_address: String,
-    #[serde(alias = "displayName")]
-    pub display_name: String,
-    #[serde(alias = "timeZone")]
-    pub time_zone: String,
-}
-
 #[derive(Debug)]
 pub enum JiraError {
     RequiredParameter(String),
@@ -366,28 +91,17 @@ impl Error for JiraError {
     }
 }
 
-/// Convenience method to create a `JiraClient` instance. It will load parameters
-/// from the .toml file on disk and set up everything for you.
-// TODO: rewrite this to get rid of the dependency on common::config
-#[must_use]
-#[allow(clippy::missing_panics_doc)]
-pub fn create_jira_client() -> JiraClient {
-    // Creates HTTP client with all the required credentials
-    let config = config::load().unwrap();
-    JiraClient::from(&config).unwrap()
-}
-
-pub struct JiraClient {
-    pub jira_url: String,
+pub struct Jira {
+    url: String,
     pub user_name: String,
     pub http_client: Client,
 }
 
-impl JiraClient {
+impl Jira {
     #[allow(clippy::missing_errors_doc)]
-    pub fn new(jira_url: &str, user_name: &str, token: &str) -> Result<JiraClient, JiraError> {
-        if jira_url.is_empty() {
-            return Err(JiraError::RequiredParameter("jira_url".to_string()));
+    pub fn new(url: &str, user_name: &str, token: &str) -> Result<Jira, JiraError> {
+        if url.is_empty() {
+            return Err(JiraError::RequiredParameter("url".to_string()));
         }
         if user_name.is_empty() {
             return Err(JiraError::RequiredParameter("user_name".to_string()));
@@ -401,16 +115,16 @@ impl JiraClient {
             Err(e) => return Err(JiraError::ReqwestError(e)),
         };
 
-        Ok(JiraClient {
-            jira_url: jira_url.to_string(),
+        Ok(Jira {
+            url: url.to_string(),
             user_name: user_name.to_string(),
             http_client,
         })
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn from(cfg: &AppConfiguration) -> Result<JiraClient, JiraError> {
-        JiraClient::new(&cfg.jira.jira_url, &cfg.jira.user, &cfg.jira.token)
+    pub fn from(cfg: &JiraClientConfiguration) -> Result<Jira, JiraError> {
+        Jira::new(&cfg.jira_url, &cfg.user, &cfg.token)
     }
 
     fn create_http_client(user_name: &str, token: &str) -> Result<reqwest::Client, reqwest::Error> {
@@ -470,15 +184,15 @@ impl JiraClient {
     pub async fn get_projects_filtered(
         &self,
         filter_projects_opt: Option<Vec<String>>,
-    ) -> Vec<JiraProject> {
+    ) -> Vec<Project> {
         let filter = filter_projects_opt.unwrap_or_default();
         self.get_all_projects(filter).await
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub async fn get_issue_by_id_or_key(&self, id: &str) -> Result<JiraIssue, reqwest::StatusCode> {
+    pub async fn get_issue_by_id_or_key(&self, id: &str) -> Result<Issue, reqwest::StatusCode> {
         let resource = format!("/issue/{id}");
-        match Self::get_jira_resource::<JiraIssue>(
+        match Self::get_jira_resource::<Issue>(
             &self.http_client,
             &resource,
             reqwest::StatusCode::OK,
@@ -492,7 +206,7 @@ impl JiraClient {
 
     /// Retrieves all Jira projects, filtering out the private ones
     #[allow(clippy::missing_panics_doc)]
-    pub async fn get_all_projects(&self, project_keys: Vec<String>) -> Vec<JiraProject> {
+    pub async fn get_all_projects(&self, project_keys: Vec<String>) -> Vec<Project> {
         let start_at = 0;
 
         // Retrieves first page of Jira projects
@@ -504,7 +218,7 @@ impl JiraClient {
         .await
         .unwrap();
 
-        let mut projects = Vec::<JiraProject>::new();
+        let mut projects = Vec::<Project>::new();
         if project_page.values.is_empty() {
             // No projects, just return empty vector
             return projects;
@@ -540,7 +254,7 @@ impl JiraClient {
         projects
     }
 
-    pub async fn get_issues_for_single_project(&self, project_key: String) -> Vec<JiraIssue> {
+    pub async fn get_issues_for_single_project(&self, project_key: String) -> Vec<Issue> {
         Self::static_get_issues_for_single_project(&self.http_client, project_key).await
     }
 
@@ -556,12 +270,12 @@ impl JiraClient {
     async fn static_get_issues_for_single_project(
         http_client: &Client,
         project_key: String,
-    ) -> Vec<JiraIssue> {
+    ) -> Vec<Issue> {
         let mut resource = Self::compose_resource_and_params(&project_key, 0, 1024);
 
-        let mut issues = Vec::<JiraIssue>::new();
+        let mut issues = Vec::<Issue>::new();
         loop {
-            let mut issue_page = match Self::get_jira_resource::<JiraIssuesPage>(
+            let mut issue_page = match Self::get_jira_resource::<IssuesPage>(
                 http_client,
                 &resource,
                 reqwest::StatusCode::OK,
@@ -719,7 +433,7 @@ impl JiraClient {
 
     // ---- END of static functions
 
-    pub async fn get_issues_for_projects(&self, projects: Vec<JiraProject>) -> Vec<JiraProject> {
+    pub async fn get_issues_for_projects(&self, projects: Vec<Project>) -> Vec<Project> {
         let http_client = self.http_client.clone();
         let mut futures_stream = futures::stream::iter(projects)
             .map(|mut project| {
@@ -734,7 +448,7 @@ impl JiraClient {
             })
             .buffer_unordered(FUTURE_BUFFER_SIZE);
 
-        let mut result = Vec::<JiraProject>::new();
+        let mut result = Vec::<Project>::new();
         while let Some(r) = futures_stream.next().await {
             match r {
                 Ok(jp) => {
@@ -751,10 +465,10 @@ impl JiraClient {
     #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub async fn get_issues_and_worklogs(
         &self,
-        projects: Vec<JiraProject>,
+        projects: Vec<Project>,
         issues_filter: Vec<String>,
         started_after: NaiveDateTime,
-    ) -> Result<Vec<JiraProject>, StatusCode> {
+    ) -> Result<Vec<Project>, StatusCode> {
         let mut futures_stream = futures::stream::iter(projects)
             .map(|mut project| {
                 let client = self.http_client.clone();
@@ -773,7 +487,7 @@ impl JiraClient {
                         issues.len(),
                         filter
                     );
-                    let issues: Vec<JiraIssue> = issues
+                    let issues: Vec<Issue> = issues
                         .into_iter()
                         .filter(|issue| {
                             filter.is_empty()
@@ -802,7 +516,7 @@ impl JiraClient {
             })
             .buffer_unordered(FUTURE_BUFFER_SIZE);
 
-        let mut result = Vec::<JiraProject>::new();
+        let mut result = Vec::<Project>::new();
         while let Some(r) = futures_stream.next().await {
             match r.unwrap() {
                 Ok(jp) => {
@@ -828,14 +542,14 @@ impl JiraClient {
         // if you fly across the ocean :-)
         // Move this into a function
         let start = started.format("%Y-%m-%dT%H:%M:%S.%3f%z");
-        let worklog_entry = WorklogInsert {
+        let worklog_entry = Insert {
             timeSpentSeconds: time_spent_seconds,
             comment: comment.to_string(),
             started: start.to_string(),
         };
         let json = serde_json::to_string(&worklog_entry).unwrap(); // Let Serde do the heavy lifting
 
-        let url = format!("{}/issue/{}/worklog", self.jira_url, issue_id);
+        let url = format!("{}/issue/{}/worklog", self.url, issue_id);
         debug!("Composed url for worklog insert: {}", url);
 
         Self::post_jira_data::<Worklog>(&self.http_client, url, json, StatusCode::CREATED).await
@@ -847,10 +561,7 @@ impl JiraClient {
         issue_id: String,
         worklog_id: String,
     ) -> Result<(), JiraError> {
-        let url = format!(
-            "{}/issue/{}/worklog/{}",
-            self.jira_url, &issue_id, &worklog_id
-        );
+        let url = format!("{}/issue/{}/worklog/{}", self.url, &issue_id, &worklog_id);
         let response = self.http_client.delete(url).send().await.unwrap();
         match response.status() {
             reqwest::StatusCode::NO_CONTENT => Ok(()), // 204
@@ -888,14 +599,10 @@ impl JiraClient {
         }
     }
 
-    pub async fn get_current_user(&self) -> JiraUser {
+    pub async fn get_current_user(&self) -> User {
         let resource = "/myself";
-        match Self::get_jira_resource::<JiraUser>(
-            &self.http_client,
-            resource,
-            reqwest::StatusCode::OK,
-        )
-        .await
+        match Self::get_jira_resource::<User>(&self.http_client, resource, reqwest::StatusCode::OK)
+            .await
         {
             Ok(ju) => ju,
             Err(StatusCode::UNAUTHORIZED) => {
@@ -962,28 +669,4 @@ pub fn midnight_a_month_ago_in() -> NaiveDateTime {
         a_month_ago.date_naive(),
         NaiveTime::from_hms_opt(0, 0, 0).unwrap(),
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_jira_key() {
-        let k1 = JiraKey::from("TIME-40");
-        let k2 = JiraKey::from("TIME-40");
-        assert_eq!(&k1, &k2, "Seems JiraKey does not compare by value");
-    }
-
-    #[test]
-    fn test_jira_key_uppercase() {
-        let k1 = JiraKey::from("time-147");
-        assert_eq!(k1.to_string(), "TIME-147".to_string());
-    }
-
-    #[test]
-    fn test_deserialize_to_jira_issue() {
-        let json_data = include_str!("../tests/issue_time_63.json");
-        let _jira_issue: JiraIssue = serde_json::from_str(json_data).unwrap();
-    }
 }

@@ -407,17 +407,17 @@ mod tests {
     #[test]
     fn test_calculate_starting_point() {
         let t = calculate_started_time(None, 3600);
-        assert!(t.is_ok());
+        assert!(t.is_ok(), "{t:?}");
 
         let now = Local::now().format("%H:%M").to_string();
         let t = calculate_started_time(Some(str_to_date_time(&now).unwrap()), 3600);
-        assert!(t.is_err());
+        assert!(t.is_err(), "{t:?}");
 
         // now less 1 hour
         let one_hour_ago = Local::now().checked_sub_signed(Duration::hours(1)).unwrap();
         let one_hour_ago_str = one_hour_ago.format("%H:%M").to_string();
         let t = calculate_started_time(Some(str_to_date_time(&one_hour_ago_str).unwrap()), 3600);
-        assert!(t.is_ok());
+        assert!(t.is_ok(), "{t:?}");
 
         // Now less 30min adding 1 hour should fail
         let thirty_min_ago = Local::now()

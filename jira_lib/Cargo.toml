@@ -6,8 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-common = { path = "../common" }
-
 # Using version = "1" will download the latest version of major release 1.x
 serde = { version = "1", features = ["derive"] }
 # Version number needs to be compatible with serde

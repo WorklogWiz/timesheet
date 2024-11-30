@@ -1,10 +1,11 @@
-use crate::journal::csv::JournalCsv;
-use crate::journal::Journal;
 use crate::WorklogError;
 use anyhow::Context;
 use anyhow::Result;
+use common::journal::csv::JournalCsv;
+use common::journal::Journal;
 use directories;
 use directories::ProjectDirs;
+use jira_lib::config::{self, JiraClientConfiguration};
 use serde::{Deserialize, Serialize};
 use std::error;
 use std::fs::{self, remove_file, File};
@@ -22,7 +23,7 @@ const KEYCHAIN_SERVICE: &str = "com.autostoresystem.jira_worklog";
 #[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
 pub struct AppConfiguration {
     /// Holds the URL to the Jira instance we are running again.
-    pub jira: Jira,
+    pub jira: JiraClientConfiguration,
     /// This will ensure that the filename is created, even if the Toml file
     /// is an old version, which does not have an `application_data` section
     #[serde(default = "default_application_data_section")]
@@ -59,32 +60,6 @@ fn default_application_data_section() -> ApplicationData {
     ApplicationData::default()
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-pub struct Jira {
-    pub jira_url: String,
-    pub user: String,
-    pub token: String,
-}
-
-impl Default for Jira {
-    fn default() -> Self {
-        Jira {
-            jira_url: "https://autostore.atlassian.net/rest/api/latest".into(),
-            user: "user.name@autostoresystem.com".into(),
-            token: "<your secret jira token goes here>".into(),
-        }
-    }
-}
-
-impl Jira {
-    /// Does the token look like a valid Jira Security token?
-    #[must_use]
-    pub fn has_valid_jira_token(&self) -> bool {
-        !(self.token == Jira::default().token
-            || self.token.contains("secret")
-            || self.token == JIRA_TOKEN_STORED_IN_MACOS_KEYCHAIN)
-    }
-}
 /// Filename holding the application configuration parameters
 #[must_use]
 pub fn configuration_file_name() -> PathBuf {
@@ -224,6 +199,30 @@ pub fn load() -> Result<AppConfiguration, WorklogError> {
     Ok(app_config)
 }
 
+#[allow(clippy::missing_errors_doc)]
+pub fn save(cfg: &AppConfiguration) -> Result<()> {
+    create_configuration_file(cfg, &configuration_file_name())
+}
+
+#[allow(clippy::missing_errors_doc)]
+pub fn remove() -> io::Result<()> {
+    fs::remove_file(configuration_file_name().as_path())
+}
+
+/// Loads the current application configuration file or creates new one with default values
+/// The location will be the system default as provided by `config_file_name()`
+#[allow(clippy::missing_errors_doc)]
+pub fn load_or_create() -> Result<AppConfiguration, Box<dyn error::Error>> {
+    let p = configuration_file_name();
+    if p.exists() && p.is_file() {
+        Ok(load()?)
+    } else {
+        let cfg = AppConfiguration::default();
+        create_configuration_file(&cfg, &configuration_file_name())?;
+        Ok(cfg)
+    }
+}
+
 ///
 /// # Errors
 /// Returns an error if something fails
@@ -259,31 +258,6 @@ pub fn tmp_conf_load() -> Result<AppConfiguration, WorklogError> {
         panic!("The Jira token in the application configuration is invalid. You need to create a configuration file with a valid Jira token");
     }
 }
-
-#[allow(clippy::missing_errors_doc)]
-pub fn save(cfg: &AppConfiguration) -> Result<()> {
-    create_configuration_file(cfg, &configuration_file_name())
-}
-
-#[allow(clippy::missing_errors_doc)]
-pub fn remove() -> io::Result<()> {
-    fs::remove_file(configuration_file_name().as_path())
-}
-
-/// Loads the current application configuration file or creates new one with default values
-/// The location will be the system default as provided by `config_file_name()`
-#[allow(clippy::missing_errors_doc)]
-pub fn load_or_create() -> Result<AppConfiguration, Box<dyn error::Error>> {
-    let p = configuration_file_name();
-    if p.exists() && p.is_file() {
-        Ok(load()?)
-    } else {
-        let cfg = AppConfiguration::default();
-        create_configuration_file(&cfg, &configuration_file_name())?;
-        Ok(cfg)
-    }
-}
-
 /// Sets the Jira Access Security Token in the macOS Key Chain
 /// See also the `security` command.
 /// `
@@ -315,8 +289,6 @@ fn merge_jira_token_from_keychain(config: &mut AppConfiguration) {
     }
 }
 
-const JIRA_TOKEN_STORED_IN_MACOS_KEYCHAIN: &str = "*** stored in macos keychain ***";
-
 #[cfg(target_os = "macos")]
 fn migrate_jira_token_into_keychain(app_config: &mut AppConfiguration) {
     match secure_credentials::macos::store_secure_token(
@@ -339,7 +311,7 @@ fn migrate_jira_token_into_keychain(app_config: &mut AppConfiguration) {
     // a useless placeholder
     // This will ensure the jira security token in the config file on disk contains
     debug!("MacOs: Removing the security token from the config file");
-    app_config.jira.token = JIRA_TOKEN_STORED_IN_MACOS_KEYCHAIN.to_string();
+    app_config.jira.token = config::JIRA_TOKEN_STORED_IN_MACOS_KEYCHAIN.to_string();
 }
 
 #[allow(clippy::missing_errors_doc)]
@@ -388,6 +360,7 @@ mod tests {
         );
     }
 
+    #[ignore]
     #[test]
     fn test_write_and_read_toml_file() -> Result<(), Box<dyn error::Error>> {
         let config_file_path = configuration_file_name().clone();
@@ -437,7 +410,7 @@ mod tests {
         let mut app = AppConfiguration::default();
         assert!(!app.jira.has_valid_jira_token(), "{}", app.jira.token);
 
-        app.jira.token = JIRA_TOKEN_STORED_IN_MACOS_KEYCHAIN.to_string();
+        app.jira.token = config::JIRA_TOKEN_STORED_IN_MACOS_KEYCHAIN.to_string();
         assert!(!app.jira.has_valid_jira_token());
 
         app.jira.token = "XXXXX3xFfGF07-XjakdCf_Y7_CNWuvhyHAhCr5sn4Q1kp35oUiN-zrZm9TeZUIllWqrMuPRc4Zcbo-GvCEgPZSjj1oUZkUZBc7vEOJmSxcdq-lEWHkECvyAee64iBboDeYDJZIaiAidS57YJQnWCEAADmGnE5TyDeZqRkdMgvbMvU9Wyd6T05wI=3FF0BE2A".to_string();

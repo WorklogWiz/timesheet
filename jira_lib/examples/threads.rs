@@ -1,5 +1,7 @@
+use std::env;
+
 use futures::{stream, Future, Stream, StreamExt};
-use jira_lib::{JiraProject, JiraProjectsPage};
+use jira_lib::models::project::{JiraProjectsPage, Project};
 use lazy_static::lazy_static;
 use reqwest::Client;
 use tokio::time::Instant;
@@ -10,37 +12,46 @@ lazy_static! {
 
 #[tokio::main]
 async fn main() {
-    let http_client = jira_lib::create_jira_client().http_client;
+    if let (Ok(host), Ok(user), Ok(token)) = (
+        env::var("JIRA_HOST"),
+        env::var("JIRA_USER"),
+        env::var("JIRA_TOKEN"),
+    ) {
+        let http_client = jira_lib::Jira::new(
+            &format!("{host}/rest/api/latest"),
+            &user,
+            &token).expect("Error initializing jira client")
+            .http_client;
 
-    let urls = vec![
-        "https://autostore.atlassian.net/rest/api/latest/project/search?maxResults=50&startAt=0"
-            .to_string(),
-        "https://autostore.atlassian.net/rest/api/latest/project/search?maxResults=50&startAt=50"
-            .to_string(),
-        "https://autostore.atlassian.net/rest/api/latest/project/search?maxResults=50&startAt=100"
-            .to_string(),
-        "https://autostore.atlassian.net/rest/api/latest/project/search?maxResults=50&startAt=150"
-            .to_string(),
-    ];
+        let urls = vec![
+            "https://autostore.atlassian.net/rest/api/latest/project/search?maxResults=50&startAt=0"
+                .to_string(),
+            "https://autostore.atlassian.net/rest/api/latest/project/search?maxResults=50&startAt=50"
+                .to_string(),
+            "https://autostore.atlassian.net/rest/api/latest/project/search?maxResults=50&startAt=100"
+                .to_string(),
+            "https://autostore.atlassian.net/rest/api/latest/project/search?maxResults=50&startAt=150"
+                .to_string(),
+        ];
 
-    let result = get_project_pages(&http_client, urls).await;
-    let r2 = result.iter().flatten().collect::<Vec<&JiraProject>>();
+        let result = get_project_pages(&http_client, urls).await;
+        let r2 = result.iter().flatten().collect::<Vec<&Project>>();
 
-    println!(
-        "Retrieved {} projects in {}ms",
-        r2.len(),
-        START_TIME.elapsed().as_millis()
-    );
-
+        println!(
+            "Retrieved {} projects in {}ms",
+            r2.len(),
+            START_TIME.elapsed().as_millis()
+        );
     /*    for e in result {
             for p in e {
                 println!("Project: {} {}", p.key, p.name);
             }
         }
     */
+    }
 }
 
-async fn get_project_pages(http_client: &Client, urls: Vec<String>) -> Vec<Vec<JiraProject>> {
+async fn get_project_pages(http_client: &Client, urls: Vec<String>) -> Vec<Vec<Project>> {
     get_project_futures_stream(http_client, urls)
         .buffer_unordered(10)
         .collect()
@@ -50,11 +61,11 @@ async fn get_project_pages(http_client: &Client, urls: Vec<String>) -> Vec<Vec<J
 fn get_project_futures_stream(
     http_client: &Client,
     urls: Vec<String>,
-) -> impl Stream<Item = impl Future<Output = Vec<JiraProject>> + '_> + '_ {
+) -> impl Stream<Item = impl Future<Output = Vec<Project>> + '_> + '_ {
     stream::iter(urls).map(|url| get_projects_from_page(http_client, url))
 }
 
-async fn get_projects_from_page(http_client: &Client, url: String) -> Vec<JiraProject> {
+async fn get_projects_from_page(http_client: &Client, url: String) -> Vec<Project> {
     let start = Instant::now();
     let response = http_client.get(url.clone()).send().await.unwrap();
     let _elapsed = start.elapsed();

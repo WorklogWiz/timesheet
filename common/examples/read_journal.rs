@@ -1,10 +1,7 @@
-use common::config;
 use std::fs::File;
 
 fn main() {
-    let configuration = config::load().unwrap();
-
-    let file = File::open(configuration.application_data.journal_data_file_name).unwrap();
+    let file = File::open("path-to-journal").unwrap();
     let mut rdr = csv::ReaderBuilder::new()
         .delimiter(b';')
         .has_headers(true)

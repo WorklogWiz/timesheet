@@ -1,15 +1,20 @@
 use chrono::DateTime;
-use jira_lib::{Author, JiraFields, JiraIssue, JiraKey, JiraProject, Worklog};
+use jira_lib::models::{
+    core::{Author, JiraFields, JiraKey},
+    issue::Issue,
+    project::Project,
+    worklog::Worklog,
+};
 
 #[test]
 fn test_collect_authors() {
-    let p = JiraProject {
+    let p = Project {
         id: String::new(),
         key: String::new(),
         name: String::new(),
         url: String::new(),
         is_private: false,
-        issues: vec![JiraIssue {
+        issues: vec![Issue {
             id: String::new(),
             self_url: String::new(),
             key: JiraKey::from("key-1"),
