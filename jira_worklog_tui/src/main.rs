@@ -6,12 +6,12 @@ use ratatui::{
     DefaultTerminal,
 };
 use std::error::Error;
+use worklog_lib::config;
+use local_worklog::{LocalWorklog, LocalWorklogService};
 
 use chrono::{
     offset::TimeZone, DateTime, Datelike, Duration, Local, NaiveDate, NaiveTime, Weekday,
 };
-use common::config;
-use jira_lib::{self, JiraClient, Worklog};
 
 fn week_bounds(date: DateTime<Local>) -> (u32, DateTime<Local>, DateTime<Local>) {
     //let now = Local::now();
@@ -31,7 +31,7 @@ fn week_bounds(date: DateTime<Local>) -> (u32, DateTime<Local>, DateTime<Local>)
 
 #[allow(clippy::type_complexity)]
 #[allow(clippy::cast_sign_loss)]
-fn map_to_week_view(worklogs: &[Worklog]) -> (Vec<(String, [u32; 7], u32)>, [u32; 7], u32) {
+fn map_to_week_view(worklogs: &[LocalWorklog]) -> (Vec<(String, [u32; 7], u32)>, [u32; 7], u32) {
     let mut week_view: Vec<(String, [u32; 7], u32)> = vec![];
     let mut column_sums = [0u32; 7];
     let mut total_sum = 0u32;
@@ -65,17 +65,18 @@ fn map_to_week_view(worklogs: &[Worklog]) -> (Vec<(String, [u32; 7], u32)>, [u32
     (week_view, column_sums, total_sum)
 }
 
-async fn fetch_weekly_data(
-    client: &JiraClient,
-    time_codes: Vec<String>,
+#[allow(clippy::type_complexity)]
+fn fetch_weekly_data(
+    worklog_service: &LocalWorklogService,
     start_of_week: DateTime<Local>,
 ) -> (Vec<(String, [u32; 7], u32)>, [u32; 7], u32) {
+    /*
     let all_entries: Vec<Vec<Worklog>> =
         futures::future::join_all(time_codes.into_iter().map(|issue| {
-            let client = &client;
+            let client = &worklog_service;
             async move {
                 match client
-                    .get_worklogs_for_current_user(&issue, Some(start_of_week))
+                    .find_worklogs_after(&issue, Some(start_of_week))
                     .await
                 {
                     Ok(result) => result,
@@ -87,23 +88,28 @@ async fn fetch_weekly_data(
             }
         }))
         .await;
+     */
+    let mut all_local =
+        match worklog_service.find_worklogs_after(start_of_week, &[]) {
+            Ok(worklogs) => worklogs,
+            Err(e) => {
+                panic!("Unable to retrieve worklogs from local work log database {e}");
+            },
+        };
 
-    let mut all_entries: Vec<Worklog> = all_entries.into_iter().flatten().collect();
-    all_entries.sort_by_key(|e| e.started);
-    map_to_week_view(&all_entries)
+    all_local.sort_by_key(|e| e.started);
+    map_to_week_view(&all_local)
 }
 
 #[allow(clippy::unused_async)]
 async fn run(mut terminal: DefaultTerminal) -> Result<(), Box<dyn Error>> {
-    let cfg = config::load()?;
-    let client: JiraClient = JiraClient::from(&cfg)?;
+    let worklog_service = LocalWorklogService::new(&config::local_worklog_dbms_file_name())?;
     let mut current_date = Local::now();
 
     loop {
         let (week, start_of_week, end_of_week) = week_bounds(current_date);
-        let time_codes = cfg.application_data.get_journal().find_unique_keys()?;
         let (week_data, column_sums, row_sums) =
-            fetch_weekly_data(&client, time_codes, start_of_week).await;
+            fetch_weekly_data(&worklog_service, start_of_week);
 
         let rows: Vec<Row> = week_data
             .iter()

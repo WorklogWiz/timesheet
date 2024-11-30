@@ -6,11 +6,13 @@ edition = "2021"
 [dependencies]
 crossterm = "0.28.1"
 ratatui = "0.28.1"
-jira_lib =  {path = "../jira_lib"}
-common = {path = "../common" }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
 chrono = { workspace = true }
 futures = "0.3.31"
+
+worklog_lib =  {path = "../worklog_lib"}
+jira_lib =  {path = "../jira_lib"}
+local_worklog =  {path = "../local_repo"}
 
 [build-dependencies]
 dockerfile = { git = "ssh://git@as-git.autostoresystem.com/autostore-tools/rust-build-tools", rev="v1.0.2" }

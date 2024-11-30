@@ -6,9 +6,6 @@ use log::debug;
 use common::date::{self, seconds_to_hour_and_min};
 use jira_lib::models::core::JiraKey;
 use local_worklog::LocalWorklog;
-use log::debug;
-use std::cmp;
-use std::collections::BTreeMap;
 
 /// Prints summary tables like this:
 /// ````

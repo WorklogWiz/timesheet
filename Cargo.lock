@@ -1267,13 +1267,14 @@ name = "jira_worklog_tui"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "common",
  "crossterm",
  "dockerfile",
  "futures",
  "jira_lib",
+ "local_worklog",
  "ratatui",
  "tokio",
+ "worklog_lib",
 ]
 
 [[package]]
