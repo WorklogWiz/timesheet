@@ -1,13 +1,18 @@
 use chrono::{DateTime, Local};
-use common::config::AppConfiguration;
 use common::journal::Journal;
-use common::{config, WorklogError};
-use jira_lib::{JiraClient, JiraIssue, JiraKey};
+use common::WorklogError;
+use config::AppConfiguration;
+use jira_lib::{
+    models::{core::JiraKey, issue::Issue},
+    Jira,
+};
 use local_worklog::{LocalWorklog, LocalWorklogService};
 use log::{debug, info, warn};
 use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
+
+pub mod config;
 
 pub enum ApplicationRuntime {
     Production(RuntimeState),
@@ -16,7 +21,7 @@ pub enum ApplicationRuntime {
 
 pub struct RuntimeState {
     app_config: AppConfiguration,
-    jira_client: JiraClient,
+    jira_client: Jira,
     local_worklog_service: local_worklog::LocalWorklogService,
 }
 
@@ -69,7 +74,7 @@ impl ApplicationRuntime {
         &self.get_state().app_config
     }
 
-    pub fn get_jira_client(&self) -> &JiraClient {
+    pub fn get_jira_client(&self) -> &Jira {
         &self.get_state().jira_client
     }
 
@@ -112,8 +117,8 @@ impl ApplicationRuntime {
     /// Initializes the runtime using the supplied application configuration
     fn init_runtime(
         app_config: &AppConfiguration,
-    ) -> Result<(JiraClient, LocalWorklogService), WorklogError> {
-        let jira_client = JiraClient::new(
+    ) -> Result<(Jira, LocalWorklogService), WorklogError> {
+        let jira_client = Jira::new(
             &app_config.jira.jira_url,
             &app_config.jira.user,
             &app_config.jira.token,
@@ -138,12 +143,12 @@ impl ApplicationRuntime {
     pub async fn sync_jira_issue_information(
         &self,
         issue_keys: &[JiraKey],
-    ) -> Result<Vec<JiraIssue>, WorklogError> {
+    ) -> Result<Vec<Issue>, WorklogError> {
         let jira_issues = self
             .get_jira_client()
             .get_issues_for_single_project("TIME".to_string())
             .await;
-        let result: Vec<JiraIssue> = jira_issues
+        let result: Vec<Issue> = jira_issues
             .into_iter()
             .filter(|issue| issue_keys.contains(&issue.key))
             .collect();
@@ -330,8 +335,8 @@ mod tests {
     async fn test_sync_jira_issue_information() -> anyhow::Result<(), WorklogError> {
         let runtime = ApplicationRuntime::new_test()?;
         let time_147 = JiraKey::from("TIME-147");
-        let result: Vec<JiraIssue> = runtime
-            .sync_jira_issue_information(&vec![time_147.clone()])
+        let result: Vec<Issue> = runtime
+            .sync_jira_issue_information(&[time_147.clone()])
             .await?;
         assert_eq!(result[0].key, time_147);
         Ok(())

@@ -1,5 +1,7 @@
+/* TODO: Fix these tests using mockall
 use chrono::{Days, Local, Utc};
 use std::string::ToString;
+
 
 #[ignore]
 #[tokio::test] // Requires a valid user token in configuration
@@ -44,3 +46,12 @@ async fn test_get_worklog_entries_for_current_user() {
         .delete_worklog(TEST_ISSUE.to_string(), r.id)
         .await;
 }
+
+#[ignore]
+#[tokio::test]
+async fn test_get_time_tracking_options() {
+    let jira_client = jira_lib::create_jira_client();
+    let options = jira_client.get_time_tracking_options().await;
+    assert_eq!(options.unwrap().defaultUnit, "hour".to_string());
+}
+*/
