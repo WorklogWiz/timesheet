@@ -1,0 +1,22 @@
+[package]
+name = "worklog"
+edition = "2021"
+version.workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+log = {workspace = true}
+
+journal = { path = "../journal"}
+jira = { path = "../jira"}
+secure_credentials = { path = "../secure_credentials" }
+thiserror = { workspace = true }
+anyhow = {workspace = true}
+chrono = {workspace = true}
+serde = { version = "1", features = ["derive"] }
+directories = "5.0.1"
+toml = "0.8.19"
+rusqlite = { version = "0", features = ["bundled", "chrono"] }
+lazy_static = "1.4.0"
+num-traits = "0.2.19"
+regex = "1"

@@ -1,0 +1,30 @@
+[package]
+name = "timesheet-cli"
+description = "Add, delete and get statistics about Jira worklog entries"
+readme = "README.md"
+authors= ["Steinar Overbeck Cook <steinar.cook@autostoresystem.com>"]
+version.workspace = true
+edition = "2021"
+
+[[bin]]
+name = "timesheet-cli"
+path = "src/main.rs"
+
+[[bin]]
+name = "jira_worklog"
+path = "src/main.rs"
+
+[dependencies]
+jira = { path = "../jira" }
+worklog = { path = "../worklog" }
+clap = { version = "4.2.2", features = ["derive"] }
+
+chrono = { workspace = true, features = ["serde"] }
+
+log = {workspace = true}
+env_logger = {  workspace = true }
+
+tokio = { workspace = true, features = ["full"] }
+
+[build-dependencies]
+dockerfile = { git = "ssh://git@as-git.autostoresystem.com/autostore-tools/rust-build-tools", rev="v1.0.2" }

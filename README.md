@@ -5,14 +5,20 @@ Rust learning project to extract and update hours logged in Jira.
 
 The project consists of the following modules:
 
-* `common` - common types shared between various 
-* `jira_lib` - library with various functions to retrieve data from Jira
-* `jira_worklog` - command line utility to register logged hours into Jira
-* `jira_worklog_tui` - text user interface utility as an alternative to `jira_worklog`
+Binaries:
+
+* `cli` - command line utility `timesheet-cli` to register logged hours into Jira.
+it also produces the `jira_worklog`
+* `tui` - text user interface as an alternative to the cli
+* `server` - attempt to create a server for REST/gRPC
+
+Libraries:
+
+* `common` - common types shared between various
+* `jira` - library with various functions to retrieve data from Jira
+* `worklog` - common functionality to be shared between the various clients
 * `local_repo` - Sqlite DBMS repository
-* `rust-axum-backend` - attempt to create a backend for a web based interface
 * `secure_credentials` - secure credentials for macOS clients
-* `worklog_lib` - common functionality to be shared between the various clients
 
 ## How to build on MacOS
 
@@ -34,41 +40,14 @@ is rather large, so perhaps there is better way to do this.
 
 Moved to autostore-tools repo on Sept 2, 2024
 
-Here is an overview of the dependencies, extracted from `Cargo.toml`:
+Here is an overview of the dependencies, extracted from `Cargo.toml` using: `cargo depgraph --workspace-only | dot -Tsvg -o docs/assets/deps.svg`
 
-```plantuml
-component common {
-    component date
-    component journal
-    component config
-}
+![Dependency graph](docs/assets/deps.svg)
 
-component jira_lib
-component jira_worklog
-component jira_worklog_tui
-component local_repo
-component "rust-axum-backend" as Web
-component secure_credentials
-component worklog_lib
+## Maintainer notes
 
-jira_worklog ..> jira_lib
-jira_worklog ..> common
-jira_worklog ..> worklog_lib
-jira_worklog ..> local_repo
+### Generate `pdf` from markdown files
 
-jira_worklog_tui ..> jira_lib
-jira_worklog_tui ..> common
+`pandoc README.md -o README.pdf`
 
-local_repo ..> common
-local_repo ..> jira_lib
-
-jira_lib ..> common
-
-common ..> secure_credentials
-
-worklog_lib ..> common
-worklog_lib ..> jira_lib
-worklog_lib ..> local_repo
-
-
-```
+> To get `pandoc` on MacOS use `brew install pandoc basictex`

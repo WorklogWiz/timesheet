@@ -1,0 +1,20 @@
+[package]
+name = "timesheet-tui"
+version.workspace = true
+edition = "2021"
+
+[[bin]]
+name = "timesheet-tui"
+path = "src/main.rs"
+
+[dependencies]
+crossterm = "0.28.1"
+ratatui = "0.28.1"
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+chrono = { workspace = true }
+futures = "0.3.31"
+
+worklog =  {path = "../worklog"}
+
+[build-dependencies]
+dockerfile = { git = "ssh://git@as-git.autostoresystem.com/autostore-tools/rust-build-tools", rev="v1.0.2" }

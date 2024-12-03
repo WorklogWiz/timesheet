@@ -35,6 +35,5 @@ plugins:
   - - '@semantic-release/gitlab'
     - gitlabUrl: https://as-git.autostoresystem.com
       assets:
-        - path: 'target/jira-worklog/*'
+        - path: 'target/timesheet/*'
           target: generic_package
-          label: "Binaries"
