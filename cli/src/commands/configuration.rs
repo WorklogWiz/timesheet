@@ -37,6 +37,7 @@ pub fn execute(config: Configuration) {
             user,
             token,
             jira_url,
+            tracking_project,
             list: false,
             remove: false,
         } => {
@@ -59,6 +60,9 @@ pub fn execute(config: Configuration) {
             }
             if let Some(jira_url) = jira_url {
                 app_config.jira.jira_url = jira_url.to_string();
+            }
+            if let Some(tracking_project) = tracking_project {
+                app_config.tracking_project = tracking_project.to_string();
             }
             config::save(&app_config).expect("Unable to save the application config");
             println!(

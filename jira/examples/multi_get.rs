@@ -2,8 +2,8 @@ use std::env;
 
 use futures::StreamExt;
 
-use jira::{Credentials, Jira};
 use jira::models::worklog::WorklogsPage;
+use jira::{Credentials, Jira};
 
 #[tokio::main]
 async fn main() {

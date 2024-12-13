@@ -14,9 +14,7 @@ async fn main() {
         let client = Jira::new(&host, Credentials::Basic(user, token))
             .expect("Error initializing jira client");
 
-        let results = client
-            .get::<GlobalSettings>("/configuration")
-            .await;
+        let results = client.get::<GlobalSettings>("/configuration").await;
         println!("{results:?}");
     } else {
         panic!("Missing env var JIRA_HOST, JIRA_USER or JIRA_TOKEN")

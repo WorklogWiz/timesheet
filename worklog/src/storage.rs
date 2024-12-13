@@ -138,9 +138,7 @@ impl WorklogStorage {
         // Creates the schema if needed
         create_local_worklog_schema(&connection)?;
 
-        Ok(WorklogStorage {
-            connection,
-        })
+        Ok(WorklogStorage { connection })
     }
 
     /// Adds a new entry into the local DBMS
@@ -278,7 +276,7 @@ impl WorklogStorage {
         &self,
         start_datetime: DateTime<Local>,
         keys: &[JiraKey],
-    ) -> Result<Vec<LocalWorklog>, rusqlite::Error> {
+    ) -> Result<Vec<LocalWorklog>, WorklogError> {
         // Base SQL query
         let mut sql = String::from(
             "SELECT issue_key, id, author, created, updated, started, time_spent, time_spent_seconds, issue_id, comment
@@ -452,14 +450,9 @@ mod tests {
         };
         lws.add_entry(&worklog)?;
 
-        let result = lws.find_worklogs_after(
-            Local::now().checked_sub_days(Days::new(60)).unwrap(),
-            &[],
-        )?;
-        assert!(
-            !result.is_empty(),
-            "No data found in worklog dbms",
-        );
+        let result =
+            lws.find_worklogs_after(Local::now().checked_sub_days(Days::new(60)).unwrap(), &[])?;
+        assert!(!result.is_empty(), "No data found in worklog dbms",);
         assert!(!result.is_empty(), "Expected a not empty collection");
         Ok(())
     }

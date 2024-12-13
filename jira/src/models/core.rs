@@ -18,16 +18,14 @@ pub struct Author {
 }
 
 /// Holds the Jira custom field `customfield_10904`
-#[derive(Debug, Deserialize, Serialize, Default)]
-#[allow(non_snake_case)]
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
 pub struct JiraFields {
     pub summary: String,
     #[serde(alias = "customfield_10904")]
     pub asset: Option<JiraAsset>,
 }
 
-#[derive(Debug, Deserialize, Serialize, Default)]
-#[allow(non_snake_case)]
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
 pub struct JiraAsset {
     #[serde(alias = "self")]
     pub url: String,

@@ -1,7 +1,10 @@
 use std::env;
 
 use futures::{stream, Future, Stream, StreamExt};
-use jira::{models::project::{JiraProjectsPage, Project}, Credentials, Jira};
+use jira::{
+    models::project::{JiraProjectsPage, Project},
+    Credentials, Jira,
+};
 use lazy_static::lazy_static;
 use reqwest::Client;
 use tokio::time::Instant;

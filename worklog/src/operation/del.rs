@@ -5,7 +5,10 @@ pub struct Del {
     pub worklog_id: String,
 }
 
-pub(crate) async fn execute(runtime: ApplicationRuntime, instructions: &Del) -> Result<String, WorklogError> {
+pub(crate) async fn execute(
+    runtime: &ApplicationRuntime,
+    instructions: &Del,
+) -> Result<String, WorklogError> {
     let client = runtime.jira_client();
 
     let current_user = client.get_current_user().await?;
@@ -16,11 +19,15 @@ pub(crate) async fn execute(runtime: ApplicationRuntime, instructions: &Del) -> 
     if worklog_entry.author.accountId != current_user.account_id {
         return Err(WorklogError::BadInput(format!(
             "ERROR: You are not the owner of worklog with id {}",
-            &instructions.worklog_id)));
+            &instructions.worklog_id
+        )));
     }
 
     client
-        .delete_worklog(instructions.issue_id.clone(), instructions.worklog_id.clone())
+        .delete_worklog(
+            instructions.issue_id.clone(),
+            instructions.worklog_id.clone(),
+        )
         .await?;
     runtime
         .worklog_service()

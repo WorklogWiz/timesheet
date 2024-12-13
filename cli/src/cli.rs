@@ -107,7 +107,7 @@ pub(crate) struct Configuration {
     /// The Jira security API token obtained from your Manage Account -> Security
     #[arg(short, long)]
     pub token: Option<String>,
-    /// Your email address, i.e. steinar.cook@autostoresystem.com
+    /// Your email address used in Jira
     #[arg(short, long)]
     pub user: Option<String>,
     /// Lists the current configuration (if it exists) and exit
@@ -120,6 +120,10 @@ pub(crate) struct Configuration {
         default_value = "https://autostore.atlassian.net/rest/api/latest"
     )]
     pub jira_url: Option<String>,
+    /// The name of the project where the issues to track time on are (make it a list?)
+    #[arg(short, long, default_value = "TIME")]
+    pub tracking_project: Option<String>,
+    /// Remove the current configuration
     #[arg(long, default_value_t = false)]
     pub remove: bool,
 }

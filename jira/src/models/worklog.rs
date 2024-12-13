@@ -13,7 +13,7 @@ pub struct WorklogsPage {
     pub worklogs: Vec<Worklog>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Eq, PartialEq, PartialOrd)]
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, PartialOrd)]
 #[allow(non_snake_case)]
 pub struct Worklog {
     pub id: String,

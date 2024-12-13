@@ -19,7 +19,7 @@ pub struct IssuesPage {
 }
 
 /// Represents a jira issue
-#[derive(Debug, Deserialize, Serialize, Default)]
+#[derive(Clone, Debug, Deserialize, Serialize, Default)]
 pub struct Issue {
     /// Numeric id of the jira issue
     pub id: String, // Numeric id

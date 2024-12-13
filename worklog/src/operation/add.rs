@@ -1,6 +1,12 @@
 use anyhow::Result;
 use chrono::{Datelike, Local, TimeZone, Weekday};
-use jira::{models::{core::JiraKey, setting::{GlobalSettings, TimeTrackingConfiguration}}, Jira};
+use jira::{
+    models::{
+        core::JiraKey,
+        setting::{GlobalSettings, TimeTrackingConfiguration},
+    },
+    Jira,
+};
 use log::{debug, info};
 
 use crate::{date, error::WorklogError, storage::LocalWorklog, ApplicationRuntime};
@@ -12,8 +18,10 @@ pub struct Add {
     pub comment: Option<String>,
 }
 
-pub(crate) async fn execute(runtime: ApplicationRuntime, instructions: &mut Add) -> Result<Vec<LocalWorklog>, WorklogError> {
-
+pub(crate) async fn execute(
+    runtime: &ApplicationRuntime,
+    instructions: &mut Add,
+) -> Result<Vec<LocalWorklog>, WorklogError> {
     let client = runtime.jira_client();
 
     let cfg = client.get::<GlobalSettings>("/configuration").await?;
@@ -22,7 +30,9 @@ pub(crate) async fn execute(runtime: ApplicationRuntime, instructions: &mut Add)
     info!("Global Jira options: {:?}", &time_tracking_options);
 
     if instructions.durations.is_empty() {
-        return Err(WorklogError::BadInput("Need at least one duration".to_string()));
+        return Err(WorklogError::BadInput(
+            "Need at least one duration".to_string(),
+        ));
     }
 
     // Ensure the issue id is always uppercase
@@ -37,7 +47,8 @@ pub(crate) async fn execute(runtime: ApplicationRuntime, instructions: &mut Add)
 
     let mut added_worklog_items: Vec<LocalWorklog> = vec![];
 
-    if instructions.durations.len() == 1 && instructions.durations[0].chars().next().unwrap() <= '9' {
+    if instructions.durations.len() == 1 && instructions.durations[0].chars().next().unwrap() <= '9'
+    {
         // Single duration without a "day name" prefix
         // like for instance --duration 7,5h
         let result = add_single_entry(
@@ -50,7 +61,9 @@ pub(crate) async fn execute(runtime: ApplicationRuntime, instructions: &mut Add)
         )
         .await?;
         added_worklog_items.push(result);
-    } else if !instructions.durations.is_empty() && instructions.durations[0].chars().next().unwrap() >= 'A' {
+    } else if !instructions.durations.is_empty()
+        && instructions.durations[0].chars().next().unwrap() >= 'A'
+    {
         // One or more durations with day name prefix, like for instance:
         // --duration mon:7,5h tue:1h wed:1d
         debug!("Handling multiple entries");
@@ -63,12 +76,10 @@ pub(crate) async fn execute(runtime: ApplicationRuntime, instructions: &mut Add)
         )
         .await?;
     } else {
-        return Err(WorklogError::BadInput(
-            format!(
-                "Internal error, unable to parse the durations. Did not understand: {}",
-                instructions.durations[0]
-            )
-        ));
+        return Err(WorklogError::BadInput(format!(
+            "Internal error, unable to parse the durations. Did not understand: {}",
+            instructions.durations[0]
+        )));
     }
     // Writes the added worklog items to our local journal
     runtime
@@ -172,6 +183,8 @@ async fn add_single_entry(
         )
         .await?;
 
-    Ok(LocalWorklog::from_worklog(&result, JiraKey::from(issue_key)))
+    Ok(LocalWorklog::from_worklog(
+        &result,
+        JiraKey::from(issue_key),
+    ))
 }
-
