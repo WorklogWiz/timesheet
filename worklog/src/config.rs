@@ -23,6 +23,11 @@ const KEYCHAIN_SERVICE: &str = "com.autostoresystem.jira_worklog";
 pub struct AppConfiguration {
     /// Holds the URL to the Jira instance we are running again.
     pub jira: JiraClientConfiguration,
+
+    /// Holds the project where issues to track time on are
+    #[serde(default = "default_tracking_project")]
+    pub tracking_project: String,
+
     /// This will ensure that the filename is created, even if the Toml file
     /// is an old version, which does not have an `application_data` section
     #[serde(default = "default_application_data")]
@@ -59,14 +64,6 @@ impl ApplicationData {
 #[must_use]
 pub fn configuration_file() -> PathBuf {
     project_dirs().preference_dir().into()
-}
-
-pub(crate) const JOURNAL_CSV_FILE_NAME: &str = "worklog_journal.csv";
-
-/// Name of CSV file holding the local journal
-#[must_use]
-pub(crate) fn journal_file() -> PathBuf {
-    project_dirs().data_dir().join(JOURNAL_CSV_FILE_NAME)
 }
 
 /// Filename of the Sqlite DBMS holding the local repo of work logs
@@ -129,8 +126,20 @@ pub fn application_config_to_string(cfg: &AppConfiguration) -> Result<String> {
     Ok(toml::to_string::<AppConfiguration>(cfg)?)
 }
 
+pub(crate) const JOURNAL_CSV_FILE_NAME: &str = "worklog_journal.csv";
+
+/// Name of CSV file holding the local journal
+#[must_use]
+pub(crate) fn journal_file() -> PathBuf {
+    project_dirs().data_dir().join(JOURNAL_CSV_FILE_NAME)
+}
+
 fn default_application_data() -> ApplicationData {
     ApplicationData::default()
+}
+
+fn default_tracking_project() -> String {
+    "TIME".to_string()
 }
 
 fn project_dirs() -> ProjectDirs {

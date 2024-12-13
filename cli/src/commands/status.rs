@@ -4,7 +4,9 @@ use chrono::{Datelike, Days, Local};
 use jira::models::core::JiraKey;
 use log::debug;
 use worklog::{
-    date, error::WorklogError, storage::{LocalWorklog, WorklogStorage}
+    date,
+    error::WorklogError,
+    storage::{LocalWorklog, WorklogStorage},
 };
 
 use crate::{cli::Status, get_runtime, table_report_weekly::table_report_weekly};
@@ -41,7 +43,7 @@ pub async fn execute(status: Status) -> Result<(), WorklogError> {
         with jira using this command sample command, replacing issues time-147 and time-166
         with whatever is relevant for you:
 
-        jira_worklog sync -i time-147 time-166
+        timesheet-cli sync -i time-147 time-166
         "
         );
         exit(2);

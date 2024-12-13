@@ -4,18 +4,25 @@
 //!
 //! Many of the types have been declared specifically for the purpose of work log management,
 //! and are hence not generic.
-use std::{collections::BTreeMap, error::Error, fmt::{self, Formatter}};
+use std::{
+    collections::BTreeMap,
+    error::Error,
+    fmt::{self, Formatter},
+};
 
 use chrono::{DateTime, Days, Local, NaiveDateTime, TimeZone};
+use config::JiraClientConfiguration;
 use futures::StreamExt;
 use log::{debug, info};
-use reqwest::{header::{ACCEPT, CONTENT_TYPE}, Client, Method, RequestBuilder, StatusCode};
-use config::JiraClientConfiguration;
 use models::{
     issue::{Issue, IssuesPage},
     project::{JiraProjectsPage, Project},
     user::User,
     worklog::{Insert, Worklog, WorklogsPage},
+};
+use reqwest::{
+    header::{ACCEPT, CONTENT_TYPE},
+    Client, Method, RequestBuilder, StatusCode,
 };
 
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -66,11 +73,20 @@ impl fmt::Display for JiraError {
         use crate::JiraError::*;
 
         match self {
-            RequiredParameter(param_name) => writeln!(f, "Parameter '{param_name}' must contain a a value"),
+            RequiredParameter(param_name) => {
+                writeln!(f, "Parameter '{param_name}' must contain a a value")
+            }
             DeleteFailed(sc) => writeln!(f, "Failed to delete: {sc}"),
-            WorklogNotFound(issue, worklog_id) => writeln!(f, "Worklog entry with issue_key: {issue} and worklog_id: {worklog_id} not found"),
-            RequestError(e) => writeln!(f, "Internal error in reqwest library: {}", e.to_string().as_str()),
-            ParseError(e) =>  writeln!(f, "Could not connect to Jira: {e:?}!"),
+            WorklogNotFound(issue, worklog_id) => writeln!(
+                f,
+                "Worklog entry with issue_key: {issue} and worklog_id: {worklog_id} not found"
+            ),
+            RequestError(e) => writeln!(
+                f,
+                "Internal error in reqwest library: {}",
+                e.to_string().as_str()
+            ),
+            ParseError(e) => writeln!(f, "Could not connect to Jira: {e:?}!"),
             SerializationError(e) => writeln!(f, "Could not serialize/deserialize: {e:?}!"),
             Fault {
                 ref code,
@@ -143,7 +159,7 @@ impl Jira {
     #[allow(clippy::missing_errors_doc)]
     pub fn new<H>(host: H, credentials: Credentials) -> Result<Jira>
     where
-    H: Into<String>,
+        H: Into<String>,
     {
         let host = Url::parse(&host.into())?;
 
@@ -161,19 +177,16 @@ impl Jira {
         let url = Url::parse(&cfg.jira_url)?;
         Jira::new(
             format!("{}://{}", url.scheme(), url.host().unwrap()),
-            Credentials::Basic(cfg.user.clone(), cfg.token.clone()))
+            Credentials::Basic(cfg.user.clone(), cfg.token.clone()),
+        )
     }
 
-    async fn request<D>(
-        &self,
-        method: Method,
-        endpoint: &str,
-        body: Option<Vec<u8>>,
-    ) -> Result<D>
+    async fn request<D>(&self, method: Method, endpoint: &str, body: Option<Vec<u8>>) -> Result<D>
     where
         D: DeserializeOwned,
     {
-        let url = self.host
+        let url = self
+            .host
             .join(&format!("rest/{}/latest{endpoint}", self.api))?;
 
         let mut request = self
@@ -182,7 +195,7 @@ impl Jira {
             .header(CONTENT_TYPE, "application/json")
             .header(ACCEPT, "application/json");
 
-            request = self.credentials.apply(request);
+        request = self.credentials.apply(request);
 
         if let Some(body) = body {
             request = request.body(body);
@@ -230,7 +243,8 @@ impl Jira {
         S: Serialize,
     {
         let data = serde_json::to_string::<S>(&body)?;
-        self.request::<D>(Method::POST, endpoint, Some(data.into_bytes())).await
+        self.request::<D>(Method::POST, endpoint, Some(data.into_bytes()))
+            .await
     }
 
     /*
@@ -299,17 +313,12 @@ impl Jira {
         clippy::cast_possible_wrap,
         clippy::missing_errors_doc
     )]
-    pub async fn get_issues_for_project(
-        &self,
-        project_key: String,
-    ) -> Result<Vec<Issue>> {
+    pub async fn get_issues_for_project(&self, project_key: String) -> Result<Vec<Issue>> {
         let mut resource = Self::compose_resource_and_params(&project_key, 0, 1024);
 
         let mut issues = Vec::<Issue>::new();
         loop {
-            let mut issue_page = self
-                .get::<IssuesPage>(&resource)
-                .await?;
+            let mut issue_page = self.get::<IssuesPage>(&resource).await?;
 
             // issues.len() will be invalid once we move the contents of the issues into our result
             let is_last_page = issue_page.issues.len() < issue_page.max_results as usize;
@@ -346,9 +355,7 @@ impl Jira {
 
         debug!("Retrieving worklogs for {}", issue_key);
         loop {
-            let mut worklog_page = self
-                .get::<WorklogsPage>(&resource_name)
-                .await?;
+            let mut worklog_page = self.get::<WorklogsPage>(&resource_name).await?;
             let is_last_page = worklog_page.worklogs.len() < worklog_page.max_results as usize;
             if !is_last_page {
                 resource_name = Self::compose_worklogs_url(
@@ -414,8 +421,7 @@ impl Jira {
             .map(|mut project| {
                 let me = self.clone();
                 tokio::spawn(async move {
-                    let Ok(issues) = me.get_issues_for_project(project.key.clone()).await
-                    else {
+                    let Ok(issues) = me.get_issues_for_project(project.key.clone()).await else {
                         todo!()
                     };
                     let _old = std::mem::replace(&mut project.issues, issues);
@@ -453,9 +459,7 @@ impl Jira {
                 let filter = issues_filter.clone();
                 let me = self.clone(); // Clones the vector to allow async move
                 tokio::spawn(async move {
-                    let issues =
-                        me.get_issues_for_project(project.key.clone())
-                            .await?;
+                    let issues = me.get_issues_for_project(project.key.clone()).await?;
                     debug!(
                         "Extracted {} issues. Applying filter {:?}",
                         issues.len(),
@@ -473,11 +477,10 @@ impl Jira {
                     for issue in &mut project.issues {
                         debug!("Retrieving worklogs for issue {}", &issue.key);
                         let key = issue.key.to_string();
-                        let mut worklogs =
-                            match me.get_worklogs_for(key, started_after).await {
-                                Ok(result) => result,
-                                Err(e) => return Err(e),
-                            };
+                        let mut worklogs = match me.get_worklogs_for(key, started_after).await {
+                            Ok(result) => result,
+                            Err(e) => return Err(e),
+                        };
                         debug!(
                             "Issue {} has {} worklog entries",
                             issue.key.value,
@@ -503,10 +506,7 @@ impl Jira {
         Ok(result)
     }
 
-    #[allow(
-        clippy::missing_errors_doc,
-        clippy::missing_panics_doc
-    )]
+    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub async fn insert_worklog(
         &self,
         issue_id: &str,
@@ -530,11 +530,7 @@ impl Jira {
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub async fn delete_worklog(
-        &self,
-        issue_id: String,
-        worklog_id: String,
-    ) -> Result<()> {
+    pub async fn delete_worklog(&self, issue_id: String, worklog_id: String) -> Result<()> {
         let url = format!("/issue/{}/worklog/{}", &issue_id, &worklog_id);
         let _ = self.delete::<Option<Worklog>>(&url).await?;
         Ok(())
@@ -551,10 +547,7 @@ impl Jira {
         self.get::<Worklog>(&resource).await
     }
 
-    #[allow(
-        clippy::missing_errors_doc,
-        clippy::missing_panics_doc
-    )]
+    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     pub async fn get_worklogs_for_current_user(
         &self,
         issue_key: &str,
@@ -569,9 +562,9 @@ impl Jira {
         let naive_date_time = DateTime::from_timestamp_millis(date_time.timestamp_millis())
             .unwrap()
             .naive_local();
-        let result =
-            self.get_worklogs_for(issue_key.to_string(), naive_date_time)
-                .await?;
+        let result = self
+            .get_worklogs_for(issue_key.to_string(), naive_date_time)
+            .await?;
         debug!("Work logs retrieved, filtering them for current user ....");
         Ok(result
             .into_iter()
@@ -586,22 +579,28 @@ mod tests {
     use mockito::Server;
 
     #[tokio::test]
-    async fn fetch_myself_success() -> Result<()>{
+    async fn fetch_myself_success() -> Result<()> {
         let mut server = Server::new_async().await;
         let url = server.url();
-        let _m = server.mock("GET", "/rest/api/latest/myself")
+        let _m = server
+            .mock("GET", "/rest/api/latest/myself")
             .with_status(200)
-            .with_body(r#"{
+            .with_body(
+                r#"{
                 "self": "foo",
                 "accountId": "foo",
                 "emailAddress": "foo@bar.com",
                 "displayName": "foo",
                 "timeZone": "local"
-            }"#)
+            }"#,
+            )
             .create_async()
             .await;
 
-        let client = Jira::new(url, Credentials::Basic("foo@bar.com".to_string(), String::new()))?;
+        let client = Jira::new(
+            url,
+            Credentials::Basic("foo@bar.com".to_string(), String::new()),
+        )?;
         let user = client.get_current_user().await?;
 
         assert_eq!(user.email_address, "foo@bar.com");
@@ -609,19 +608,25 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fetch_myself_unauth() -> Result<()>{
+    async fn fetch_myself_unauth() -> Result<()> {
         let mut server = Server::new_async().await;
         let url = server.url();
-        let _m = server.mock("GET", "/rest/api/latest/myself")
+        let _m = server
+            .mock("GET", "/rest/api/latest/myself")
             .with_status(403)
-            .with_body(r#"{
+            .with_body(
+                r#"{
                 "errorMessages": ["foo"],
                 "errors": {}
-            }"#)
+            }"#,
+            )
             .create_async()
             .await;
 
-        let client = Jira::new(url, Credentials::Basic("foo@bar.com".to_string(), String::new()))?;
+        let client = Jira::new(
+            url,
+            Credentials::Basic("foo@bar.com".to_string(), String::new()),
+        )?;
         if let Err(unauth) = client.get_current_user().await {
             #[allow(clippy::single_match_else)]
             match unauth {

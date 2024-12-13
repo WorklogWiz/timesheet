@@ -39,6 +39,7 @@
         "synchronising",
         "tempfile",
         "testenv",
+        "thiserror",
         "timesheet",
         "timespent",
         "timespentseconds",
@@ -48,5 +49,9 @@
         "worklogs",
         "xmlstarlet",
         "zigbuild"
-    ]
+    ],
+    "editor.formatOnSave": true,
+    "[rust]": {
+      "editor.defaultFormatter": "rust-lang.rust-analyzer"
+    }
 }

@@ -1,65 +1,78 @@
 use axum::{
-    response::{Html, Json},
-    routing::get,
+    extract::State,
+    http::StatusCode,
+    response::{IntoResponse, Json, Response},
+    routing::{get, post},
     Router,
 };
-use serde::{Deserialize, Serialize};
-use std::net::SocketAddr;
+use chrono::{Duration, Local};
+use jira::models::{core::JiraKey, issue::Issue};
+use std::{net::SocketAddr, sync::Arc};
+use tokio::sync::Mutex;
 use tower_http::cors::{Any, CorsLayer};
+use worklog::{error::WorklogError, storage::LocalWorklog, ApplicationRuntime};
 
-#[derive(Serialize)]
-struct Message {
-    message: String,
-}
-
-async fn root() -> Html<&'static str> {
-    Html("<h1>Welcome to the Timesheet Rust Axum Backend</h1>")
-}
-
-async fn api() -> Json<Message> {
-    use chrono::Local;
-
-    Json(Message {
-        message: format!(
-            "Hello from Rust at {}",
-            Local::now().format("%Y-%m-%d %H:%M:%S")
-        ),
-    })
-}
 use serde_json::json;
 
-#[derive(Serialize, Deserialize, Debug)]
-struct Timesheet {
-    projects: Vec<String>,
-    hours: Vec<Vec<u32>>, // 2D array for hours worked per day and per project
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum ServerError {
+    #[error("Internal Server Error")]
+    InternalServerError,
+    #[error("Bad Request")]
+    BadRequest,
+    #[error("Worklog error")]
+    WorklogError(#[from] WorklogError),
 }
 
-// The timesheet handler function
-async fn get_timesheet() -> Json<Timesheet> {
-    // Create some mock data to represent the current timesheet
-    let timesheet = Timesheet {
-        projects: vec![
-            String::from("TIME-117"),
-            String::from("TIME-147"),
-            String::from("TIME-148"),
-        ],
-        hours: vec![
-            vec![4, 5, 0, 8, 7, 3, 2], // TIME-117 Monday through Sunday
-            vec![5, 1, 4, 0, 3, 1, 4], // TIME-147
-            vec![0, 4, 6, 0, 2, 5, 3], // TIME-148
-        ],
-    };
+impl IntoResponse for ServerError {
+    fn into_response(self) -> Response {
+        let status_code = match self {
+            ServerError::InternalServerError => StatusCode::INTERNAL_SERVER_ERROR,
+            ServerError::BadRequest => StatusCode::BAD_REQUEST,
+            ServerError::WorklogError(_worklog_error) => StatusCode::INTERNAL_SERVER_ERROR,
+        };
+
+        let message = "Something went wrong".to_string();
+        (status_code, message).into_response()
+    }
+}
+
+//#[debug_handler]
+#[allow(dead_code)]
+async fn get_tracking_candidates(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<Issue>>, ServerError> {
+    let runtime = state.runtime.lock().await;
+    let operation_result = &runtime.execute(worklog::Operation::Codes).await?;
+
+    match operation_result {
+        worklog::OperationResult::Issues(issues) => Ok(Json(issues.clone())),
+        _ => Err(ServerError::InternalServerError),
+    }
+}
+
+async fn get_worklogs(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<LocalWorklog>>, ServerError> {
+    let runtime = state.runtime.lock().await;
+    let wls = runtime.worklog_service();
+    let keys = wls.find_unique_keys()?;
+    let keys: Vec<JiraKey> = keys.into_iter().map(JiraKey::from).collect();
+    let worklogs = wls.find_worklogs_after(
+        Local::now()
+            .checked_sub_signed(Duration::days(365))
+            .unwrap(),
+        &keys,
+    )?;
 
     // Return the timesheet data as a JSON response
-    Json(timesheet)
+    Ok(Json(worklogs))
 }
 
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
-use axum::routing::post;
-
 // Handler to handle POST requests to /worklog/timesheet
-async fn post_timesheet(Json(payload): Json<Timesheet>) -> impl IntoResponse {
+async fn post_worklog(Json(payload): Json<LocalWorklog>) -> impl IntoResponse {
     // Here you can process the timesheet data, such as saving it to a database
     // For now, we will just print the received data
     println!("Received timesheet data: {payload:?}");
@@ -73,25 +86,36 @@ async fn post_timesheet(Json(payload): Json<Timesheet>) -> impl IntoResponse {
     )
 }
 
+#[derive(Clone)]
+struct AppState {
+    runtime: Arc<Mutex<ApplicationRuntime>>,
+}
+
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), ServerError> {
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
         .allow_headers(Any);
 
+    let state = AppState {
+        runtime: Arc::new(Mutex::new(ApplicationRuntime::new()?)),
+    };
     let app = Router::new()
-        .route("/", get(root))
-        .route("/api", get(api))
-        .route("/worklog/timesheet", get(get_timesheet))
-        .route("/worklog/timesheet", post(post_timesheet))
+        .route("/api/worklogs", get(get_worklogs))
+        .route("/api/worklogs", post(post_worklog))
+        //.route("/api/tracking", get(get_tracking_candidates))
+        .with_state(state)
         .layer(cors);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 4000));
-    println!("Server running on {addr}");
+    println!("Server running on http://{addr}");
 
-    axum::Server::bind(&addr)
+    match axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await
-        .unwrap();
+    {
+        Ok(()) => todo!(),
+        Err(_) => todo!(),
+    }
 }

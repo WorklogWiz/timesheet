@@ -34,8 +34,9 @@ async fn main() -> Result<(), WorklogError> {
     #[allow(clippy::match_wildcard_for_single_variants)]
     match opts.subcmd {
         SubCommand::Add(add) => {
-            let or: &worklog::OperationResult = &get_runtime().execute(Operation::Add(add.into())).await?;
-            match or {
+            let operation_result: &worklog::OperationResult =
+                &get_runtime().execute(Operation::Add(add.into())).await?;
+            match operation_result {
                 worklog::OperationResult::Added(items) => {
                     for item in items {
                         println!(
@@ -46,20 +47,21 @@ async fn main() -> Result<(), WorklogError> {
                             &item.comment.as_deref().unwrap_or("")
                         );
                         println!(
-                            "To delete entry: jira_worklog del -i {} -w {}",
+                            "To delete entry: timesheet-cli del -i {} -w {}",
                             &item.issue_key, &item.id
                         );
                     }
-                },
+                }
                 _ => panic!("This should never happen!"),
             }
         }
 
         SubCommand::Del(del) => {
-            let or = &get_runtime().execute(Operation::Del(del.into())).await?;
-            match or {
-                worklog::OperationResult::Deleted(id) =>
-                    println!("Jira work log id {id} deleted from Jira"),
+            let operation_result = &get_runtime().execute(Operation::Del(del.into())).await?;
+            match operation_result {
+                worklog::OperationResult::Deleted(id) => {
+                    println!("Jira work log id {id} deleted from Jira");
+                }
                 _ => todo!(),
             }
         }
@@ -72,13 +74,15 @@ async fn main() -> Result<(), WorklogError> {
             configuration::execute(config);
         } // end Config
         SubCommand::Codes => {
-            let runtime = get_runtime();
-            let jira_client = runtime.jira_client();
-            let issues = jira_client
-                .get_issues_for_project("TIME".to_string())
-                .await?;
-            for issue in issues {
-                println!("{} {}", issue.key, issue.fields.summary);
+            let operation_result: &worklog::OperationResult =
+                &get_runtime().execute(Operation::Codes).await?;
+            match operation_result {
+                worklog::OperationResult::Issues(issues) => {
+                    for issue in issues {
+                        println!("{} {}", issue.key, issue.fields.summary);
+                    }
+                }
+                _ => todo!(),
             }
         }
         SubCommand::Sync(synchronisation) => {
@@ -95,7 +99,7 @@ fn get_runtime() -> ApplicationRuntime {
         Ok(runtime) => runtime,
         Err(err) => {
             println!("Unable to load application runtime configuration {err}");
-            println!("Create it with: jira_worklog config --user <EMAIL> --token <JIRA_TOKEN>");
+            println!("Create it with: timesheet-cli config --user <EMAIL> --token <JIRA_TOKEN>");
             println!("See 'config' subcommand for more details");
             exit(4);
         }
@@ -104,7 +108,7 @@ fn get_runtime() -> ApplicationRuntime {
 
 fn configure_logging(opts: &Opts) {
     let mut tmp_dir = env::temp_dir();
-    tmp_dir.push("jira_worklog.log");
+    tmp_dir.push("timesheet-cli.log");
 
     if opts.verbosity.is_some() {
         println!("Logging to {}", &tmp_dir.to_string_lossy());

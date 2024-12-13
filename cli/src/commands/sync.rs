@@ -59,10 +59,7 @@ pub async fn execute(sync: Synchronisation) -> Result<(), WorklogError> {
 
             let local_worklog =
                 LocalWorklog::from_worklog(&worklog, JiraKey::from(issue_key.clone()));
-            if let Err(err) = runtime
-                .worklog_service()
-                .add_entry(&local_worklog)
-            {
+            if let Err(err) = runtime.worklog_service().add_entry(&local_worklog) {
                 eprintln!(
                     "Insert into database failed for {:?}, cause: {:?}",
                     &local_worklog, err

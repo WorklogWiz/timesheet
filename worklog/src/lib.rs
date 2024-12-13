@@ -6,17 +6,21 @@ use jira::{
     Jira,
 };
 use journal::Journal;
-use operation::{add::{self, Add}, del::{self, Del}};
-use storage::{LocalWorklog, WorklogStorage};
 use log::{debug, info, warn};
+use operation::{
+    add::{self, Add},
+    del::{self, Del},
+    issues,
+};
 use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;
+use storage::{LocalWorklog, WorklogStorage};
 
-pub mod operation;
 pub mod config;
 pub mod date;
 pub mod error;
+pub mod operation;
 pub mod storage;
 
 pub struct ApplicationRuntime {
@@ -28,11 +32,13 @@ pub struct ApplicationRuntime {
 pub enum Operation {
     Add(Add),
     Del(Del),
+    Codes,
 }
 
 pub enum OperationResult {
     Added(Vec<LocalWorklog>),
     Deleted(String),
+    Issues(Vec<Issue>),
 }
 
 impl ApplicationRuntime {
@@ -70,7 +76,7 @@ impl ApplicationRuntime {
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub async fn execute(self, operation: Operation) -> Result<OperationResult, WorklogError> {
+    pub async fn execute(&self, operation: Operation) -> Result<OperationResult, WorklogError> {
         match operation {
             Operation::Add(mut instructions) => {
                 let worklogs = add::execute(self, &mut instructions).await?;
@@ -79,6 +85,10 @@ impl ApplicationRuntime {
             Operation::Del(instructions) => {
                 let id = del::execute(self, &instructions).await?;
                 Ok(OperationResult::Deleted(id))
+            }
+            Operation::Codes => {
+                let issues = issues::execute(self).await?;
+                Ok(OperationResult::Issues(issues))
             }
         }
     }
@@ -91,11 +101,8 @@ impl ApplicationRuntime {
         // use the default
         // TODO: Rewrite using match
         if app_config.application_data.local_worklog.is_none() && dbms_path.is_none() {
-            app_config.application_data.local_worklog = Some(
-                config::worklog_file()
-                    .to_string_lossy()
-                    .to_string(),
-            );
+            app_config.application_data.local_worklog =
+                Some(config::worklog_file().to_string_lossy().to_string());
         } else if dbms_path.is_some() {
             debug!(
                 "Using {} as the local worklog data store",
@@ -110,9 +117,7 @@ impl ApplicationRuntime {
     }
 
     /// Initializes the runtime using the supplied application configuration
-    fn init_runtime(
-        app_config: &AppConfiguration,
-    ) -> Result<(Jira, WorklogStorage), WorklogError> {
+    fn init_runtime(app_config: &AppConfiguration) -> Result<(Jira, WorklogStorage), WorklogError> {
         let jira_client = Jira::from(&app_config.jira)?;
 
         // Creates the Path to the local worklog DBMS
@@ -136,7 +141,7 @@ impl ApplicationRuntime {
     ) -> Result<Vec<Issue>, WorklogError> {
         let jira_issues = self
             .jira_client()
-            .get_issues_for_project("TIME".to_string())
+            .get_issues_for_project(self.app_config.tracking_project.to_string())
             .await?;
         let result: Vec<Issue> = jira_issues
             .into_iter()
@@ -192,18 +197,13 @@ pub async fn migrate_csv_journal_to_local_worklog_dbms(
         debug!(
             "Inserting {} entries into the local worklog database {}",
             work_logs.len(),
-            runtime
-                .worklog_service()
-                .get_dbms_path()
+            runtime.worklog_service().get_dbms_path()
         );
 
         for wl in work_logs {
             let local_worklog = LocalWorklog::from_worklog(&wl, JiraKey::from(key.clone()));
             debug!("Adding {:?} to local worklog DBMS", &local_worklog);
-            if let Err(error) = runtime
-                .worklog_service()
-                .add_entry(&local_worklog)
-            {
+            if let Err(error) = runtime.worklog_service().add_entry(&local_worklog) {
                 warn!("Failed to insert {:?} : {}", local_worklog, error);
                 info!("Continuing with next entry");
             }

@@ -1,6 +1,6 @@
 # The Jira worklog utility
 
-The `jira_worklog` utility allows you to enter your Jira worklog entries as easy and simple
+The `timesheet-cli` utility allows you to enter your Jira worklog entries as easy and simple
 as possible from the command line. The main objective for this utility is speed. If you don't like command line applications, don't use this tool :-)
 
 This utility will let you add your work log entries in less than 1 second.
@@ -37,20 +37,20 @@ Disclaimer: Network latency and the response time of Jira is the main culprit of
 
 ````shell
 # Add one day of work to Jira issue TIME-94
-jira_worklog add -i time-94 -d 1d
+timesheet-cli add -i time-94 -d 1d
 
 # Give me a status of all work log entries for the last 30 days
-jira_worklog status
+timesheet-cli status
 
 # Give me status for the last 30 days for time-94 and time-40
-jira_worklog status -i time-94 time-40
+timesheet-cli status -i time-94 time-40
 ````
 
 See the detailed examples below for more details.
 
 ## Installation
 
-Once you have downloaded and installed `jira_worklog` in your **path**.
+Once you have downloaded and installed `timesheet-cli` in your **path**.
 Like, for instance, `$HOME/.local/bin`:
 
 1. Obtain a Jira API security token from:
@@ -65,7 +65,7 @@ Like, for instance, `$HOME/.local/bin`:
 
     ````shell
    # Creates the configuration file and stores your credentials in it
-    jira_worklog config --user steinar.cook@autostoresystem.com --token vbF**************E3
+    timesheet-cli config --user steinar.cook@autostoresystem.com --token vbF**************E3
     ````
 
 ### Using `curl` to verify your security token
@@ -82,7 +82,7 @@ curl --request GET \
 ### Installing on macOS
 
 There are some extra security built into the macOS which prevents you from running potential malware.
-Consequently, you will see this error message if you attempt to run `jira_worklog`:
+Consequently, you will see this error message if you attempt to run `timesheet-cli`:
 
 ![macOS Unidentified Developer Screenshot](images/macOS_error_unidentified_dev.png)
 
@@ -90,9 +90,9 @@ To fix this:
 
 ```shell
 # Move to the directory where you installed
-cd [to_the_directory_where_you_have_installed_jira_worklog]
+cd [to_the_directory_where_you_have_installed_timesheet-cli]
 
-chmod a+rx ./jira_worklog && xattr -d com.apple.quarantine ./jira_worklog
+chmod a+rx ./timesheet-cli && xattr -d com.apple.quarantine ./timesheet-cli
 ```
 
 This should solve the problem.
@@ -109,7 +109,7 @@ If you think your machine has been compromised, go to Jira account ira and "Revo
 
 On macOS, the Jira Security Access Token is stored in the built-in KeyChain.
 
-When `jira_worklog` attempts to access your macOS Keychain, this window will pop up.
+When `timesheet-cli` attempts to access your macOS Keychain, this window will pop up.
 It is a good idea to press `Always Allow` to save you some time :-)
 
 ![KeyChain Prompt](images/keychain_prompt.png)
@@ -118,13 +118,14 @@ Here is a neat command to work with security tokens and passwords
 on macOS:
 
 ````shell
-# This will list the entire contents of the `jira_worklog` entry from the keychain
+# This will list the entire contents of the `timesheet-cli` entry from the keychain
+# The jira_worklog name is for backwards compatibility
 security find-generic-password -s com.autostoresystem.jira_worklog -a your.name@company.com -g
 ````
 
 #### Removing local configuration files
 
-You can remove your local configuration file using the command: `jira_worklog config --remove`
+You can remove your local configuration file using the command: `timesheet-cli config --remove`
 
 | Operating system     | Config file location                                                    |
 |----------------------|-------------------------------------------------------------------------|
@@ -151,7 +152,7 @@ Here is an example using all the possible options:
 
 ````shell
 # Specify a duration of 1,5 week, 2,5 days, 5,25 hours and 30min like this
-jira_worklog add -i time-158 -d 1,5w2,5d5,25h30min
+timesheet-cli add -i time-158 -d 1,5w2,5d5,25h30min
 ````
 
 ### Local database file
@@ -160,9 +161,9 @@ The local database file can be found here:
 
 | Operating System | Local Sqlite database file                                                       |
 |------------------|----------------------------------------------------------------------------------|
-| macOS            | /Users/${USER}/Library/Application Support/com.autostore.jira_worklog/worklog.db |
-| Windows          | C:\Users\%USERNAME%\AppData\Roaming\jira_worklog\worklog.db                      |
-| Linux            | /home/${LOGNAME}/.local/share/jira_worklog/worklog.db                            |
+| macOS            | /Users/${USER}/Library/Application Support/com.autostore.timesheet-cli/worklog.db |
+| Windows          | C:\Users\%USERNAME%\AppData\Roaming\timesheet-cli\worklog.db                      |
+| Linux            | /home/${LOGNAME}/.local/share/timesheet-cli/worklog.db                            |
 
 NOTE! I have neither access to a Windows nor a Linux system, so the specified paths might not be correct.
 
@@ -175,28 +176,28 @@ Here are some examples on how to use the utility.
 ````shell
 # Registers 1 hour of work on TIME-94 with a comment
 # The starting point will be current time less 1 hour
-jira_worklog add -i time-94 -d 1h -c "I did some great work for AutoStore"
+timesheet-cli add -i time-94 -d 1h -c "I did some great work for AutoStore"
 
 
 # Registers 1 hour of work on TIME-94 at 11:00 today without a comment
-jira_worklog add -i time-94 -d 1h -s 11:00
+timesheet-cli add -i time-94 -d 1h -s 11:00
 
 # Registers 1 day of work (7.5h) on TIME-94, starting at 08:00 today, no comments
-jira_worklog add -i time-94 -d 1d
+timesheet-cli add -i time-94 -d 1d
 
 # Registers 1 day (7.5 hours) of work starting at 08:00 today with no comment
-jira_worklog add -i time-94 -d 1d
+timesheet-cli add -i time-94 -d 1d
 
 #
 # Add 1d of work last friday, 1d of work on last thursday, 4h of work
 # last Wednesday and 1,5h on last Tuesday
-jira_worklog add -i time-94 -d Fri:1d Thu:1d Wed:4h Tue:1,5h
+timesheet-cli add -i time-94 -d Fri:1d Thu:1d Wed:4h Tue:1,5h
 ````
 
 Given this command:
 
 `````shell
-jira_worklog add -i time-94 -d 13h -c "Meetings and managerial work"
+timesheet-cli add -i time-94 -d 13h -c "Meetings and managerial work"
 `````
 
 You will get a receipt looking something like this:
@@ -216,7 +217,7 @@ Added work log entry Id: 217258 Time spent: 1d 5h 30m Time spent in seconds: 468
 ````shell
 #
 # Shows the status from a given date
-jira_worklog status -i time-40 time-147 time-117 -a 2023-05-01
+timesheet-cli status -i time-40 time-147 time-117 -a 2023-05-01
 ````
 
 This would give you something like this:
@@ -290,7 +291,7 @@ If you omit the `--issue` option, a list of unique time codes will
 be obtained from the local journal on your machine.
 
 ```shell
-jira_worklog status
+timesheet-cli status
 ```
 
 ### Removing entries
@@ -300,7 +301,7 @@ We all make mistakes every now then. To remove an entry you need to specify the
 
 ````shell
 # Removes a work log entry for issue TIME-94 with worklog id of 216626
-jira_worklog del -i time-94 -w 216626
+timesheet-cli del -i time-94 -w 216626
 ````
 
 The entry will also be removed from the local journal.
@@ -313,13 +314,13 @@ Jira and replacing the data in the local database.
 
 ````shell
 # Synchronise all time codes found in the local database going back 30 days
-jira_worklog sync
+timesheet-cli sync
 
 # Synchronise the specified time codes going after the supplied start date
-jira_worklog sync -i time-155 -s 2024-10-01
+timesheet-cli sync -i time-155 -s 2024-10-01
 
 # Synchronise multiple time codes
-jira_worklog sync -i time-155 -i time-166
+timesheet-cli sync -i time-155 -i time-166
 ````
 
 The output looks something like this:
@@ -338,7 +339,7 @@ Synchronising 3 entries for time code time-166
 If you want a complete list of all the available time codes:
 
 ```shell
-jira_worklog codes
+timesheet-cli codes
 ```
 
 Output:
@@ -371,15 +372,15 @@ TIME-145 Port Software - Sustaining
 A log-file is created behind the scenes if you use the `--verbosity` option, which allows for debugging:
 
 ````shell
-jira_worklog status -i time-40 -v debug
+timesheet-cli status -i time-40 -v debug
 ````
 
 Output would look something like this:
 
 ````shell
-jira_worklog status -i TIME-40 -v debug
+timesheet-cli status -i TIME-40 -v debug
 Version: 0.2.7
-Logging to /var/folders/ll/ywcp72091yv33vkts306qs0r0000gn/T/jira_worklog.log
+Logging to /var/folders/ll/ywcp72091yv33vkts306qs0r0000gn/T/timesheet-cli.log
 Issue    IssueId      Id         Weekday Started                      Time spent
 TIME-40  85002        304588     Mon     2024-08-05 08:00 +0200       07:30
 TIME-40  85002        304589     Tue     2024-08-06 08:00 +0200       07:30
