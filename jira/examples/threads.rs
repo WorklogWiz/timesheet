@@ -24,16 +24,8 @@ async fn main() {
             .expect("Error initializing jira client")
             .client;
 
-        let urls = vec![
-            "https://autostore.atlassian.net/rest/api/latest/project/search?maxResults=50&startAt=0"
-                .to_string(),
-            "https://autostore.atlassian.net/rest/api/latest/project/search?maxResults=50&startAt=50"
-                .to_string(),
-            "https://autostore.atlassian.net/rest/api/latest/project/search?maxResults=50&startAt=100"
-                .to_string(),
-            "https://autostore.atlassian.net/rest/api/latest/project/search?maxResults=50&startAt=150"
-                .to_string(),
-        ];
+        let url = format!("https://{host}/rest/api/latest/project/search?maxResults=50&startAt=0");
+        let urls = vec![url.clone(), url.clone(), url.clone(), url.clone()];
 
         let result = get_project_pages(&http_client, urls).await;
         let r2 = result.iter().flatten().collect::<Vec<&Project>>();

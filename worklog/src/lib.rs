@@ -10,7 +10,6 @@ use log::{debug, info, warn};
 use operation::{
     add::{self, Add},
     del::{self, Del},
-    issues,
 };
 use std::fs;
 use std::path::PathBuf;

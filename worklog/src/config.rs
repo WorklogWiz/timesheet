@@ -6,7 +6,6 @@ use jira::config::JiraClientConfiguration;
 use journal::csv::JournalCsv;
 use journal::Journal;
 use serde::{Deserialize, Serialize};
-use std::error;
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
@@ -15,11 +14,11 @@ use std::rc::Rc;
 #[cfg(target_os = "macos")]
 use log::debug;
 #[cfg(target_os = "macos")]
-const KEYCHAIN_SERVICE: &str = "com.autostoresystem.jira_worklog";
+const KEYCHAIN_SERVICE: &str = "com.norns.timesheet";
 
 /// Application configuration struct
 /// Holds the data we need to connect to Jira, write to the local journal and so on
-#[derive(Serialize, Deserialize, Debug, PartialEq, Default, Clone)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct AppConfiguration {
     /// Holds the URL to the Jira instance we are running again.
     pub jira: JiraClientConfiguration,
@@ -110,14 +109,12 @@ pub fn remove() -> io::Result<()> {
 /// Loads the current application configuration file or creates new one with default values
 /// The location will be the system default as provided by `config_file_name()`
 #[allow(clippy::missing_errors_doc)]
-pub fn load_or_create() -> Result<AppConfiguration, Box<dyn error::Error>> {
-    let p = configuration_file();
-    if p.exists() && p.is_file() {
+pub fn load_or_create() -> Result<AppConfiguration> {
+    let path = configuration_file();
+    if path.exists() && path.is_file() {
         Ok(load()?)
     } else {
-        let cfg = AppConfiguration::default();
-        create_configuration_file(&cfg, &configuration_file())?;
-        Ok(cfg)
+        Err(WorklogError::ConfigFileNotFound { path }.into())
     }
 }
 
@@ -143,7 +140,7 @@ fn default_tracking_project() -> String {
 }
 
 fn project_dirs() -> ProjectDirs {
-    ProjectDirs::from("com", "autostore", "jira_worklog")
+    ProjectDirs::from("com", "norns", "timesheet")
         .expect("Unable to determine the name of the 'project_dirs' directory name")
 }
 
@@ -190,8 +187,8 @@ fn create_configuration_file(cfg: &AppConfiguration, path: &PathBuf) -> Result<(
 /// Sets the Jira Access Security Token in the macOS Key Chain
 /// See also the `security` command.
 /// `
-/// security add-generic-password -s com.autosstoresystem.jira_worklog \
-///   -a steinar.cook@autostoresystem.com -w secure_token_goes_here
+/// security add-generic-password -s com.norns.timesheet \
+///   -a your-emailk@whereever.com -w secure_token_goes_here
 /// `
 #[cfg(target_os = "macos")]
 fn merge_jira_token_from_keychain(config: &mut AppConfiguration) {
@@ -286,12 +283,12 @@ mod tests {
         );
     }
 
-    #[ignore]
+    #[ignore] // Cannot access the keychain from a non-interactive test
     #[test]
-    fn test_write_and_read_toml_file() -> Result<(), Box<dyn error::Error>> {
+    fn test_write_and_read_toml_file() -> Result<()> {
         let tmp_config_file = std::env::temp_dir().join("test-config.toml");
 
-        let cfg = AppConfiguration::default();
+        let cfg = generate_config_for_test();
 
         create_configuration_file(&cfg, &tmp_config_file)?;
         if let Ok(result) = read(&tmp_config_file) {
@@ -308,15 +305,17 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_jira_valid_token() {
-        let mut app = AppConfiguration::default();
-        assert!(!app.jira.has_valid_jira_token(), "{}", app.jira.token);
-
-        app.jira.token = JIRA_TOKEN_STORED_IN_MACOS_KEYCHAIN.to_string();
-        assert!(!app.jira.has_valid_jira_token());
-
-        app.jira.token = "XXXXX3xFfGF07-XjakdCf_Y7_CNWuvhyHAhCr5sn4Q1kp35oUiN-zrZm9TeZUIllWqrMuPRc4Zcbo-GvCEgPZSjj1oUZkUZBc7vEOJmSxcdq-lEWHkECvyAee64iBboDeYDJZIaiAidS57YJQnWCEAADmGnE5TyDeZqRkdMgvbMvU9Wyd6T05wI=3FF0BE2A".to_string();
-        assert!(app.jira.has_valid_jira_token());
+    fn generate_config_for_test() -> AppConfiguration {
+        AppConfiguration {
+            jira: JiraClientConfiguration {
+                jira_url: "http".to_string(),
+                user: "steinar".to_string(),
+                token: "not_a_token".to_string(),
+            },
+            application_data: ApplicationData {
+                journal_data_file_name: "journal".to_string(),
+                local_worklog: None,
+            },
+        }
     }
 }

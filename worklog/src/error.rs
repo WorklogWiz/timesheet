@@ -17,6 +17,8 @@ pub enum WorklogError {
     },
     #[error("Unable to create configuration file {path}")]
     ConfigFileCreation { path: PathBuf },
+    #[error("Unable to find configuration file {path}")]
+    ConfigFileNotFound { path: PathBuf },
     #[error("Jira error {0}")]
     JiraError(String),
     #[error("Jira request failed: {msg} : {reason}")]

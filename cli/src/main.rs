@@ -34,9 +34,9 @@ async fn main() -> Result<(), WorklogError> {
     #[allow(clippy::match_wildcard_for_single_variants)]
     match opts.subcmd {
         SubCommand::Add(add) => {
-            let operation_result: &worklog::OperationResult =
+            let or: &worklog::OperationResult =
                 &get_runtime().execute(Operation::Add(add.into())).await?;
-            match operation_result {
+            match or {
                 worklog::OperationResult::Added(items) => {
                     for item in items {
                         println!(
@@ -47,7 +47,7 @@ async fn main() -> Result<(), WorklogError> {
                             &item.comment.as_deref().unwrap_or("")
                         );
                         println!(
-                            "To delete entry: timesheet-cli del -i {} -w {}",
+                            "To delete entry: timesheet del -i {} -w {}",
                             &item.issue_key, &item.id
                         );
                     }
@@ -57,10 +57,10 @@ async fn main() -> Result<(), WorklogError> {
         }
 
         SubCommand::Del(del) => {
-            let operation_result = &get_runtime().execute(Operation::Del(del.into())).await?;
-            match operation_result {
+            let or = &get_runtime().execute(Operation::Del(del.into())).await?;
+            match or {
                 worklog::OperationResult::Deleted(id) => {
-                    println!("Jira work log id {id} deleted from Jira");
+                    println!("Jira work log id {id} deleted from Jira")
                 }
                 _ => todo!(),
             }
@@ -99,7 +99,7 @@ fn get_runtime() -> ApplicationRuntime {
         Ok(runtime) => runtime,
         Err(err) => {
             println!("Unable to load application runtime configuration {err}");
-            println!("Create it with: timesheet-cli config --user <EMAIL> --token <JIRA_TOKEN>");
+            println!("Create it with: timesheet config --user <EMAIL> --token <JIRA_TOKEN>");
             println!("See 'config' subcommand for more details");
             exit(4);
         }
@@ -108,7 +108,7 @@ fn get_runtime() -> ApplicationRuntime {
 
 fn configure_logging(opts: &Opts) {
     let mut tmp_dir = env::temp_dir();
-    tmp_dir.push("timesheet-cli.log");
+    tmp_dir.push("timesheet.log");
 
     if opts.verbosity.is_some() {
         println!("Logging to {}", &tmp_dir.to_string_lossy());

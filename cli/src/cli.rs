@@ -107,7 +107,7 @@ pub(crate) struct Configuration {
     /// The Jira security API token obtained from your Manage Account -> Security
     #[arg(short, long)]
     pub token: Option<String>,
-    /// Your email address used in Jira
+    /// Your email address, i.e. me@whereever.com
     #[arg(short, long)]
     pub user: Option<String>,
     /// Lists the current configuration (if it exists) and exit

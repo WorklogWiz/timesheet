@@ -6,7 +6,7 @@ pub struct Del {
 }
 
 pub(crate) async fn execute(
-    runtime: &ApplicationRuntime,
+    runtime: ApplicationRuntime,
     instructions: &Del,
 ) -> Result<String, WorklogError> {
     let client = runtime.jira_client();

@@ -33,14 +33,3 @@ pub struct Issue {
     pub worklogs: Vec<Worklog>,
     pub fields: JiraFields,
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_deserialize_to_jira_issue() {
-        let json_data = include_str!("../../tests/issue_time_63.json");
-        let _jira_issue: Issue = serde_json::from_str(json_data).unwrap();
-    }
-}

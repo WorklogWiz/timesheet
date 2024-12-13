@@ -267,11 +267,11 @@ mod tests {
 
     fn create_sample_journal() -> PathBuf {
         let data = r"key;w_id;started;time spent;comment
-TIME-147;314335;2024-09-19 20:21 +0200;02:00;jira_worklog
+TIME-147;314335;2024-09-19 20:21 +0200;02:00;timesheet
 TIME-148;315100;2024-09-20 11:57 +0200;01:00;Information meeting on time codes
 TIME-117;315377;2024-09-20 14:33 +0200;01:00;ASOS Product Roadmap
 TIME-147;315633;2024-09-20 18:48 +0200;05:00;Admin
-TIME-147;315634;2024-09-20 22:49 +0200;01:00;jira_worklog
+TIME-147;315634;2024-09-20 22:49 +0200;01:00;timesheet
 ";
         // Creates the temporary file with "random" name
         let path_buf = std::env::temp_dir().join(format!(
