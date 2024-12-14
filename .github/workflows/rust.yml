@@ -15,19 +15,58 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest]
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          #- os: ubuntu-latest
+          #  target: aarch64-unknown-linux-gnu
+          #- os: ubuntu-latest
+          #  target: x86_64-unknown-linux-musl
+          #- os: ubuntu-latest
+          #  target: aarch64-unknown-linux-musl
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          # os: macos-latest
+          #  target: aarch64-apple-darwin
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      #- uses: wagoid/commitlint-github-action@v6
+      - name: Install dependencies
+        run: |
+          if [ "${{ matrix.os }}" == "ubuntu-latest" ]; then
+            sudo apt-get update
+            sudo apt-get --no-install-recommends install -y musl-tools
+          fi
+        shell: bash
 
       - name: Set up Rust
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           override: true
+
+      - name: Cache cargo registry
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry
+
+      - name: Cache cargo build
+        uses: actions/cache@v3
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-build
+          restore-keys: |
+            ${{ runner.os }}-cargo-build
+
+      - name: Add target
+        run: rustup target add ${{ matrix.target }}
 
       - name: Configure sccache environment
         run: |
@@ -40,28 +79,31 @@ jobs:
       - name: Format check
         run: cargo fmt -- --check
 
-      - name: Pedantic check
-        run: cargo clippy -- -D clippy::pedantic
-
       - name: Build
         run: |
-          cargo build --release --message-format=json 1> rustc-messages.json
+          cargo build --release --target ${{ matrix.target }} --message-format=json 1> rustc-messages.json
           if [ $? -ne 0 ]; then
             jq -r 'select(.reason == "compiler-message") | .message | select(.level == "error" or .level == "warning") | .rendered' rustc-messages.json
             exit 1
           else
             jq -r 'select(.reason == "compiler-artifact" and .executable != null) | .executable' rustc-messages.json \
             | sed 's/ (bin)$//' | while IFS= read -r binary; do
-                mkdir -p target/publish
-                cp "$binary" target/publish
+                mkdir -p target/${{ matrix.target }}/publish
+                cp "$binary" target/${{ matrix.target }}/publish
               done
           fi
+        shell: bash
 
-      - name: Test
-        run: cargo test --release
+      - name: Test (native)
+        if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'x86_64-pc-windows-msvc' || matrix.target == 'x86_64-apple-darwin'
+        run: cargo test --target ${{ matrix.target }} --release
+
+      - name: Pedantic check
+        if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'x86_64-pc-windows-msvc' || matrix.target == 'x86_64-apple-darwin'
+        run: cargo clippy --target ${{ matrix.target }} --release -- -D clippy::pedantic
 
       - name: Upload artifact
         uses: actions/upload-artifact@v3
         with:
-          name: ${{ runner.os }}-binary
-          path: target/publish/
+          name: ${{ matrix.target }}-binary
+          path: target/${{ matrix.target }}/publish/
