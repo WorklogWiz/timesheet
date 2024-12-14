@@ -2,6 +2,25 @@ use std::fmt::{self, Formatter};
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
+pub(crate) enum LogLevel {
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+impl fmt::Display for LogLevel {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        match self {
+            LogLevel::Debug => write!(f, "debug"),
+            LogLevel::Info => write!(f, "info"),
+            LogLevel::Warn => write!(f, "warn"),
+            LogLevel::Error => write!(f, "error"),
+        }
+    }
+}
+
 #[derive(Parser)]
 /// Jira worklog utility - add, delete and list jira worklog entries
 ///
@@ -19,24 +38,22 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 #[command(author, version, about)] // Read from Cargo.toml
 pub(crate) struct Opts {
     #[command(subcommand)]
-    pub subcmd: SubCommand,
+    pub cmd: Command,
 
     #[arg(global = true, short, long)]
     pub verbosity: Option<LogLevel>,
 }
 
 #[derive(Subcommand)]
-pub(crate) enum SubCommand {
+pub(crate) enum Command {
     /// Add worklog entries
-    #[command(arg_required_else_help = true)]
     Add(Add),
     /// Delete work log entry
-    #[command(arg_required_else_help = true)]
     Del(Del),
     /// Get status of work log entries
     Status(Status),
-    #[command(arg_required_else_help = true)]
-    Config(Configuration),
+    /// Subcommands for configuration
+    Config(Config),
     /// Lists all time codes
     Codes,
     /// Synchronize local data store with remote Jira work logs
@@ -69,66 +86,53 @@ pub(crate) struct Del {
     pub worklog_id: String,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
-pub(crate) enum LogLevel {
-    Debug,
-    Info,
-    Warn,
-    Error,
-}
-
-impl fmt::Display for LogLevel {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        match self {
-            LogLevel::Debug => write!(f, "debug"),
-            LogLevel::Info => write!(f, "info"),
-            LogLevel::Warn => write!(f, "warn"),
-            LogLevel::Error => write!(f, "error"),
-        }
-    }
-}
-
-#[derive(Parser)]
+#[derive(Args)]
 pub(crate) struct Status {
     /// Issues to be reported on. If no issues are specified.
     /// The unique Jira keys found in the local journal of entries is used.
     /// You can specify a list of issue keys: -i time-147 time-148
     #[arg(short, long, num_args(1..), required = false)]
     pub issues: Option<Vec<String>>,
-    #[arg(short, long)]
     /// Retrieves all entries after the given date
+    #[arg(short, long)]
     pub after: Option<String>,
 }
 
-/// Create, modify or list the configuration file.
-/// The configuration file will be automatically created if you use `--token`, `--user` or `--jira_url`
-#[derive(Parser)]
-pub(crate) struct Configuration {
-    /// The Jira security API token obtained from your Manage Account -> Security
-    #[arg(short, long)]
-    pub token: Option<String>,
-    /// Your email address used in Jira
-    #[arg(short, long)]
-    pub user: Option<String>,
-    /// Lists the current configuration (if it exists) and exit
-    #[arg(short, long)]
-    pub list: bool,
-    /// The URL of Jira, don't change this unless you know what you are doing
-    #[arg(
-        short,
-        long,
-        default_value = "https://autostore.atlassian.net/rest/api/latest"
-    )]
-    pub jira_url: Option<String>,
-    /// The name of the project where the issues to track time on are (make it a list?)
-    #[arg(short, long, default_value = "TIME")]
-    pub tracking_project: Option<String>,
-    /// Remove the current configuration
-    #[arg(long, default_value_t = false)]
-    pub remove: bool,
+#[derive(Args)]
+pub(crate) struct Config {
+    #[command(subcommand)]
+    pub cmd: ConfigCommand,
 }
 
-#[derive(Parser)]
+/// Create, modify or list the configuration file.
+/// The configuration file will be automatically created if you use `--token`, `--user` or `--url`
+#[derive(Subcommand, Clone)]
+pub(crate) enum ConfigCommand {
+    /// Update the configuration file
+    Update(UpdateConfiguration),
+    /// write current configuration to standard output
+    List,
+    /// Remove the current configuration
+    Remove,
+}
+
+#[derive(Args, Clone)]
+pub(crate) struct UpdateConfiguration {
+    /// The Jira security API token obtained from your Manage Account -> Security
+    #[arg(short, long)]
+    pub token: String,
+    /// Your email address, i.e. me@whereever.com
+    #[arg(short, long)]
+    pub user: String,
+    /// The base url to your Jira, typically <https://yourcompany.atlassian.net/rest/api/latest>
+    #[arg(long)]
+    pub url: String,
+
+    #[arg(short, long, default_value = "TIME")]
+    pub tracking_project: String,
+}
+
+#[derive(Args)]
 pub(crate) struct Synchronisation {
     #[arg(name = "started", short, long)]
     /// Default is to sync for the current month, but you may specify an ISO8601 date from which

@@ -5,7 +5,7 @@
             "type": "lldb",
             "request": "launch",
             "name": "tui",
-            "program": "${workspaceRoot}/target/debug/jira_worklog_tui",
+            "program": "${workspaceRoot}/target/debug/timesheet-tui",
             "cwd": "${workspaceRoot}",
             "sourceLanguages": [
                 "rust"

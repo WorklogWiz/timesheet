@@ -43,7 +43,7 @@ pub async fn execute(status: Status) -> Result<(), WorklogError> {
         with jira using this command sample command, replacing issues time-147 and time-166
         with whatever is relevant for you:
 
-        timesheet-cli sync -i time-147 time-166
+        timesheet sync -i time-147 time-166
         "
         );
         exit(2);

@@ -6,7 +6,7 @@
             "command": "build",
             "args": [
                 "--bin",
-                "jira_worklog_tui"
+                "timesheet-tui"
             ],
             "problemMatcher": [
                 "$rustc"

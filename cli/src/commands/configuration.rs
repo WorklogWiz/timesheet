@@ -1,8 +1,9 @@
 use std::process::exit;
 
-use worklog::config;
+use jira::config::JiraClientConfiguration;
+use worklog::config::{self, AppConfiguration, ApplicationData};
 
-use crate::cli::Configuration;
+use crate::cli::{ConfigCommand, UpdateConfiguration};
 
 fn list_and_exit() {
     println!(
@@ -22,48 +23,21 @@ fn list_and_exit() {
     exit(0);
 }
 
-pub fn execute(config: Configuration) {
+#[allow(clippy::enum_glob_use)]
+pub fn execute(config: ConfigCommand) {
+    use ConfigCommand::*;
     match config {
-        // List current configuration
-        Configuration {
-            list: true,
-            remove: false,
-            ..
-        } => {
+        List => {
             list_and_exit();
         }
         // Add new values to the configuration
-        Configuration {
-            user,
-            token,
-            jira_url,
-            tracking_project,
-            list: false,
-            remove: false,
-        } => {
-            let mut app_config = match config::load_or_create() {
-                Ok(ac) => ac,
-                Err(e) => {
-                    eprintln!(
-                        "ERROR: Unable to load or create configuration file {}, reason:{}",
-                        config::configuration_file().to_string_lossy(),
-                        e
-                    );
-                    exit(4);
-                }
+        Update(settings) => {
+            let app_config = AppConfiguration {
+                jira: settings.clone().into(),
+                application_data: ApplicationData::default(),
+                tracking_project: settings.tracking_project,
             };
-            if let Some(user) = user {
-                app_config.jira.user = user.to_string();
-            }
-            if let Some(token) = token {
-                app_config.jira.token = token.to_string();
-            }
-            if let Some(jira_url) = jira_url {
-                app_config.jira.jira_url = jira_url.to_string();
-            }
-            if let Some(tracking_project) = tracking_project {
-                app_config.tracking_project = tracking_project.to_string();
-            }
+
             config::save(&app_config).expect("Unable to save the application config");
             println!(
                 "Configuration saved to {}",
@@ -71,7 +45,7 @@ pub fn execute(config: Configuration) {
             );
             exit(0);
         }
-        Configuration { remove: true, .. } => match config::remove() {
+        Remove => match config::remove() {
             Ok(()) => {
                 println!(
                     "Configuration file {} removed",
@@ -80,11 +54,20 @@ pub fn execute(config: Configuration) {
             }
             Err(e) => {
                 println!(
-                    "ERROR:Unable to remove configuration file {} : {}",
+                    "ERROR:Unable to remove configuration file {} : {e}",
                     config::configuration_file().to_string_lossy(),
-                    e
                 );
             }
         },
+    }
+}
+
+impl From<UpdateConfiguration> for JiraClientConfiguration {
+    fn from(val: UpdateConfiguration) -> Self {
+        JiraClientConfiguration {
+            user: val.user,
+            token: val.token,
+            url: val.url,
+        }
     }
 }

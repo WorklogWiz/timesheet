@@ -1,20 +1,18 @@
 
-# Jira Time Sheet
+# Time Sheet
 
-Rust learning project to extract and update hours logged in Jira.
+Rust project to extract and update hours logged in Jira.
 
 The project consists of the following modules:
 
 Binaries:
 
 * `cli` - command line utility `timesheet-cli` to register logged hours into Jira.
-it also produces the `jira_worklog`
 * `tui` - text user interface as an alternative to the cli
 * `server` - attempt to create a server for REST/gRPC
 
 Libraries:
 
-* `common` - common types shared between various
 * `jira` - library with various functions to retrieve data from Jira
 * `worklog` - common functionality to be shared between the various clients
 * `local_repo` - Sqlite DBMS repository
@@ -37,8 +35,6 @@ cargo build --target x86_64-pc-windows-gnu
 
 **Note** This was the first entry I found on Google in June 2023. The Windows executable
 is rather large, so perhaps there is better way to do this.
-
-Moved to autostore-tools repo on Sept 2, 2024
 
 Here is an overview of the dependencies, extracted from `Cargo.toml` using: `cargo depgraph --workspace-only | dot -Tsvg -o docs/assets/deps.svg`
 
