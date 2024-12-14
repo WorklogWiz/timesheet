@@ -2,7 +2,7 @@
 name = "timesheet-cli"
 description = "Add, delete and get statistics about Jira worklog entries"
 readme = "README.md"
-authors= ["Steinar Overbeck Cook <steinar.cook@autostoresystem.com>"]
+authors= ["Steinar Overbeck Cook <steinar.cook@gmail.com>"]
 version.workspace = true
 edition = "2021"
 

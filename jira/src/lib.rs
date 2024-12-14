@@ -174,7 +174,7 @@ impl Jira {
     #[allow(clippy::missing_errors_doc)]
     #[allow(clippy::missing_panics_doc)]
     pub fn from(cfg: &JiraClientConfiguration) -> Result<Jira> {
-        let url = Url::parse(&cfg.jira_url)?;
+        let url = Url::parse(&cfg.url)?;
         Jira::new(
             format!("{}://{}", url.scheme(), url.host().unwrap()),
             Credentials::Basic(cfg.user.clone(), cfg.token.clone()),

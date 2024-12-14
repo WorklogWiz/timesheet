@@ -219,71 +219,6 @@ Added work log entry Id: 217258 Time spent: 1d 5h 30m Time spent in seconds: 468
 timesheet status -i time-40 time-147 time-117 -a 2023-05-01
 ````
 
-This would give you something like this:
-
-`````shell
-Version: 0.9.3
-Issue    IssueId Id      Weekday Started                Time spent Comment
-TIME-147 211874  331947  Fri     2024-11-01 08:00 +0100 07:30
-TIME-147 211874  332376  Mon     2024-11-04 09:21 +0100 07:30
-TIME-147 211874  333744  Tue     2024-11-05 08:00 +0100 07:30
-TIME-147 211874  333745  Wed     2024-11-06 08:00 +0100 07:30
-TIME-147 211874  333746  Thu     2024-11-07 08:00 +0100 07:30
-TIME-147 211874  333747  Fri     2024-11-08 08:00 +0100 07:30
-TIME-147 211874  334641  Mon     2024-11-11 08:00 +0100 07:30
-TIME-147 211874  334642  Tue     2024-11-12 08:00 +0100 07:30
-TIME-147 211874  335773  Wed     2024-11-13 08:00 +0100 07:30
-TIME-147 211874  335774  Thu     2024-11-14 08:00 +0100 04:00
-TIME-147 211874  336668  Tue     2024-11-19 08:00 +0100 07:30
-TIME-147 211874  337500  Tue     2024-11-19 08:00 +0100 07:30
-TIME-147 211874  337501  Wed     2024-11-20 08:00 +0100 07:30
-TIME-147 211874  337502  Thu     2024-11-21 08:00 +0100 07:30      Bla bla bla
-TIME-155 214674  336667  Mon     2024-11-18 08:00 +0100 05:00      Lysaker - Gardermoen - Vats
-TIME-166 219027  336669  Sat     2024-11-16 08:00 +0100 02:00
-TIME-166 219027  336665  Sun     2024-11-17 08:00 +0100 01:00
-TIME-166 219027  336666  Mon     2024-11-18 08:00 +0100 07:30
-
-CW 44 from 2024-10-28 to 2024-11-03
-Time code         Mon   Tue   Wed   Thu   Fri   Sat   Sun Total
---------------- ----- ----- ----- ----- ----- ----- ----- -----
-TIME-147          -     -     -     -   07:30   -     -   07:30
-TIME-155          -     -     -     -     -     -     -   00:00
-TIME-166          -     -     -     -     -     -     -   00:00
---------------- ----- ----- ----- ----- ----- ----- ----- -----
-Week total        -     -     -     -   07:30   -     -   07:30
-=============== ===== ===== ===== ===== ===== ===== ===== =====
-
-CW 45 from 2024-11-04 to 2024-11-10
-Time code         Mon   Tue   Wed   Thu   Fri   Sat   Sun Total
---------------- ----- ----- ----- ----- ----- ----- ----- -----
-TIME-147        07:30 07:30 07:30 07:30 07:30   -     -   37:30
-TIME-155          -     -     -     -     -     -     -   00:00
-TIME-166          -     -     -     -     -     -     -   00:00
---------------- ----- ----- ----- ----- ----- ----- ----- -----
-Week total      07:30 07:30 07:30 07:30 07:30   -     -   37:30
-=============== ===== ===== ===== ===== ===== ===== ===== =====
-
-CW 46 from 2024-11-11 to 2024-11-17
-Time code         Mon   Tue   Wed   Thu   Fri   Sat   Sun Total
---------------- ----- ----- ----- ----- ----- ----- ----- -----
-TIME-147        07:30 07:30 07:30 04:00   -     -     -   26:30
-TIME-155          -     -     -     -     -     -     -   00:00
-TIME-166          -     -     -     -     -   02:00 01:00 03:00
---------------- ----- ----- ----- ----- ----- ----- ----- -----
-Week total      07:30 07:30 07:30 04:00   -   02:00 01:00 29:30
-=============== ===== ===== ===== ===== ===== ===== ===== =====
-
-CW 47 from 2024-11-18 to 2024-11-24
-Time code         Mon   Tue   Wed   Thu   Fri   Sat   Sun Total
---------------- ----- ----- ----- ----- ----- ----- ----- -----
-TIME-147          -   15:00 07:30 07:30   -     -     -   30:00
-TIME-155        05:00   -     -     -     -     -     -   05:00
-TIME-166        07:30   -     -     -     -     -     -   07:30
---------------- ----- ----- ----- ----- ----- ----- ----- -----
-Week total      12:30 15:00 07:30 07:30   -     -     -   42:30
-=============== ===== ===== ===== ===== ===== ===== ===== =====
-`````
-
 ### Create a status report from most used time codes
 
 If you omit the `--issue` option, a list of unique time codes will
@@ -339,31 +274,6 @@ If you want a complete list of all the available time codes:
 
 ```shell
 timesheet codes
-```
-
-Output:
-
-```text
-TIME-164 ASIO - Sustaining
-TIME-163 Service Vehicles - Sustaining
-TIME-162 Service Wall - Sustaining
-TIME-161 Amazon UWA6 - Customer Project
-TIME-160 Cloud Infrastructure & DevOps
-TIME-159 1214 Qubit Product Improvement 2024
-TIME-158 1215 Robot Radio Wifi
-TIME-157 1213 Green Train Release Spring 2025 - Test & Validation
-TIME-156 1212 Green Train Release Spring 2025 - Cube Control Software
-TIME-155 Travel
-TIME-154 Product Management
-TIME-153 Product Safety
-TIME-152 Scalability - Sustaining
-TIME-151 Log Analyzer - Sustaining
-TIME-150 Facility Management
-TIME-148 Training and Education
-TIME-147 Administration
-TIME-146 UX - Sustaining
-TIME-145 Port Software - Sustaining
-.... ......
 ```
 
 ### Debug

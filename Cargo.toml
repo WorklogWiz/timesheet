@@ -1,7 +1,6 @@
 
 [workspace]
 members = [
-    "journal",
     "jira",
     "cli",
     "tui",

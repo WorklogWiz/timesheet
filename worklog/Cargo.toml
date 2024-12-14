@@ -7,7 +7,6 @@ version.workspace = true
 tokio = { workspace = true }
 log = {workspace = true}
 
-journal = { path = "../journal"}
 jira = { path = "../jira"}
 secure_credentials = { path = "../secure_credentials" }
 thiserror = { workspace = true }

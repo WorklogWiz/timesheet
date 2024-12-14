@@ -4,10 +4,8 @@ use chrono::{Datelike, Days, Local};
 use jira::models::core::JiraKey;
 use log::debug;
 use worklog::{
-    date, date,
+    date,
     error::WorklogError,
-    error::WorklogError,
-    storage::{LocalWorklog, WorklogStorage},
     storage::{LocalWorklog, WorklogStorage},
 };
 

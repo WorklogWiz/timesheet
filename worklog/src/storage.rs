@@ -4,7 +4,7 @@ use jira::models::{core::JiraKey, issue::Issue, worklog::Worklog};
 use log::debug;
 use rusqlite::{named_params, params, Connection};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::{fs, path::Path};
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Clone)]
 #[allow(non_snake_case)]
@@ -129,10 +129,13 @@ impl WorklogStorage {
     /// # Errors
     /// Returns an error something goes wrong
     pub fn new(dbms_path: &Path) -> Result<Self, WorklogError> {
-        let connection = Connection::open(dbms_path).map_err(|e| WorklogError::OpenDbms {
-            path: dbms_path.to_string_lossy().into(),
-            reason: e.to_string(),
-        })?;
+        if let Some(parent) = dbms_path.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent)?;
+            }
+        }
+
+        let connection = Connection::open(dbms_path)?;
 
         connection.path();
         // Creates the schema if needed

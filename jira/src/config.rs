@@ -4,7 +4,7 @@ pub const JIRA_TOKEN_STORED_IN_MACOS_KEYCHAIN: &str = "*** stored in macos keych
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct JiraClientConfiguration {
-    pub jira_url: String,
+    pub url: String,
     pub user: String,
     pub token: String,
 }

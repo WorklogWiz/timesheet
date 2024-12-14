@@ -13,7 +13,6 @@ Binaries:
 
 Libraries:
 
-* `common` - common types shared between various
 * `jira` - library with various functions to retrieve data from Jira
 * `worklog` - common functionality to be shared between the various clients
 * `local_repo` - Sqlite DBMS repository

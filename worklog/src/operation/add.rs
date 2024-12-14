@@ -7,13 +7,6 @@ use jira::{
     },
     Jira,
 };
-use jira::{
-    models::{
-        core::JiraKey,
-        setting::{GlobalSettings, TimeTrackingConfiguration},
-    },
-    Jira,
-};
 use log::{debug, info};
 
 use crate::{date, error::WorklogError, storage::LocalWorklog, ApplicationRuntime};
@@ -26,7 +19,7 @@ pub struct Add {
 }
 
 pub(crate) async fn execute(
-    runtime: ApplicationRuntime,
+    runtime: &ApplicationRuntime,
     instructions: &mut Add,
 ) -> Result<Vec<LocalWorklog>, WorklogError> {
     let client = runtime.jira_client();
@@ -37,9 +30,6 @@ pub(crate) async fn execute(
     info!("Global Jira options: {:?}", &time_tracking_options);
 
     if instructions.durations.is_empty() {
-        return Err(WorklogError::BadInput(
-            "Need at least one duration".to_string(),
-        ));
         return Err(WorklogError::BadInput(
             "Need at least one duration".to_string(),
         ));

@@ -5,10 +5,10 @@ use std::fs::File;
 use std::process::exit;
 
 use clap::Parser;
-use cli::{LogLevel, Opts, SubCommand};
+use cli::{Command, LogLevel, Opts};
 use commands::{configuration, status, sync};
 use env_logger::Env;
-use log::{debug, info};
+use log::debug;
 
 use worklog::{error::WorklogError, operation, ApplicationRuntime, Operation};
 
@@ -22,18 +22,9 @@ async fn main() -> Result<(), WorklogError> {
 
     configure_logging(&opts); // Handles the -v option
 
-    if let Ok(entry_count) = worklog::migrate_csv_journal_to_local_worklog_dbms(None).await {
-        debug!(
-            "Migrated {} entries from CVS Journal to local work log DBMS",
-            entry_count
-        );
-    } else {
-        info!("No local CSV Journal entries migrated");
-    }
-
     #[allow(clippy::match_wildcard_for_single_variants)]
-    match opts.subcmd {
-        SubCommand::Add(add) => {
+    match opts.cmd {
+        Command::Add(add) => {
             let or: &worklog::OperationResult =
                 &get_runtime().execute(Operation::Add(add.into())).await?;
             match or {
@@ -56,24 +47,24 @@ async fn main() -> Result<(), WorklogError> {
             }
         }
 
-        SubCommand::Del(del) => {
+        Command::Del(del) => {
             let or = &get_runtime().execute(Operation::Del(del.into())).await?;
             match or {
                 worklog::OperationResult::Deleted(id) => {
-                    println!("Jira work log id {id} deleted from Jira")
+                    println!("Jira work log id {id} deleted from Jira");
                 }
                 _ => todo!(),
             }
         }
 
-        SubCommand::Status(status) => {
+        Command::Status(status) => {
             status::execute(status).await?;
         }
 
-        SubCommand::Config(config) => {
-            configuration::execute(config);
+        Command::Config(config) => {
+            configuration::execute(config.cmd);
         } // end Config
-        SubCommand::Codes => {
+        Command::Codes => {
             let operation_result: &worklog::OperationResult =
                 &get_runtime().execute(Operation::Codes).await?;
             match operation_result {
@@ -85,7 +76,7 @@ async fn main() -> Result<(), WorklogError> {
                 _ => todo!(),
             }
         }
-        SubCommand::Sync(synchronisation) => {
+        Command::Sync(synchronisation) => {
             sync::execute(synchronisation).await?;
         }
     }
@@ -98,10 +89,18 @@ fn get_runtime() -> ApplicationRuntime {
     match ApplicationRuntime::new() {
         Ok(runtime) => runtime,
         Err(err) => {
-            println!("Unable to load application runtime configuration {err}");
-            println!("Create it with: timesheet config --user <EMAIL> --token <JIRA_TOKEN>");
-            println!("See 'config' subcommand for more details");
-            exit(4);
+            match err {
+                WorklogError::ApplicationConfig { .. } => {
+                    eprintln!(
+                        "Configuration file not found. Use 'timesheet config update' to create it"
+                    );
+                }
+                _ => {
+                    eprintln!("Failed to create runtime: '{err}'");
+                }
+            }
+
+            exit(1);
         }
     }
 }

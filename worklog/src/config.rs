@@ -3,13 +3,10 @@ use anyhow::Result;
 use directories;
 use directories::ProjectDirs;
 use jira::config::JiraClientConfiguration;
-use journal::csv::JournalCsv;
-use journal::Journal;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 
 #[cfg(target_os = "macos")]
 use log::debug;
@@ -36,26 +33,15 @@ pub struct AppConfiguration {
 /// Holds the configuration for the `application_data` section of the Toml file
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct ApplicationData {
-    pub journal_data_file_name: String,
     /// The path to the local worklog data store
-    pub local_worklog: Option<String>,
+    pub local_worklog: String,
 }
 
 impl Default for ApplicationData {
     fn default() -> Self {
         ApplicationData {
-            journal_data_file_name: journal_file().to_string_lossy().to_string(),
-            local_worklog: Some(worklog_file().to_string_lossy().to_string()),
+            local_worklog: worklog_file().to_string_lossy().to_string(),
         }
-    }
-}
-
-impl ApplicationData {
-    #[must_use]
-    pub fn get_journal(&self) -> Rc<dyn Journal> {
-        // The trait object is created here and shoved onto the heap with a reference count, before
-        // being returned
-        Rc::new(JournalCsv::new(PathBuf::from(&self.journal_data_file_name)))
     }
 }
 
@@ -106,29 +92,9 @@ pub fn remove() -> io::Result<()> {
     fs::remove_file(configuration_file().as_path())
 }
 
-/// Loads the current application configuration file or creates new one with default values
-/// The location will be the system default as provided by `config_file_name()`
-#[allow(clippy::missing_errors_doc)]
-pub fn load_or_create() -> Result<AppConfiguration> {
-    let path = configuration_file();
-    if path.exists() && path.is_file() {
-        Ok(load()?)
-    } else {
-        Err(WorklogError::ConfigFileNotFound { path }.into())
-    }
-}
-
 #[allow(clippy::missing_errors_doc)]
 pub fn application_config_to_string(cfg: &AppConfiguration) -> Result<String> {
     Ok(toml::to_string::<AppConfiguration>(cfg)?)
-}
-
-pub(crate) const JOURNAL_CSV_FILE_NAME: &str = "worklog_journal.csv";
-
-/// Name of CSV file holding the local journal
-#[must_use]
-pub(crate) fn journal_file() -> PathBuf {
-    project_dirs().data_dir().join(JOURNAL_CSV_FILE_NAME)
 }
 
 fn default_application_data() -> ApplicationData {
@@ -247,22 +213,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn tom_parsing() {
+    fn toml_parsing() {
         let toml_str = r#"
         [jira]
-        jira_url = "http"
+        url = "http"
         user = "steinar"
         token = "rubbish"
 
         [application_data]
-        journal_data_file_name = "journal"
+        local_worklog = "worklog.db"
         "#;
 
         let app_config: AppConfiguration = toml::from_str(toml_str).unwrap();
-        assert_eq!(
-            app_config.application_data.journal_data_file_name,
-            "journal"
-        );
+        assert_eq!(app_config.application_data.local_worklog, "worklog.db");
     }
 
     /// Verifies that the `journal_data_file_name` is populated with a reasonable default even if it
@@ -271,15 +234,15 @@ mod tests {
     fn test_toml_parsing_with_defaults_generated() {
         let toml_str = r#"
         [jira]
-        jira_url = "http"
+        url = "http"
         user = "steinar"
         token = "rubbish"
         "#;
 
         let app_config: AppConfiguration = toml::from_str(toml_str).unwrap();
         assert_eq!(
-            app_config.application_data.journal_data_file_name,
-            journal_file().to_string_lossy()
+            app_config.application_data.local_worklog,
+            worklog_file().to_string_lossy()
         );
     }
 
@@ -294,7 +257,7 @@ mod tests {
         if let Ok(result) = read(&tmp_config_file) {
             // Don't compare the jira.token field as this may vary depending on operating system
             assert!(
-                cfg.jira.jira_url == result.jira.jira_url
+                cfg.jira.url == result.jira.url
                     && cfg.jira.user == result.jira.user
                     && cfg.application_data == result.application_data
             );
@@ -308,14 +271,14 @@ mod tests {
     fn generate_config_for_test() -> AppConfiguration {
         AppConfiguration {
             jira: JiraClientConfiguration {
-                jira_url: "http".to_string(),
+                url: "http".to_string(),
                 user: "steinar".to_string(),
                 token: "not_a_token".to_string(),
             },
             application_data: ApplicationData {
-                journal_data_file_name: "journal".to_string(),
-                local_worklog: None,
+                local_worklog: "worklog.db".to_string(),
             },
+            tracking_project: "MyProject".to_string(),
         }
     }
 }
