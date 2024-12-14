@@ -1,19 +1,19 @@
 branches:
   - name: master
 plugins:
-  - - '@semantic-release/commit-analyzer'
+  - - "@semantic-release/commit-analyzer"
     - preset: conventionalcommits
       parserOpts:
         - BREAKING CHANGE
         - BREAKING CHANGES
-  - - '@semantic-release/release-notes-generator'
+  - - "@semantic-release/release-notes-generator"
     - preset: conventionalcommits
       parserOpts:
         - BREAKING CHANGE
         - BREAKING CHANGES
-  - - '@semantic-release/changelog'
+  - - "@semantic-release/changelog"
     - changelogFile: CHANGELOG.md
-  - - '@semantic-release/exec'
+  - - "@semantic-release/exec"
     - verifyReleaseCmd: "echo ${nextRelease.version} > .VERSION"
       #
       # This script transforms the collected artifacts and puts them in a releasable form
@@ -32,8 +32,3 @@ plugins:
 
   # If you want to release to gitlab, you can adjust this to your needs, you can prepare the
   # package in the exec:prepareCmd above
-  - - '@semantic-release/gitlab'
-    - gitlabUrl: https://as-git.autostoresystem.com
-      assets:
-        - path: 'target/timesheet/*'
-          target: generic_package
