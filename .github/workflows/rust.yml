@@ -1,0 +1,67 @@
+name: Rust
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  publicRelease: "${{ github.ref == 'refs/heads/main' && 'True' || 'False' }}"
+  configuration: "${{ github.ref == 'refs/heads/main' && 'Release' || 'Debug' }}"
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      #- uses: wagoid/commitlint-github-action@v6
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Configure sccache environment
+        run: |
+          echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
+          echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
+
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.7
+
+      - name: Format check
+        run: cargo fmt -- --check
+
+      - name: Pedantic check
+        run: cargo clippy -- -D clippy::pedantic
+
+      - name: Build
+        run: |
+          cargo build --release --message-format=json 1> rustc-messages.json
+          if [ $? -ne 0 ]; then
+            jq -r 'select(.reason == "compiler-message") | .message | select(.level == "error" or .level == "warning") | .rendered' rustc-messages.json
+            exit 1
+          else
+            jq -r 'select(.reason == "compiler-artifact" and .executable != null) | .executable' rustc-messages.json \
+            | sed 's/ (bin)$//' | while IFS= read -r binary; do
+                mkdir -p target/publish
+                cp "$binary" target/publish
+              done
+          fi
+
+      - name: Test
+        run: cargo test --release
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ runner.os }}-binary
+          path: target/publish/

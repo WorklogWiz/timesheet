@@ -47,6 +47,12 @@
     "xmlstarlet",
     "zigbuild"
   ],
+  "rust-analyzer.check.command": "clippy",
+  "rust-analyzer.check.extraArgs": [
+    "--",
+    "-D",
+    "clippy::pedantic"
+  ],
   "editor.formatOnSave": true,
   "[rust]": {
     "editor.defaultFormatter": "rust-lang.rust-analyzer"
