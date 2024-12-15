@@ -32,3 +32,9 @@ pub struct Project {
     /// Collection of issues belonging to the jira project
     pub issues: Vec<Issue>,
 }
+
+// TODO: elaborate on JiraProjectKey
+#[derive(Serialize, Debug)]
+pub struct JiraProjectKey {
+    pub key: String,
+}

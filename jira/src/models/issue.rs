@@ -1,9 +1,9 @@
-use serde::{Deserialize, Serialize};
-
 use super::{
     core::{JiraFields, JiraKey},
     worklog::Worklog,
 };
+use crate::models::project::JiraProjectKey;
+use serde::{Deserialize, Serialize};
 
 /// Represents a page of Jira issues retrieved from Jira
 #[derive(Debug, Deserialize, Serialize)]
@@ -32,4 +32,29 @@ pub struct Issue {
     #[serde(skip)] // Added after deserializing
     pub worklogs: Vec<Worklog>,
     pub fields: JiraFields,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct JiraNewIssueResponse {
+    pub id: String,
+    pub key: String,
+}
+
+#[allow(clippy::module_name_repetitions)]
+#[derive(Serialize, Debug)]
+pub struct JiraNewIssue {
+    pub fields: JiraIssueFields,
+}
+
+#[derive(Serialize, Debug)]
+pub struct JiraIssueFields {
+    pub project: JiraProjectKey,
+    pub issuetype: JiraIssueType,
+    pub summary: String,
+    pub description: Option<String>,
+}
+
+#[derive(Serialize, Debug)]
+pub struct JiraIssueType {
+    pub name: String,
 }

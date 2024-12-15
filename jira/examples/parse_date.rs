@@ -46,7 +46,7 @@ pub fn parse_time_zone() {
     use chrono_tz::Tz;
     use chrono_tz::UTC;
     let tz: Tz = "US/Mountain".parse().unwrap();
-    let dt = tz.ymd(2023, 4, 22).and_hms(12, 0, 0);
+    let dt = tz.with_ymd_and_hms(2023, 4, 22, 12, 0, 0).unwrap();
     let utc = dt.with_timezone(&UTC);
     assert_eq!(utc.to_string(), "2023-04-22 18:00:00 UTC");
 }

@@ -2,7 +2,7 @@ use crate::error::WorklogError;
 use config::AppConfiguration;
 use jira::{
     models::{core::JiraKey, issue::Issue},
-    Jira,
+    Credentials, Jira,
 };
 use operation::{
     add::{self, Add},
@@ -42,7 +42,11 @@ impl ApplicationRuntime {
     /// Returns an error if the initialisation goes wrong
     pub fn new() -> Result<Self, WorklogError> {
         let config = config::load()?;
-        let client = Jira::from(&config.jira)?;
+
+        let client = Jira::new(
+            &config.jira.url,
+            Credentials::Basic(config.jira.user.clone(), config.jira.token.clone()),
+        )?;
 
         let path = PathBuf::from(&config.application_data.local_worklog);
 

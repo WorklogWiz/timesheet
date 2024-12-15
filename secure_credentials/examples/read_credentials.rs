@@ -3,7 +3,7 @@ use secure_credentials::macos::get_secure_token;
 
 #[allow(unused_variables)]
 fn main() {
-    let service = "com.norns.timesheet";
+    let service = "com.norn.timesheet";
     let account = "me@whereever.com";
 
     #[cfg(target_os = "macos")]

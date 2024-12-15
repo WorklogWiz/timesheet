@@ -19,3 +19,4 @@ rusqlite = { version = "0", features = ["bundled", "chrono"] }
 lazy_static = "1.4.0"
 num-traits = "0.2.19"
 regex = "1"
+url = "2.5.4"

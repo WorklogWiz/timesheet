@@ -309,6 +309,7 @@ pub fn seconds_to_hour_and_min(seconds: &i32) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Timelike;
 
     #[test]
     fn test_parse_hour_and_minutes_to_seconds() {
@@ -409,15 +410,21 @@ mod tests {
         let t = calculate_started_time(None, 3600);
         assert!(t.is_ok(), "{t:?}");
 
-        let now = Local::now().format("%H:%M").to_string();
-        let t = calculate_started_time(Some(str_to_date_time(&now).unwrap()), 3600);
+        let current_hh_mm_str = Local::now().format("%H:%M").to_string();
+        let t = calculate_started_time(Some(str_to_date_time(&current_hh_mm_str).unwrap()), 3600);
         assert!(t.is_err(), "{t:?}");
 
-        // now less 1 hour
-        let one_hour_ago = Local::now().checked_sub_signed(Duration::hours(1)).unwrap();
-        let one_hour_ago_str = one_hour_ago.format("%H:%M").to_string();
-        let t = calculate_started_time(Some(str_to_date_time(&one_hour_ago_str).unwrap()), 3600);
-        assert!(t.is_ok(), "{t:?}");
+        let now = Local::now();
+
+        // This code will not work between 00:00 and 01:00
+        if now.hour() > 1 {
+            // now less 1 hour
+            let one_hour_ago = Local::now().checked_sub_signed(Duration::hours(1)).unwrap();
+            let one_hour_ago_str = one_hour_ago.format("%H:%M").to_string();
+            let t =
+                calculate_started_time(Some(str_to_date_time(&one_hour_ago_str).unwrap()), 3600);
+            assert!(t.is_ok(), "{t:?}");
+        }
 
         // Now less 30min adding 1 hour should fail
         let thirty_min_ago = Local::now()

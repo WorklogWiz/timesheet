@@ -11,7 +11,6 @@ use std::{
 };
 
 use chrono::{DateTime, Days, Local, NaiveDateTime, TimeZone};
-use config::JiraClientConfiguration;
 use futures::StreamExt;
 use log::{debug, info};
 use models::{
@@ -25,10 +24,12 @@ use reqwest::{
     Client, Method, RequestBuilder, StatusCode,
 };
 
+use crate::models::issue::{JiraIssueFields, JiraIssueType, JiraNewIssue, JiraNewIssueResponse};
+use crate::models::project::JiraProjectKey;
+use crate::models::setting::{GlobalSettings, TimeTrackingConfiguration};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use url::{ParseError, Url};
 
-pub mod config;
 pub mod models;
 
 type Result<T> = std::result::Result<T, JiraError>;
@@ -42,16 +43,6 @@ pub struct Errors {
     pub errors: BTreeMap<String, String>,
 }
 
-#[cfg_attr(doc, aquamarine::aquamarine)]
-///
-/// ```mermaid
-/// graph LR
-///     s([Source]) --> a[[aquamarine]]
-///      r[[rustdoc]] --> f([Docs w/ Mermaid!])
-///      subgraph rustc[Rust Compiler]
-///      a -. inject mermaid.js .-> r
-///      end
-/// ```
 #[derive(Debug)]
 pub enum JiraError {
     Unauthorized,
@@ -169,16 +160,6 @@ impl Jira {
             client: Client::new(),
             credentials,
         })
-    }
-
-    #[allow(clippy::missing_errors_doc)]
-    #[allow(clippy::missing_panics_doc)]
-    pub fn from(cfg: &JiraClientConfiguration) -> Result<Jira> {
-        let url = Url::parse(&cfg.url)?;
-        Jira::new(
-            format!("{}://{}", url.scheme(), url.host().unwrap()),
-            Credentials::Basic(cfg.user.clone(), cfg.token.clone()),
-        )
     }
 
     async fn request<D>(&self, method: Method, endpoint: &str, body: Option<Vec<u8>>) -> Result<D>
@@ -529,6 +510,53 @@ impl Jira {
         self.post::<Worklog, Insert>(&url, worklog_entry).await
     }
 
+    /// Creates a new Jira issue in the specified project.
+    ///
+    /// This function interacts with the Jira server to create an issue under the given
+    /// project key. The returned issue will contain data such as the issue key and ID
+    /// as provided by the Jira server.
+    ///
+    /// # Parameters
+    /// - `project_key`: The Jira project key (e.g., `"NOR"`) where the issue will be created.
+    /// - `issue_data`: The issue details, such as the summary, description, issue type, etc.
+    ///
+    /// # Returns
+    /// - Returns a `Result` containing the newly created `Issue` on success, or a suitable
+    ///   error if the operation fails (e.g., network issues or invalid data).
+    ///
+    /// # Errors
+    /// This function may return:
+    /// - `WorklogError::InvalidJiraToken` if the token used to authenticate is invalid.
+    /// - `WorklogError::JiraResponse` if the server responds with an error, such as a validation failure.
+    ///
+    pub async fn create_issue(
+        &self,
+        jira_project_key: JiraProjectKey,
+        summary: &str,
+        description: Option<String>,
+    ) -> Result<JiraNewIssueResponse> {
+        let new_issue = JiraNewIssue {
+            fields: JiraIssueFields {
+                project: JiraProjectKey {
+                    key: jira_project_key.key,
+                },
+                issuetype: JiraIssueType {
+                    name: "Task".to_string(),
+                },
+                summary: summary.to_string(),
+                description,
+            },
+        };
+
+        let url = "/issue";
+
+        let result = self
+            .post::<JiraNewIssueResponse, JiraNewIssue>(url, new_issue)
+            .await?;
+        debug!("Created issue {:?}", result);
+        Ok(result)
+    }
+
     #[allow(clippy::missing_errors_doc)]
     pub async fn delete_worklog(&self, issue_id: String, worklog_id: String) -> Result<()> {
         let url = format!("/issue/{}/worklog/{}", &issue_id, &worklog_id);
@@ -541,6 +569,11 @@ impl Jira {
         self.get::<User>("/myself").await
     }
 
+    #[allow(clippy::missing_errors_doc)]
+    pub async fn get_time_tracking_options(&self) -> Result<TimeTrackingConfiguration> {
+        let global_settings = self.get::<GlobalSettings>("/configuration").await?;
+        Ok(global_settings.timeTrackingConfiguration)
+    }
     #[allow(clippy::missing_errors_doc)]
     pub async fn get_worklog(&self, issue_id: &str, worklog_id: &str) -> Result<Worklog> {
         let resource = format!("/issue/{issue_id}/worklog/{worklog_id}");
