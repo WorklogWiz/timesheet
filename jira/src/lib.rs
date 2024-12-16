@@ -12,7 +12,7 @@ use std::{
 
 use chrono::{DateTime, Days, Local, NaiveDateTime, TimeZone};
 use futures::StreamExt;
-use log::{debug, info};
+use log::{debug, info, warn};
 use models::{
     issue::{Issue, IssuesPage},
     project::{JiraProjectsPage, Project},
@@ -139,6 +139,26 @@ impl Credentials {
     }
 }
 
+///
+/// # Example
+///
+/// ```rust,ignore
+/// use jira::Jira;
+/// use jira::Credentials;
+///
+/// #[tokio::main]
+/// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+///     let jira = Jira::new(
+///         "https://your-jira-instance.atlassian.net",
+///         Credentials::Basic("your_username".to_string(), "your_api_token".to_string()),
+///     )?;
+///
+///     let response: serde_json::Value = jira.get("/issue/TEST-1").await?;
+///     println!("Issue data: {:?}", response);
+///
+///     Ok(())
+/// }
+/// ```
 #[derive(Clone)]
 pub struct Jira {
     host: Url,
@@ -148,7 +168,33 @@ pub struct Jira {
 }
 
 impl Jira {
-    #[allow(clippy::missing_errors_doc)]
+    /// Example usage:
+    ///
+    /// ```rust,ignore
+    /// use jira::Jira;
+    /// use jira::Credentials;
+    ///
+    /// #[tokio::main]
+    /// async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    ///     let jira = Jira::new(
+    ///         "https://your-jira-instance.atlassian.net",
+    ///         Credentials::Basic("your_username".to_string(), "your_api_token".to_string()),
+    ///     )?;
+    ///
+    ///     let response: serde_json::Value = jira.get("/issue/TEST-1").await?;
+    ///     println!("Issue data: {:?}", response);
+    ///
+    ///     Ok(())
+    /// }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// This function returns an error in the following cases:
+    ///
+    /// * If `host` is not a valid URL, a `ParseError` will be returned.
+    /// * If the provided credentials are not valid or cause unexpected behavior during API interaction,
+    ///   subsequent requests using this instance may fail.
     pub fn new<H>(host: H, credentials: Credentials) -> Result<Jira>
     where
         H: Into<String>,
@@ -204,7 +250,23 @@ impl Jira {
         }
     }
 
-    #[allow(clippy::missing_errors_doc)]
+    ///
+    /// Sends an HTTP GET request to the specified Jira endpoint.
+    ///
+    /// # Parameters
+    ///
+    /// * `endpoint`: A string slice that specifies the Jira API endpoint to be called.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing the response of type `D` if successful, or a `JiraError` if an error occurs.
+    ///
+    /// # Errors
+    ///
+    /// This function returns errors for the following cases:
+    /// * Failure in sending the GET request.
+    /// * Issues while deserializing the response into the expected type `D`.
+    ///
     pub async fn get<D>(&self, endpoint: &str) -> Result<D>
     where
         D: DeserializeOwned,
@@ -229,28 +291,134 @@ impl Jira {
             .await
     }
 
-    /*
-    async fn put<D, S>(&self, endpoint: &str, body: S) -> Result<D>
-    where
-        D: DeserializeOwned,
-        S: Serialize,
-    {
-        let data = serde_json::to_string::<S>(&body)?;
-        debug!("Json request: {}", data);
-        self.request::<D>(Method::PUT, endpoint, Some(data.into_bytes())).await
+    /// Searches for Jira issues based on provided projects and/or issue keys.
+    ///
+    /// # Parameters
+    /// * `projects`: A vector of project keys (e.g., `["TEST", "PROJ"]`). Can be empty.
+    /// * `issue_keys`: A slice of issue keys to search for (e.g., `["TEST-1", "PROJ-2"]`). Can be empty.
+    ///
+    /// # Returns
+    /// A `Result` containing a vector of `Issue` if successful, or a `JiraError` if an error occurs.
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// * Both `projects` and `issue_keys` are empty.
+    /// * Network requests fail.
+    /// * Parsing the response fails.
+    ///
+    /// # Examples
+    /// This function requires proper setup of Jira client and works asynchronously.
+    pub async fn search_issues(
+        &self,
+        projects: &Vec<&str>,
+        issue_keys: &[JiraKey],
+    ) -> Result<Vec<Issue>> {
+        if projects.is_empty() && issue_keys.is_empty() {
+            warn!("No projects or issue keys provided");
+            return Ok(Vec::<Issue>::new());
+        }
+
+        let mut jql = String::new();
+        if !projects.is_empty() {
+            jql = format!("project in ({})", projects.join(","));
+        }
+        if !issue_keys.is_empty() {
+            // and comma-separated list of issue keys
+            let keys_spec = issue_keys
+                .iter()
+                .map(std::string::ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(",");
+
+            if jql.is_empty() {
+                // No Project clause, so only add the issue keys
+                jql.push_str(format!("issuekey in ({keys_spec})").as_str());
+            } else {
+                // Appends the set of issue keys, if project clause exists
+                let s = format!("{jql} and issuekey in ({keys_spec})");
+                jql = s;
+            }
+        }
+
+        let jql_encoded = urlencoding::encode(&jql);
+
+        let jira_issues = self.fetch_jql_result(jql_encoded.as_ref()).await?;
+        Ok(jira_issues)
     }
 
-    #[allow(clippy::missing_errors_doc)]
-    async fn get_issue_by_id_or_key(&self, id: &str) -> Result<Issue> {
+    /// Fetches paginated JQL results from the Jira server
+    #[allow(clippy::cast_possible_wrap)]
+    #[allow(clippy::cast_sign_loss)]
+    async fn fetch_jql_result(&self, jql_encoded: &str) -> Result<Vec<Issue>> {
+        let mut resource = Self::compose_resource_for_next_jql_page(jql_encoded, 0, 50);
 
-        self.get::<Issue>(&format!("/issue/{id}")).await
+        let mut jira_issues: Vec<Issue> = Vec::new();
+        loop {
+            let mut jira_issues_page = self.get::<IssuesPage>(&resource).await?;
+            let last_page = jira_issues_page.issues.is_empty()
+                || jira_issues_page.issues.len() < jira_issues_page.max_results as usize;
+            if !last_page {
+                resource = Self::compose_resource_for_next_jql_page(
+                    jql_encoded,
+                    jira_issues_page.start_at
+                        + i32::try_from(jira_issues_page.issues.len()).unwrap(),
+                    jira_issues_page.max_results,
+                );
+            }
+            jira_issues.append(&mut jira_issues_page.issues);
+            if last_page {
+                break;
+            }
+        }
+        Ok(jira_issues)
     }
 
-    */
+    /// Composes the resource string for the next page of JQL results
+    fn compose_resource_for_next_jql_page(
+        jql_encoded: &str,
+        start_at: i32,
+        max_results: i32,
+    ) -> String {
+        let resource = format!(
+            "/search?jql={}&startAt={}&maxResults={}&fields={}",
+            jql_encoded, start_at, max_results, "id,key,summary,components,description"
+        );
+        resource
+    }
 
-    /// Retrieves all Jira projects, filtering out the private ones
-    /// Only used in examples
-    #[allow(clippy::missing_errors_doc)]
+    ///
+    /// Retrieves all public Jira projects based on provided project keys,
+    /// filtering out the private ones.
+    ///
+    /// Currently only used in examples
+    ///
+    /// This function filters out private projects automatically and handles paginated results
+    /// from the Jira API, ensuring all public projects are retrieved.
+    ///
+    /// # Arguments
+    ///
+    /// * `project_keys` - List of project keys to fetch Jira projects for.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a `Vec` of `Project` if successful, or an error otherwise.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// * Network requests fail.
+    /// * Parsing the response fails.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let jira_client = JiraClient::new("https://your-jira-instance.com", "username", "token");
+    /// let project_keys = vec!["PRJ1".to_string(), "PRJ2".to_string()];
+    /// let projects = jira_client.get_projects(project_keys).await?;
+    /// for project in projects {
+    ///     println!("Jira Project: {}", project.name);
+    /// }
+    /// ```
     pub async fn get_projects(&self, project_keys: Vec<String>) -> Result<Vec<Project>> {
         let start_at = 0;
 
@@ -289,11 +457,40 @@ impl Jira {
         Ok(projects)
     }
 
+    /// Retrieves all Jira issues for a given project.
+    ///
+    /// This function handles paginated results from the Jira API to fetch all issues
+    /// associated with a specific project. It ensures that all issues are collected by
+    /// iterating over all available pages while avoiding any potential data loss.
+    ///
+    /// # Arguments
+    ///
+    /// * `project_key` - The key of the Jira project for which issues are being retrieved.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a `Vec` of `Issue` if successful, or an error otherwise.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// * Network requests fail.
+    /// * Parsing the response fails.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let jira_client = JiraClient::new("https://your-jira-instance.com", "username", "token");
+    /// let project_key = "PRJ1".to_string();
+    /// let issues = jira_client.get_issues_for_project(project_key).await?;
+    /// for issue in issues {
+    ///     println!("Jira Issue: {}", issue.summary);
+    /// }
+    /// ```
     #[allow(
         clippy::cast_sign_loss,
         clippy::cast_possible_truncation,
-        clippy::cast_possible_wrap,
-        clippy::missing_errors_doc
+        clippy::cast_possible_wrap
     )]
     pub async fn get_issues_for_project(&self, project_key: String) -> Result<Vec<Issue>> {
         let mut resource = Self::compose_resource_and_params(&project_key, 0, 1024);
@@ -425,9 +622,38 @@ impl Jira {
         Ok(result)
     }
 
-    // todo: clean up and make simpler!
+    /// Retrieves issues and their associated worklogs for the specified projects.
+    ///
+    /// # Arguments
+    /// * `projects` - A vector of `Project` instances from which to retrieve issues and worklogs.
+    /// * `issues_filter` - A vector of issue keys to filter issues by. If empty, all issues are included.
+    /// * `started_after` - A `NaiveDateTime` instance to filter worklog entries that started after this date.
+    ///
+    /// # Returns
+    /// A `Result` containing a vector of updated `Project` instances with their issues and associated worklogs,
+    /// or an error if any operation fails.
+    ///
+    /// # Errors
+    /// This function can return an error if:
+    /// * Retrieving issues for a specific project fails.
+    /// * Retrieving worklogs for an issue fails.
+    /// * Internal futures processing encounters a failure.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// use chrono::NaiveDate;
+    ///
+    /// let projects = vec![]; // Assume projects are populated.
+    /// let issues_filter = vec!["ISSUE-1".to_string(), "ISSUE-2".to_string()];
+    /// let started_after = NaiveDate::from_ymd(2023, 10, 01).and_hms(0, 0, 0);
+    ///
+    /// let result = instance.get_issues_and_worklogs(projects, issues_filter, started_after).await;
+    /// match result {
+    ///     Ok(updated_projects) => println!("Retrieved {} projects", updated_projects.len()),
+    ///     Err(e) => println!("Error: {}", e),
+    /// }
+    /// ```
     #[allow(dead_code)]
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
     async fn get_issues_and_worklogs(
         self,
         projects: Vec<Project>,
@@ -491,7 +717,44 @@ impl Jira {
         Ok(result)
     }
 
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+    /// Inserts a worklog for a specific issue in Jira.
+    ///
+    /// This function is used to log work time for a Jira issue. It formats the `started` time
+    /// based on the Jira-supported date-time format and then sends the worklog data to the Jira server.
+    ///
+    /// # Parameters
+    /// - `issue_id`: The ID of the Jira issue for which the worklog will be logged.
+    /// - `started`: The starting date and time of the worklog, formatted as `DateTime<Local>`.
+    /// - `time_spent_seconds`: The duration of the worklog in seconds.
+    /// - `comment`: A description or comment about the work performed.
+    ///
+    /// # Returns
+    /// - `Ok(Worklog)` if the operation succeeds, containing the created worklog entry.
+    /// - An error of type `Result<Worklog, E>` if the operation fails (e.g., network error or invalid input).
+    ///
+    /// # Notes
+    /// - The `started` time format includes timezone information and is based on the user's local time.
+    /// - Ensure that the provided `issue_id` corresponds to an existing Jira issue and that the user
+    ///   has the appropriate permissions to log time.
+    ///
+    /// # Errors
+    /// This function may return:
+    /// - An error related to network communication if the server cannot be reached.
+    /// - Validation errors if the input data or formatting does not meet Jira's requirements.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// use chrono::Local;
+    ///
+    /// let started = Local::now();
+    /// let time_spent_seconds = 3600; // 1 hour
+    /// let comment = "Worked on improving project documentation.";
+    ///
+    /// match instance.insert_worklog("ISSUE-123", started, time_spent_seconds, comment).await {
+    ///     Ok(worklog) => println!("Successfully inserted worklog: {:?}", worklog),
+    ///     Err(e) => eprintln!("Error inserting worklog: {:?}", e),
+    /// }
+    /// ```
     pub async fn insert_worklog(
         &self,
         issue_id: &str,
@@ -514,28 +777,41 @@ impl Jira {
         self.post::<Worklog, Insert>(&url, worklog_entry).await
     }
 
-    /// Creates a new Jira issue in the specified project.
+    /// Creates a new issue in Jira.
     ///
-    /// This function interacts with the Jira server to create an issue under the given
-    /// project key. The returned issue will contain data such as the issue key and ID
-    /// as provided by the Jira server.
+    /// This function creates an issue for a specified Jira project key with provided
+    /// details such as summary and an optional description. The issue is created with
+    /// the task type "Task".
     ///
     /// # Parameters
-    /// - `project_key`: The Jira project key (e.g., `"NOR"`) where the issue will be created.
-    /// - `issue_data`: The issue details, such as the summary, description, issue type, etc.
+    /// - `jira_project_key`: The key of the Jira project where the new issue will be created.
+    /// - `summary`: A brief summary or title for the new issue.
+    /// - `description`: An optional detailed description of the issue.
     ///
     /// # Returns
-    /// - Returns a `Result` containing the newly created `Issue` on success, or a suitable
-    ///   error if the operation fails (e.g., network issues or invalid data).
+    /// - `Ok(JiraNewIssueResponse)` if the issue is successfully created, containing details about the created issue.
+    /// - Returns an appropriate error if the creation fails due to network issues, invalid project key,
+    ///   or lack of permissions.
     ///
     /// # Errors
     /// This function may return:
-    /// - `WorklogError::InvalidJiraToken` if the token used to authenticate is invalid.
-    /// - `WorklogError::JiraResponse` if the server responds with an error, such as a validation failure.
+    /// - `JiraError::NetworkError` if a network communication issue occurs while interacting with the Jira API.
+    /// - `JiraError::InvalidResponse` if the server provides an invalid or unexpected response.
     ///
+    /// # Example
+    /// ```rust,ignore
+    /// let jira_project_key = JiraProjectKey { key: "PROJ".to_string() };
+    /// let summary = "Implement new feature";
+    /// let description = Some("This will implement a new major feature for the project.".to_string());
+    ///
+    /// match instance.create_issue(&jira_project_key, &summary, description).await {
+    ///     Ok(response) => println!("Issue created successfully: {:?}", response),
+    ///     Err(e) => eprintln!("Failed to create issue: {:?}", e),
+    /// }
+    /// ```
     pub async fn create_issue(
         &self,
-        jira_project_key: JiraProjectKey,
+        jira_project_key: &JiraProjectKey,
         summary: &str,
         description: Option<String>,
     ) -> Result<JiraNewIssueResponse> {
@@ -648,13 +924,54 @@ impl Jira {
         let global_settings = self.get::<GlobalSettings>("/configuration").await?;
         Ok(global_settings.timeTrackingConfiguration)
     }
-    #[allow(clippy::missing_errors_doc)]
+
+    /// Retrieves a specific worklog for a given issue.
+    ///
+    /// This function fetches a worklog corresponding to the provided issue ID
+    /// and worklog ID. It communicates with the Jira API to retrieve the details
+    /// of the worklog entry.
+    ///
+    /// # Parameters
+    /// - `issue_id`: A string slice representing the ID of the issue to which the worklog belongs.
+    /// - `worklog_id`: A string slice representing the unique ID of the worklog to retrieve.
+    ///
+    /// # Returns
+    /// - Returns a `Result` containing the `Worklog` object on successful retrieval.
+    /// - If the operation fails, it returns an appropriate error, such as network issues or
+    ///   Jira API-related errors.
+    ///
+    /// # Errors
+    /// This function may return:
+    /// - `WorklogError::NetworkError` if there's an issue connecting to the Jira server.
+    /// - `WorklogError::JiraResponse` if Jira responds with an error, such as an invalid worklog ID
+    ///   or insufficient permissions.
     pub async fn get_worklog(&self, issue_id: &str, worklog_id: &str) -> Result<Worklog> {
         let resource = format!("/issue/{issue_id}/worklog/{worklog_id}");
         self.get::<Worklog>(&resource).await
     }
 
-    #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
+    /// Retrieves all worklogs for the currently authenticated user associated with a specific issue.
+    ///
+    /// This function fetches worklogs for a given Jira issue key and filters the results
+    /// to include only those created by the currently authenticated user. Optionally,
+    /// it allows filtering worklogs started after a specified date.
+    ///
+    /// # Parameters
+    /// - `issue_key`: A string slice representing the key of the Jira issue.
+    /// - `started_after`: An optional `DateTime<Local>` object representing the timestamp after which
+    ///   worklogs should be included. If omitted, defaults to approximately one month prior to the current date.
+    ///
+    /// # Returns
+    /// - Returns a `Result` containing a vector of `Worklog` objects authored by the currently authenticated user on success.
+    /// - If the operation fails, it returns an appropriate error, such as network issues or Jira API-related errors.
+    ///
+    /// # Errors
+    /// This function may return:
+    /// - `WorklogError::NetworkError` if there's an issue connecting to the Jira server.
+    /// - `WorklogError::JiraResponse` if the Jira API responds with an error, such as insufficient permissions or issue not found.
+    ///
+    /// # Panics
+    /// This function will panic if `issue_key` is an empty string.
     pub async fn get_worklogs_for_current_user(
         &self,
         issue_key: &str,
