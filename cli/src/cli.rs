@@ -145,4 +145,11 @@ pub(crate) struct Synchronisation {
         long_help = "Limit synchronisation to these issues"
     )]
     pub issues: Vec<String>,
+    #[arg(
+        name = "projects",
+        short,
+        long,
+        long_help = "Limit synchronisation to these projects"
+    )]
+    pub projects: Vec<String>,
 }

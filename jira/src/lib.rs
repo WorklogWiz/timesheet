@@ -24,6 +24,7 @@ use reqwest::{
     Client, Method, RequestBuilder, StatusCode,
 };
 
+use crate::models::core::JiraKey;
 use crate::models::issue::{JiraIssueFields, JiraIssueType, JiraNewIssue, JiraNewIssueResponse};
 use crate::models::project::JiraProjectKey;
 use crate::models::setting::{GlobalSettings, TimeTrackingConfiguration};
@@ -397,7 +398,10 @@ impl Jira {
 
     #[allow(dead_code)]
     #[allow(clippy::missing_errors_doc)]
-    async fn get_issues_for_projects(self, projects: Vec<Project>) -> Result<Vec<Project>> {
+    async fn augment_projects_with_their_issues(
+        self,
+        projects: Vec<Project>,
+    ) -> Result<Vec<Project>> {
         let mut futures_stream = futures::stream::iter(projects)
             .map(|mut project| {
                 let me = self.clone();
@@ -557,19 +561,89 @@ impl Jira {
         Ok(result)
     }
 
-    #[allow(clippy::missing_errors_doc)]
+    /// Deletes an existing worklog associated with a specific issue.
+    ///
+    /// This function interacts with the Jira server to delete a worklog entry
+    /// by its corresponding issue ID and worklog ID.
+    ///
+    /// # Parameters
+    /// - `issue_id`: The ID of the issue to which the worklog belongs.
+    /// - `worklog_id`: The ID of the worklog to be deleted.
+    ///
+    /// # Returns
+    /// - Returns `Ok(())` on successful deletion of the worklog.
+    /// - Returns an appropriate error if the operation fails, such as network or permission-related issues.
+    ///
+    /// # Errors
+    /// This function may return:
+    /// - `WorklogError::NetworkError` if there's an issue connecting to the server.
+    /// - `WorklogError::JiraResponse` if Jira responds with an error (e.g., invalid worklog ID or insufficient permissions).
     pub async fn delete_worklog(&self, issue_id: String, worklog_id: String) -> Result<()> {
         let url = format!("/issue/{}/worklog/{}", &issue_id, &worklog_id);
         let _ = self.delete::<Option<Worklog>>(&url).await?;
         Ok(())
     }
 
-    #[allow(clippy::missing_errors_doc)]
+    /// Deletes an existing Jira issue.
+    ///
+    /// This function interacts with the Jira server to delete a specified issue
+    /// by its unique key. Once deleted, the issue will no longer be accessible
+    /// in the Jira system.
+    ///
+    /// # Parameters
+    /// - `jira_key`: A reference to the `JiraKey` representing the unique key of the issue to delete.
+    ///
+    /// # Returns
+    /// - Returns `Ok(())` on successful deletion of the issue.
+    /// - Returns an appropriate error if the operation fails, such as network issues or
+    ///   authentication problems.
+    ///
+    /// # Errors
+    /// This function may return:
+    /// - `WorklogError::NetworkError` if there's a problem establishing a connection.
+    /// - `WorklogError::JiraResponse` if Jira responds with an error (e.g., issue not found or insufficient permissions).
+    pub async fn delete_issue(&self, jira_key: &JiraKey) -> Result<()> {
+        let url = format!("/issue/{}", jira_key.value);
+        self.delete::<Option<JiraKey>>(&url).await?;
+        Ok(())
+    }
+
+    /// Fetches information about the currently authenticated user.
+    ///
+    /// This function sends a request to the Jira server to retrieve details about
+    /// the user connected to the provided credentials. The retrieved user information
+    /// includes account ID, email address, display name, and so on.
+    ///
+    /// # Returns
+    /// - Returns a `Result` containing the `User` object on success.
+    /// - If the operation fails, it returns an appropriate error, such as a network error or
+    ///   authentication failure.
+    ///
+    /// # Errors
+    /// This function may return:
+    /// - `WorklogError::NetworkError` if there's a problem connecting to the Jira server.
+    /// - `WorklogError::JiraResponse` if Jira responds with an error, such as invalid credentials
+    ///   or insufficient permissions.
     pub async fn get_current_user(&self) -> Result<User> {
         self.get::<User>("/myself").await
     }
 
-    #[allow(clippy::missing_errors_doc)]
+    /// Retrieves the available time tracking options configured in Jira.
+    ///
+    /// This function queries the Jira server for global time tracking settings.
+    /// The result includes information about the time tracking configuration
+    /// such as the estimates field used, time tracking provider, and other
+    /// related details.
+    ///
+    /// # Returns
+    /// - Returns a `Result` containing the `TimeTrackingConfiguration` object on success.
+    /// - Returns an appropriate error if the operation fails, such as network issues or
+    ///   authentication problems.
+    ///
+    /// # Errors
+    /// This function may return:
+    /// - `WorklogError::NetworkError` if there's an issue connecting to the server.
+    /// - `WorklogError::JiraResponse` if Jira responds with an error, such as insufficient permissions.
     pub async fn get_time_tracking_options(&self) -> Result<TimeTrackingConfiguration> {
         let global_settings = self.get::<GlobalSettings>("/configuration").await?;
         Ok(global_settings.timeTrackingConfiguration)
