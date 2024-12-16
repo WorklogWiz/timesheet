@@ -41,7 +41,7 @@ const FUTURE_BUFFER_SIZE: usize = 20;
 pub struct Errors {
     #[serde(rename = "errorMessages")]
     pub error_messages: Vec<String>,
-    pub errors: BTreeMap<String, String>,
+    pub errors: Option<BTreeMap<String, String>>,
 }
 
 #[derive(Debug)]
@@ -585,10 +585,9 @@ impl Jira {
         let jql = format!("project=\"{project_key}\" and resolution=Unresolved");
         let jql_encoded = urlencoding::encode(&jql);
 
-        // Custom field customfield_10904 is the project asset custom field
         let resource = format!(
             "/search?jql={}&startAt={}&maxResults={}&fields={}",
-            jql_encoded, start_at, max_results, "summary,customfield_10904"
+            jql_encoded, start_at, max_results, "summary"
         );
         resource
     }

@@ -98,16 +98,13 @@ impl ApplicationRuntime {
         &self,
         issue_keys: &[JiraKey],
     ) -> Result<Vec<Issue>, WorklogError> {
+
         let jira_issues = self
             .jira_client()
-            .get_issues_for_project(self.config.tracking_project.to_string())
+            .search_issues(&vec![], issue_keys)
             .await?;
-        let result: Vec<Issue> = jira_issues
-            .into_iter()
-            .filter(|issue| issue_keys.contains(&issue.key))
-            .collect();
 
-        self.worklog_service().add_jira_issues(&result)?;
-        Ok(result)
+        self.worklog_service().add_jira_issues(&jira_issues)?;
+        Ok(jira_issues)
     }
 }

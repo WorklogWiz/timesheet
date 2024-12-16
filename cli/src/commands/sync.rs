@@ -12,7 +12,34 @@ pub async fn execute(sync: Synchronisation) -> Result<(), WorklogError> {
     let start_after = sync.started.map(|s| date::str_to_date_time(&s).unwrap());
 
     let mut issue_keys_to_sync = sync.issues.clone();
-    if issue_keys_to_sync.is_empty() {
+
+    if !sync.projects.is_empty() {
+        let sync_issue_keys: Vec<JiraKey> = sync
+            .issues
+            .iter()
+            .map(|issue| JiraKey::from(issue.as_str()))
+            .collect();
+        let projects_as_str: Vec<&str> = sync
+            .projects
+            .iter()
+            .map(std::string::String::as_str)
+            .collect();
+
+        let fetched_issue_keys = runtime
+            .jira_client()
+            .search_issues(&projects_as_str, &sync_issue_keys)
+            .await?;
+
+        let fetched_issue_keys: Vec<String> = fetched_issue_keys
+            .into_iter()
+            .map(|issue| issue.key.to_string())
+            .collect();
+
+        issue_keys_to_sync.extend(fetched_issue_keys);
+    }
+
+    // If no projects and no issues were specified on the command line
+    if issue_keys_to_sync.is_empty() && sync.projects.is_empty() {
         issue_keys_to_sync = runtime.worklog_service().find_unique_keys()?;
     }
     if issue_keys_to_sync.is_empty() {
