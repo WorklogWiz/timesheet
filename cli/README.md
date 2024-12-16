@@ -16,7 +16,7 @@ The local database may be synchronised with Jira using the `sync` sub command.
 Disclaimer: Network latency and the response time of Jira is the main culprit of any delays
 
 <!-- TOC -->
-* [The Jira worklog utility](#the-jira-worklog-utility)
+* [The Time Sheet utility](#the-time-sheet-utility)
   * [Installation](#installation)
     * [Using `curl` to verify your security token](#using-curl-to-verify-your-security-token)
     * [Installing on macOS](#installing-on-macos)
@@ -175,7 +175,7 @@ Here are some examples on how to use the utility.
 ````shell
 # Registers 1 hour of work on TIME-94 with a comment
 # The starting point will be current time less 1 hour
-timesheet add -i time-94 -d 1h -c "I did some great work for AutoStore"
+timesheet add -i time-94 -d 1h -c "I did some great work"
 
 
 # Registers 1 hour of work on TIME-94 at 11:00 today without a comment
