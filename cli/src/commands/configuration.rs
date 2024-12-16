@@ -1,6 +1,6 @@
 use std::process::exit;
 
-use jira::config::JiraClientConfiguration;
+use worklog::config::JiraClientConfiguration;
 use worklog::config::{self, AppConfiguration, ApplicationData};
 
 use crate::cli::{ConfigCommand, UpdateConfiguration};

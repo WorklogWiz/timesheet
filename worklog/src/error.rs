@@ -1,9 +1,9 @@
 use std::{io, path::PathBuf};
 
+use crate::date;
 use jira::JiraError;
 use thiserror::Error;
-
-use crate::date;
+use url::ParseError;
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Error, Debug)]
@@ -43,6 +43,8 @@ pub enum WorklogError {
     FileNotFound(String),
     #[error("Could not make sense of input: {0}")]
     BadInput(String),
+    #[error("Unable to parse the url: {0}")]
+    InvalidUrl(ParseError),
 }
 
 impl From<rusqlite::Error> for WorklogError {
@@ -60,5 +62,11 @@ impl From<JiraError> for WorklogError {
 impl From<date::Error> for WorklogError {
     fn from(err: date::Error) -> Self {
         WorklogError::BadInput(format!("{err}"))
+    }
+}
+
+impl From<ParseError> for WorklogError {
+    fn from(value: ParseError) -> Self {
+        WorklogError::InvalidUrl(value)
     }
 }

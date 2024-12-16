@@ -127,8 +127,8 @@ pub(crate) struct UpdateConfiguration {
     /// The base url to your Jira, typically <https://yourcompany.atlassian.net/rest/api/latest>
     #[arg(long)]
     pub url: String,
-
-    #[arg(short, long, default_value = "TIME")]
+    // TODO: replace tracking_project with "projects" in the plural
+    #[arg(long, default_value = "TIME")]
     pub tracking_project: String,
 }
 

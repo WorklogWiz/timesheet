@@ -2,7 +2,6 @@ use crate::error::WorklogError;
 use anyhow::Result;
 use directories;
 use directories::ProjectDirs;
-use jira::config::JiraClientConfiguration;
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
@@ -10,8 +9,9 @@ use std::path::{Path, PathBuf};
 
 #[cfg(target_os = "macos")]
 use log::debug;
+
 #[cfg(target_os = "macos")]
-const KEYCHAIN_SERVICE: &str = "com.norns.timesheet";
+pub const KEYCHAIN_SERVICE_NAME: &str = "com.norn.timesheet.jira";
 
 /// Application configuration struct
 /// Holds the data we need to connect to Jira, write to the local journal and so on
@@ -45,6 +45,21 @@ impl Default for ApplicationData {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+pub struct JiraClientConfiguration {
+    pub url: String,
+    pub user: String,
+    pub token: String,
+}
+
+impl JiraClientConfiguration {
+    /// Does the token look like a valid Jira Security token?
+    #[must_use]
+    pub fn has_valid_jira_token(&self) -> bool {
+        !(self.token.contains("secret") || self.token == JIRA_TOKEN_STORED_IN_MACOS_KEYCHAIN)
+    }
+}
+
 /// Filename holding the application configuration parameters
 #[must_use]
 pub fn configuration_file() -> PathBuf {
@@ -69,8 +84,11 @@ pub fn load() -> Result<AppConfiguration, WorklogError> {
         // If the loaded configuration file holds a valid Jira token, migrate it to
         // the macOS Key Chain
         if app_config.jira.has_valid_jira_token()
-            && secure_credentials::macos::get_secure_token(KEYCHAIN_SERVICE, &app_config.jira.user)
-                .is_err()
+            && secure_credentials::macos::get_secure_token(
+                KEYCHAIN_SERVICE_NAME,
+                &app_config.jira.user,
+            )
+            .is_err()
         {
             create_configuration_file(&app_config, &config_path)
                 .map_err(|_src_err| WorklogError::ConfigFileCreation { path: config_path })?;
@@ -106,7 +124,7 @@ fn default_tracking_project() -> String {
 }
 
 fn project_dirs() -> ProjectDirs {
-    ProjectDirs::from("com", "norns", "timesheet")
+    ProjectDirs::from("com", "norn", "timesheet")
         .expect("Unable to determine the name of the 'project_dirs' directory name")
 }
 
@@ -153,7 +171,7 @@ fn create_configuration_file(cfg: &AppConfiguration, path: &PathBuf) -> Result<(
 /// Sets the Jira Access Security Token in the macOS Key Chain
 /// See also the `security` command.
 /// `
-/// security add-generic-password -s com.norns.timesheet \
+/// security add-generic-password -s com.norn.timesheet \
 ///   -a your-emailk@whereever.com -w secure_token_goes_here
 /// `
 #[cfg(target_os = "macos")]
@@ -161,7 +179,7 @@ fn merge_jira_token_from_keychain(config: &mut AppConfiguration) {
     use log::warn;
 
     debug!("MacOS: retrieving the Jira access token from the keychain ...");
-    match secure_credentials::macos::get_secure_token(KEYCHAIN_SERVICE, &config.jira.user) {
+    match secure_credentials::macos::get_secure_token(KEYCHAIN_SERVICE_NAME, &config.jira.user) {
         Ok(token) => {
             debug!("Found Jira access token in keychain and injected it");
             config.jira.token = token;
@@ -169,12 +187,12 @@ fn merge_jira_token_from_keychain(config: &mut AppConfiguration) {
         Err(err) => {
             warn!(
                 "No Jira Access Token in keychain for {} and {}",
-                KEYCHAIN_SERVICE, &config.jira.user
+                KEYCHAIN_SERVICE_NAME, &config.jira.user
             );
             warn!("ERROR: {err}");
             eprintln!(
                 "No Jira Access Token in keychain for {} and {}",
-                KEYCHAIN_SERVICE, &config.jira.user
+                KEYCHAIN_SERVICE_NAME, &config.jira.user
             );
             eprintln!("If this is the first time your using the tool, this warning can be ignored");
         }
@@ -186,14 +204,14 @@ const JIRA_TOKEN_STORED_IN_MACOS_KEYCHAIN: &str = "*** stored in macos keychain 
 #[cfg(target_os = "macos")]
 fn migrate_jira_token_into_keychain(app_config: &mut AppConfiguration) {
     match secure_credentials::macos::store_secure_token(
-        KEYCHAIN_SERVICE,
+        KEYCHAIN_SERVICE_NAME,
         &app_config.jira.user,
         &app_config.jira.token,
     ) {
         Ok(()) => {
             debug!(
                 "Jira access token stored into the Keychain under {} and {}",
-                KEYCHAIN_SERVICE, app_config.jira.user
+                KEYCHAIN_SERVICE_NAME, app_config.jira.user
             );
             debug!("MacOs: Removing the security token from the config file");
         }

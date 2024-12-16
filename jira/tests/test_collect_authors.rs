@@ -6,6 +6,8 @@ use jira::models::{
     worklog::Worklog,
 };
 
+mod test_helpers;
+
 #[test]
 fn test_collect_authors() {
     let p = Project {
