@@ -34,7 +34,7 @@ pub struct Project {
 }
 
 // TODO: elaborate on JiraProjectKey
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone, Copy)]
 pub struct JiraProjectKey {
-    pub key: String,
+    pub key: &'static str,
 }

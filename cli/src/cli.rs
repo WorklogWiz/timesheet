@@ -95,7 +95,7 @@ pub(crate) struct Status {
     pub issues: Option<Vec<String>>,
     /// Retrieves all entries after the given date
     #[arg(short, long)]
-    pub after: Option<String>,
+    pub start_after: Option<String>,
 }
 
 #[derive(Args)]
@@ -145,6 +145,7 @@ pub(crate) struct Synchronisation {
         long_help = "Limit synchronisation to these issues"
     )]
     pub issues: Vec<String>,
+    /// Synchronise all work logs for all issues in the list of projects
     #[arg(
         name = "projects",
         short,

@@ -35,7 +35,6 @@ pub fn execute(config: ConfigCommand) {
             let app_config = AppConfiguration {
                 jira: settings.clone().into(),
                 application_data: ApplicationData::default(),
-                tracking_project: settings.tracking_project,
             };
 
             config::save(&app_config).expect("Unable to save the application config");

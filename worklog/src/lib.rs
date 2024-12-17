@@ -19,6 +19,7 @@ pub mod operation;
 pub mod storage;
 
 pub struct ApplicationRuntime {
+    #[allow(dead_code)]
     config: AppConfiguration,
     client: Jira,
     worklog_service: WorklogStorage,
@@ -63,10 +64,6 @@ impl ApplicationRuntime {
         })
     }
 
-    fn configuration(&self) -> &AppConfiguration {
-        &self.config
-    }
-
     pub fn jira_client(&self) -> &Jira {
         &self.client
     }
@@ -100,14 +97,10 @@ impl ApplicationRuntime {
     ) -> Result<Vec<Issue>, WorklogError> {
         let jira_issues = self
             .jira_client()
-            .get_issues_for_project(self.config.tracking_project.to_string())
+            .search_issues(&vec![], issue_keys)
             .await?;
-        let result: Vec<Issue> = jira_issues
-            .into_iter()
-            .filter(|issue| issue_keys.contains(&issue.key))
-            .collect();
 
-        self.worklog_service().add_jira_issues(&result)?;
-        Ok(result)
+        self.worklog_service().add_jira_issues(&jira_issues)?;
+        Ok(jira_issues)
     }
 }
