@@ -423,17 +423,14 @@ mod tests {
         let t = calculate_started_time(Some(str_to_date_time(&one_hour_ago_str).unwrap()), 3600);
         assert!(t.is_ok(), "{t:?}");
 
-        // Now less 30min adding 1 hour should fail
-        let thirty_min_ago = Local
-            .with_ymd_and_hms(2024, 12, 17, 12, 25, 0)
-            .single()
-            .expect("Unable to create local DateTime")
+        // Now less 30min, adding 1 hour should fail
+        let thirty_min_ago = Local::now()
             .checked_sub_signed(Duration::minutes(30))
             .unwrap();
         let thirty_min_ago_as_str = thirty_min_ago.format("%H:%M").to_string();
         let t = calculate_started_time(
             Some(str_to_date_time(&thirty_min_ago_as_str).unwrap()),
-            3600,
+            3600, // Adding 1 hour should send us 30min into the future and fail
         );
         assert!(t.is_err());
     }
