@@ -28,7 +28,7 @@ pub async fn execute(sync: Synchronisation) -> Result<(), WorklogError> {
 
     let issue_keys_to_sync = prepare_issue_keys_for_sync(&sync, &runtime).await?;
 
-    println!("Synchronising work logs for these issues:");
+  println!("Synchronising work logs for these issues:");
     for issue in &issue_keys_to_sync {
         println!("\t{issue}");
     }
@@ -36,6 +36,7 @@ pub async fn execute(sync: Synchronisation) -> Result<(), WorklogError> {
         "Synchronising with Jira for these issues {:?}",
         &issue_keys_to_sync
     );
+
     println!("Fetching work logs, this might take some time...");
     // Fetch all worklogs for all the specified issue keys
     let mut work_logs = runtime
@@ -52,6 +53,7 @@ pub async fn execute(sync: Synchronisation) -> Result<(), WorklogError> {
             current_user.display_name
         );
         work_logs.retain(|wl| current_user.account_id == wl.author.accountId);
+
     }
 
     // Retrieve meta information for each issue key

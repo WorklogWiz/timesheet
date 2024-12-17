@@ -2,6 +2,7 @@ mod test_helpers;
 
 use crate::test_helpers::jira_client::create_jira_client;
 use crate::test_helpers::test_data;
+
 use jira::models::project::JiraProjectKey;
 
 /// This asynchronous test verifies the Jira client functionality for searching issues.

@@ -345,6 +345,7 @@ impl Jira {
                 jql = s;
             }
         }
+
         jql.push_str(" AND worklogAuthor is not EMPTY ");
         let jql_encoded = urlencoding::encode(&jql);
         debug!("search_issues() :- Composed this JQL: {jql}");
@@ -374,6 +375,7 @@ impl Jira {
                 );
             }
             jira_issues.append(&mut jira_issues_page.issues);
+
             debug!("Fetched {} issues", jira_issues.len());
             if last_page {
                 break;
