@@ -4,6 +4,7 @@ use jira::{
     models::{core::JiraKey, issue::Issue},
     Credentials, Jira,
 };
+use log::debug;
 use operation::{
     add::{self, Add},
     del::{self, Del},
@@ -95,6 +96,7 @@ impl ApplicationRuntime {
         &self,
         issue_keys: &[JiraKey],
     ) -> Result<Vec<Issue>, WorklogError> {
+        debug!("Searching for Jira issues (information)...");
         let jira_issues = self
             .jira_client()
             .search_issues(&vec![], issue_keys)

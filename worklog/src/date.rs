@@ -37,6 +37,7 @@ pub fn str_to_date_time(s: &str) -> ParseResult<DateTime<Local>> {
         let dt = NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M").unwrap();
         Ok(Local.from_local_datetime(&dt).unwrap())
     } else {
+        // TODO: don't panic, return an error
         panic!("Unable to parse {s} into a DateTime<Local>");
     }
 }

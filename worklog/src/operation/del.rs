@@ -13,7 +13,7 @@ pub(crate) async fn execute(
 
     let current_user = client.get_current_user().await?;
     let worklog_entry = client
-        .get_worklog(&instructions.issue_id, &instructions.worklog_id)
+        .get_work_log_by_isssue_and_id(&instructions.issue_id, &instructions.worklog_id)
         .await?;
 
     if worklog_entry.author.accountId != current_user.account_id {

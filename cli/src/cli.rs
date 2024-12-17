@@ -142,7 +142,8 @@ pub(crate) struct Synchronisation {
         name = "issues",
         short,
         long,
-        long_help = "Limit synchronisation to these issues"
+        long_help = "Limit synchronisation to these issues",
+        group = "sync_targets"
     )]
     pub issues: Vec<String>,
     /// Synchronise all work logs for all issues in the list of projects
@@ -150,7 +151,11 @@ pub(crate) struct Synchronisation {
         name = "projects",
         short,
         long,
-        long_help = "Limit synchronisation to these projects"
+        long_help = "Limit synchronisation to these projects",
+        group = "sync_targets"
     )]
     pub projects: Vec<String>,
+    /// Retrieves all registered Jira users, not just you
+    #[arg(short, long)]
+    pub all_users: bool,
 }

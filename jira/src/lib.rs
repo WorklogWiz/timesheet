@@ -57,6 +57,7 @@ pub enum JiraError {
     SerializationError(serde_json::error::Error),
     ParseError(ParseError),
     UnexpectedStatus,
+    UriTooLong(String),
 }
 
 #[allow(clippy::enum_glob_use)]
@@ -88,6 +89,7 @@ impl fmt::Display for JiraError {
             MethodNotAllowed => todo!(),
             NotFound(url) => writeln!(f, "Not found: '{url}'"),
             UnexpectedStatus => todo!(),
+            UriTooLong(uri) => write!(f, "URI too long: {uri} "),
         }
     }
 }
@@ -239,10 +241,14 @@ impl Jira {
             StatusCode::UNAUTHORIZED => Err(JiraError::Unauthorized),
             StatusCode::METHOD_NOT_ALLOWED => Err(JiraError::MethodNotAllowed),
             StatusCode::NOT_FOUND => Err(JiraError::NotFound(url.to_string())),
-            client_err if client_err.is_client_error() => Err(JiraError::Fault {
-                code: status,
-                errors: serde_json::from_str::<Errors>(body)?,
-            }),
+            StatusCode::URI_TOO_LONG => Err(JiraError::UriTooLong(url.to_string())),
+            client_err if client_err.is_client_error() => {
+                eprintln!("ERROR: http GET returned {status} for {url}, reason:{body}");
+                Err(JiraError::Fault {
+                    code: status,
+                    errors: serde_json::from_str::<Errors>(body)?,
+                })
+            }
             _ => {
                 let data = if body.is_empty() { "null" } else { body };
                 Ok(serde_json::from_str::<D>(data)?)
@@ -339,8 +345,9 @@ impl Jira {
                 jql = s;
             }
         }
-
+        jql.push_str(" AND worklogAuthor is not EMPTY ");
         let jql_encoded = urlencoding::encode(&jql);
+        debug!("search_issues() :- Composed this JQL: {jql}");
 
         let jira_issues = self.fetch_jql_result(jql_encoded.as_ref()).await?;
         Ok(jira_issues)
@@ -354,6 +361,7 @@ impl Jira {
 
         let mut jira_issues: Vec<Issue> = Vec::new();
         loop {
+            debug!("Fetching next page of search results ...");
             let mut jira_issues_page = self.get::<IssuesPage>(&resource).await?;
             let last_page = jira_issues_page.issues.is_empty()
                 || jira_issues_page.issues.len() < jira_issues_page.max_results as usize;
@@ -366,6 +374,7 @@ impl Jira {
                 );
             }
             jira_issues.append(&mut jira_issues_page.issues);
+            debug!("Fetched {} issues", jira_issues.len());
             if last_page {
                 break;
             }
@@ -516,14 +525,191 @@ impl Jira {
         Ok(issues)
     }
 
-    /// Only used in examples
-    #[allow(clippy::missing_errors_doc)]
+    /// Retrieves a specific worklog for a given issue.
+    ///
+    /// This function fetches a worklog corresponding to the provided issue ID
+    /// and worklog ID. It communicates with the Jira API to retrieve the details
+    /// of the worklog entry.
+    ///
+    /// # Parameters
+    /// - `issue_id`: A string slice representing the ID of the issue to which the worklog belongs.
+    /// - `worklog_id`: A string slice representing the unique ID of the worklog to retrieve.
+    ///
+    /// # Returns
+    /// - Returns a `Result` containing the `Worklog` object on successful retrieval.
+    /// - If the operation fails, it returns an appropriate error, such as network issues or
+    ///   Jira API-related errors.
+    ///
+    /// # Errors
+    /// This function may return:
+    /// - `WorklogError::NetworkError` if there's an issue connecting to the Jira server.
+    /// - `WorklogError::JiraResponse` if Jira responds with an error, such as an invalid worklog ID
+    ///   or insufficient permissions.
+    pub async fn get_work_log_by_isssue_and_id(
+        &self,
+        issue_id: &str,
+        worklog_id: &str,
+    ) -> Result<Worklog> {
+        let resource = format!("/issue/{issue_id}/worklog/{worklog_id}");
+        self.get::<Worklog>(&resource).await
+    }
+
+    ///
+    /// Fetches worklogs for a list of issues concurrently, starting from a given time.
+    ///
+    /// This function performs asynchronous fetching of worklogs for multiple Jira issues
+    /// in parallel. It limits the number of concurrent tasks to avoid overwhelming the system.
+    ///
+    /// # Arguments
+    ///
+    /// * `issues` - A vector of `Issue` objects for which worklogs are to be retrieved.
+    /// * `start_after` - A `NaiveDateTime` specifying the cutoff start time to filter the worklogs.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a `Vec` of `Worklog` objects if successful. Returns an appropriate
+    /// error if fetching any of the worklogs fails or there is a network issue.
+    ///
+    /// # Errors
+    ///
+    /// This function may return:
+    /// * Errors related to API connectivity or network issues.
+    /// * Parsing errors when handling the API responses.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let jira_client = JiraClient::new("https://your-jira-instance.com", "username", "token");
+    /// let issues = vec![
+    ///     Issue { key: "ISSUE-1".to_string(), ..Default::default() },
+    ///     Issue { key: "ISSUE-2".to_string(), ..Default::default() },
+    /// ];
+    /// let start_after = NaiveDateTime::parse_from_str("2023-01-01 00:00:00", "%Y-%m-%d %H:%M:%S")?;
+    ///
+    /// let work_logs = jira_client
+    ///     .fetch_work_logs_for_issues_concurrently(issues, start_after)
+    ///     .await?;
+    ///
+    /// for work_log in work_logs {
+    ///     println!("Work log author: {}, time spent: {}", work_log.author, work_log.time_spent);
+    /// }
+    /// ```
+    pub async fn fetch_work_logs_for_issues_concurrently(
+        &self,
+        issue_keys: &[JiraKey],
+        start_after: NaiveDateTime,
+    ) -> Result<Vec<Worklog>> {
+        let futures = issue_keys.iter().map(|issue| {
+            let issue_key = issue; // No clone needed here
+            let me = self.clone();
+            async move {
+                me.get_work_logs_for_issue(issue_key.to_string(), start_after)
+                    .await
+            }
+        });
+
+        let results = futures::stream::iter(futures)
+            .buffer_unordered(10) // Max 10 concurrent tasks
+            .collect::<Vec<_>>()
+            .await;
+
+        let mut work_logs = Vec::new();
+        for result in results {
+            match result {
+                Ok(logs) => work_logs.extend(logs),
+                Err(err) => return Err(err), // Return the first error
+            }
+        }
+
+        Ok(work_logs)
+    }
+
+    /// Retrieves all worklogs for the currently authenticated user associated with a specific issue.
+    ///
+    /// This function fetches worklogs for a given Jira issue key and filters the results
+    /// to include only those created by the currently authenticated user. Optionally,
+    /// it allows filtering worklogs started after a specified date.
+    ///
+    /// # Parameters
+    /// - `issue_key`: A string slice representing the key of the Jira issue.
+    /// - `started_after`: An optional `DateTime<Local>` object representing the timestamp after which
+    ///   worklogs should be included. If omitted, defaults to approximately one month prior to the current date.
+    ///
+    /// # Returns
+    /// - Returns a `Result` containing a vector of `Worklog` objects authored by the currently authenticated user on success.
+    /// - If the operation fails, it returns an appropriate error, such as network issues or Jira API-related errors.
+    ///
+    /// # Errors
+    /// This function may return:
+    /// - `WorklogError::NetworkError` if there's an issue connecting to the Jira server.
+    /// - `WorklogError::JiraResponse` if the Jira API responds with an error, such as insufficient permissions or issue not found.
+    ///
+    /// # Panics
+    /// This function will panic if `issue_key` is an empty string.
+    pub async fn get_work_logs_for_current_user(
+        &self,
+        issue_key: &str,
+        started_after: Option<DateTime<Local>>,
+    ) -> Result<Vec<Worklog>> {
+        assert!(!issue_key.is_empty(), "Must specify an issue key");
+        let date_time = started_after.unwrap_or_else(|| {
+            // Defaults to a month (approx)
+            Local::now().checked_sub_days(Days::new(30)).unwrap()
+        });
+        let naive_date_time = DateTime::from_timestamp_millis(date_time.timestamp_millis())
+            .unwrap()
+            .naive_local();
+        let result = self
+            .get_work_logs_for_issue(issue_key.to_string(), naive_date_time)
+            .await?;
+        debug!("Work logs retrieved, filtering them for current user ....");
+        let current_user = self.get_current_user().await?;
+        Ok(result
+            .into_iter()
+            .filter(|wl| wl.author.accountId == current_user.account_id)
+            .collect())
+    }
+
+    ///
+    /// Retrieves all work logs for a specific Jira issue, starting from a given time.
+    ///
+    /// This function fetches paginated work logs for a Jira issue by querying the Jira API.
+    /// It continues retrieving work logs until no more pages are available.
+    ///
+    /// # Arguments
+    ///
+    /// * `issue_key` - The key of the Jira issue for which work logs are being retrieved.
+    /// * `started_after` - A `NaiveDateTime` indicating the cutoff time for the work logs to retrieve.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a `Vec` of `Worklog` if successful, or an error otherwise.
+    ///
+    /// # Errors
+    ///
+    /// This function returns an error if:
+    /// * Network requests to retrieve worklogs fail.
+    /// * Parsing the Jira API responses fails.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let jira_client = JiraClient::new("https://your-jira-instance.com", "username", "token");
+    /// let issue_key = "ISSUE-123".to_string();
+    /// let started_after = NaiveDateTime::parse_from_str("2023-01-01 00:00:00", "%Y-%m-%d %H:%M:%S")?;
+    /// let worklogs = jira_client
+    ///     .get_worklogs_for_issue(issue_key, started_after)
+    ///     .await?;
+    /// for worklog in worklogs {
+    ///     println!("Worklog author: {}, time spent: {}", worklog.author, worklog.time_spent);
+    /// }
+    /// ```
     #[allow(
         clippy::cast_sign_loss,
         clippy::cast_possible_truncation,
         clippy::cast_possible_wrap
     )]
-    pub async fn get_worklogs_for(
+    pub async fn get_work_logs_for_issue(
         &self,
         issue_key: String,
         started_after: NaiveDateTime,
@@ -533,6 +719,7 @@ impl Jira {
         let mut worklogs: Vec<Worklog> = Vec::<Worklog>::new();
 
         debug!("Retrieving worklogs for {}", issue_key);
+        // Loops through the result pages until last page received
         loop {
             let mut worklog_page = self.get::<WorklogsPage>(&resource_name).await?;
             let is_last_page = worklog_page.worklogs.len() < worklog_page.max_results as usize;
@@ -687,10 +874,11 @@ impl Jira {
                     for issue in &mut project.issues {
                         debug!("Retrieving worklogs for issue {}", &issue.key);
                         let key = issue.key.to_string();
-                        let mut worklogs = match me.get_worklogs_for(key, started_after).await {
-                            Ok(result) => result,
-                            Err(e) => return Err(e),
-                        };
+                        let mut worklogs =
+                            match me.get_work_logs_for_issue(key, started_after).await {
+                                Ok(result) => result,
+                                Err(e) => return Err(e),
+                            };
                         debug!(
                             "Issue {} has {} worklog entries",
                             issue.key.value,
@@ -922,77 +1110,6 @@ impl Jira {
     pub async fn get_time_tracking_options(&self) -> Result<TimeTrackingConfiguration> {
         let global_settings = self.get::<GlobalSettings>("/configuration").await?;
         Ok(global_settings.timeTrackingConfiguration)
-    }
-
-    /// Retrieves a specific worklog for a given issue.
-    ///
-    /// This function fetches a worklog corresponding to the provided issue ID
-    /// and worklog ID. It communicates with the Jira API to retrieve the details
-    /// of the worklog entry.
-    ///
-    /// # Parameters
-    /// - `issue_id`: A string slice representing the ID of the issue to which the worklog belongs.
-    /// - `worklog_id`: A string slice representing the unique ID of the worklog to retrieve.
-    ///
-    /// # Returns
-    /// - Returns a `Result` containing the `Worklog` object on successful retrieval.
-    /// - If the operation fails, it returns an appropriate error, such as network issues or
-    ///   Jira API-related errors.
-    ///
-    /// # Errors
-    /// This function may return:
-    /// - `WorklogError::NetworkError` if there's an issue connecting to the Jira server.
-    /// - `WorklogError::JiraResponse` if Jira responds with an error, such as an invalid worklog ID
-    ///   or insufficient permissions.
-    pub async fn get_worklog(&self, issue_id: &str, worklog_id: &str) -> Result<Worklog> {
-        let resource = format!("/issue/{issue_id}/worklog/{worklog_id}");
-        self.get::<Worklog>(&resource).await
-    }
-
-    /// Retrieves all worklogs for the currently authenticated user associated with a specific issue.
-    ///
-    /// This function fetches worklogs for a given Jira issue key and filters the results
-    /// to include only those created by the currently authenticated user. Optionally,
-    /// it allows filtering worklogs started after a specified date.
-    ///
-    /// # Parameters
-    /// - `issue_key`: A string slice representing the key of the Jira issue.
-    /// - `started_after`: An optional `DateTime<Local>` object representing the timestamp after which
-    ///   worklogs should be included. If omitted, defaults to approximately one month prior to the current date.
-    ///
-    /// # Returns
-    /// - Returns a `Result` containing a vector of `Worklog` objects authored by the currently authenticated user on success.
-    /// - If the operation fails, it returns an appropriate error, such as network issues or Jira API-related errors.
-    ///
-    /// # Errors
-    /// This function may return:
-    /// - `WorklogError::NetworkError` if there's an issue connecting to the Jira server.
-    /// - `WorklogError::JiraResponse` if the Jira API responds with an error, such as insufficient permissions or issue not found.
-    ///
-    /// # Panics
-    /// This function will panic if `issue_key` is an empty string.
-    pub async fn get_worklogs_for_current_user(
-        &self,
-        issue_key: &str,
-        started_after: Option<DateTime<Local>>,
-    ) -> Result<Vec<Worklog>> {
-        assert!(!issue_key.is_empty(), "Must specify an issue key");
-        let current_user = self.get_current_user().await?;
-        let date_time = started_after.unwrap_or_else(|| {
-            // Defaults to a month (approx)
-            Local::now().checked_sub_days(Days::new(30)).unwrap()
-        });
-        let naive_date_time = DateTime::from_timestamp_millis(date_time.timestamp_millis())
-            .unwrap()
-            .naive_local();
-        let result = self
-            .get_worklogs_for(issue_key.to_string(), naive_date_time)
-            .await?;
-        debug!("Work logs retrieved, filtering them for current user ....");
-        Ok(result
-            .into_iter()
-            .filter(|wl| wl.author.accountId == current_user.account_id)
-            .collect())
     }
 }
 
