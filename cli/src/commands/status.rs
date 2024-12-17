@@ -16,7 +16,10 @@ pub async fn execute(status: Status) -> Result<(), WorklogError> {
     let runtime = get_runtime();
     let worklog_service = runtime.worklog_service();
 
-    let start_after = match status.start_after.map(|s| date::str_to_date_time(&s).unwrap()) {
+    let start_after = match status
+        .start_after
+        .map(|s| date::str_to_date_time(&s).unwrap())
+    {
         None => Local::now().checked_sub_days(Days::new(30)),
         Some(date) => Some(date),
     };

@@ -95,7 +95,6 @@ impl ApplicationRuntime {
         &self,
         issue_keys: &[JiraKey],
     ) -> Result<Vec<Issue>, WorklogError> {
-
         let jira_issues = self
             .jira_client()
             .search_issues(&vec![], issue_keys)
