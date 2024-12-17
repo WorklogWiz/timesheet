@@ -19,6 +19,7 @@ pub mod operation;
 pub mod storage;
 
 pub struct ApplicationRuntime {
+    #[allow(dead_code)]
     config: AppConfiguration,
     client: Jira,
     worklog_service: WorklogStorage,
@@ -61,10 +62,6 @@ impl ApplicationRuntime {
             client,
             worklog_service,
         })
-    }
-
-    fn configuration(&self) -> &AppConfiguration {
-        &self.config
     }
 
     pub fn jira_client(&self) -> &Jira {

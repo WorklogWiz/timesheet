@@ -20,10 +20,6 @@ pub struct AppConfiguration {
     /// Holds the URL to the Jira instance we are running again.
     pub jira: JiraClientConfiguration,
 
-    /// Holds the project where issues to track time on are
-    #[serde(default = "default_tracking_project")]
-    pub tracking_project: String,
-
     /// This will ensure that the filename is created, even if the Toml file
     /// is an old version, which does not have an `application_data` section
     #[serde(default = "default_application_data")]
@@ -117,10 +113,6 @@ pub fn application_config_to_string(cfg: &AppConfiguration) -> Result<String> {
 
 fn default_application_data() -> ApplicationData {
     ApplicationData::default()
-}
-
-fn default_tracking_project() -> String {
-    "TIME".to_string()
 }
 
 fn project_dirs() -> ProjectDirs {
@@ -296,7 +288,6 @@ mod tests {
             application_data: ApplicationData {
                 local_worklog: "worklog.db".to_string(),
             },
-            tracking_project: "MyProject".to_string(),
         }
     }
 }
