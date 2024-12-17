@@ -27,7 +27,6 @@ async fn test_create_issue() -> Result<(), Box<dyn std::error::Error>> {
 #[tokio::test]
 
 async fn create_multiple_issues_fast_version() -> Result<(), Box<dyn std::error::Error>> {
-
     let issue_keys = test_data::create_batch_of_issues(10, JiraProjectKey { key: "NOR" }).await?;
     debug!("Created {} issues", issue_keys.len());
     assert!(!issue_keys.is_empty());
