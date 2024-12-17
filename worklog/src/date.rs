@@ -432,7 +432,7 @@ mod tests {
             Some(str_to_date_time(&thirty_min_ago_as_str).unwrap()),
             3600, // Adding 1 hour should send us 30min into the future and fail
         );
-        assert!(t.is_err());
+        assert!(t.is_err(), "Result was not an error {t}");
     }
 
     #[test]
