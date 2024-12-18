@@ -29,12 +29,12 @@ async fn main() {
             );
         }
         let worklogs = client
-            .get_worklogs_for("A3SRS-1".to_string(), midnight_a_month_ago_in())
+            .get_work_logs_for_issue("A3SRS-1".to_string(), midnight_a_month_ago_in())
             .await;
         println!("{:?}", &worklogs);
 
         let results = client
-            .get_worklogs_for_current_user("time-147", Option::None)
+            .get_work_logs_for_current_user("time-147", Option::None)
             .await;
         if let Ok(worklogs) = results {
             for worklog in worklogs {
