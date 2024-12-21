@@ -297,7 +297,8 @@ impl Jira {
             .await
     }
 
-    /// Searches for Jira issues based on provided projects and/or issue keys.
+    /// Searches for Jira issues where `worklogAuthor` IS NOT EMPTY
+    /// based on provided projects and/or issue keys.
     ///
     /// # Parameters
     /// * `projects`: A vector of project keys (e.g., `["TEST", "PROJ"]`). Can be empty.
@@ -338,10 +339,10 @@ impl Jira {
 
             if jql.is_empty() {
                 // No Project clause, so only add the issue keys
-                jql.push_str(format!("issuekey in ({keys_spec})").as_str());
+                jql.push_str(format!("issueKey in ({keys_spec})").as_str());
             } else {
                 // Appends the set of issue keys, if project clause exists
-                let s = format!("{jql} and issuekey in ({keys_spec})");
+                let s = format!("{jql} and issueKey in ({keys_spec})");
                 jql = s;
             }
         }

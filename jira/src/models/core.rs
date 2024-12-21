@@ -21,8 +21,6 @@ pub struct Author {
 #[derive(Clone, Debug, Deserialize, Serialize, Default)]
 pub struct JiraFields {
     pub summary: String,
-    #[serde(alias = "customfield_10904")]
-    pub asset: Option<JiraAsset>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, Default)]
@@ -37,7 +35,7 @@ pub struct JiraAsset {
 /// This struct is typically known as a "value object" in other programming languages.
 #[derive(Debug, Serialize, Default, Eq, PartialEq, Clone)]
 pub struct JiraKey {
-    #[serde(alias = "key")]
+    #[serde(rename = "key")]
     pub(crate) value: String,
 }
 

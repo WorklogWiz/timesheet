@@ -15,6 +15,7 @@ async fn main() {
     let start_time = Instant::now();
     println!("Searching for issues, be patient this can take a while\n (minutes possibly, depending on the number of issues and the Jira instance you are using) ....");
 
+    jira.get("/rest/api/3/user/assignable/search?query=assignee%20in%20(currentUser())").await.unwrap();
     let issues = match jira.search_issues(&vec!["KT,PT"], &[]).await {
         Ok(issues) => issues,
         Err(e) => {
