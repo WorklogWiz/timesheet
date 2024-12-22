@@ -12,7 +12,7 @@ use std::{
 
 use chrono::{DateTime, Days, Local, NaiveDateTime, TimeZone};
 use futures::StreamExt;
-use log::{debug, info, warn};
+use log::{debug,  warn};
 use models::{
     issue::{Issue, IssuesPage},
     project::{JiraProjectsPage, Project},
@@ -35,7 +35,6 @@ pub mod models;
 
 type Result<T> = std::result::Result<T, JiraError>;
 
-const FUTURE_BUFFER_SIZE: usize = 20;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Errors {
@@ -782,130 +781,7 @@ impl Jira {
         resource
     }
 
-    #[allow(dead_code)]
-    #[allow(clippy::missing_errors_doc)]
-    async fn augment_projects_with_their_issues(
-        self,
-        projects: Vec<Project>,
-    ) -> Result<Vec<Project>> {
-        let mut futures_stream = futures::stream::iter(projects)
-            .map(|mut project| {
-                let me = self.clone();
-                tokio::spawn(async move {
-                    let Ok(issues) = me.get_issues_for_project(project.key.clone()).await else {
-                        todo!()
-                    };
-                    let _old = std::mem::replace(&mut project.issues, issues);
-                    project
-                })
-            })
-            .buffer_unordered(FUTURE_BUFFER_SIZE);
 
-        let mut result = Vec::<Project>::new();
-        while let Some(r) = futures_stream.next().await {
-            match r {
-                Ok(jp) => result.push(jp),
-                Err(e) => eprintln!("Error: {e:?}"),
-            }
-        }
-        Ok(result)
-    }
-
-    /// Retrieves issues and their associated worklogs for the specified projects.
-    ///
-    /// # Arguments
-    /// * `projects` - A vector of `Project` instances from which to retrieve issues and worklogs.
-    /// * `issues_filter` - A vector of issue keys to filter issues by. If empty, all issues are included.
-    /// * `started_after` - A `NaiveDateTime` instance to filter worklog entries that started after this date.
-    ///
-    /// # Returns
-    /// A `Result` containing a vector of updated `Project` instances with their issues and associated worklogs,
-    /// or an error if any operation fails.
-    ///
-    /// # Errors
-    /// This function can return an error if:
-    /// * Retrieving issues for a specific project fails.
-    /// * Retrieving worklogs for an issue fails.
-    /// * Internal futures processing encounters a failure.
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// use chrono::NaiveDate;
-    ///
-    /// let projects = vec![]; // Assume projects are populated.
-    /// let issues_filter = vec!["ISSUE-1".to_string(), "ISSUE-2".to_string()];
-    /// let started_after = NaiveDate::from_ymd(2023, 10, 01).and_hms(0, 0, 0);
-    ///
-    /// let result = instance.get_issues_and_worklogs(projects, issues_filter, started_after).await;
-    /// match result {
-    ///     Ok(updated_projects) => println!("Retrieved {} projects", updated_projects.len()),
-    ///     Err(e) => println!("Error: {}", e),
-    /// }
-    /// ```
-    #[allow(dead_code)]
-    async fn get_issues_and_worklogs(
-        self,
-        projects: Vec<Project>,
-        issues_filter: Vec<String>,
-        started_after: NaiveDateTime,
-    ) -> Result<Vec<Project>> {
-        let mut futures_stream = futures::stream::iter(projects)
-            .map(|mut project| {
-                debug!(
-                    "Creating future for {}, filters={:?}",
-                    &project.key, issues_filter
-                );
-
-                let filter = issues_filter.clone();
-                let me = self.clone(); // Clones the vector to allow async move
-                tokio::spawn(async move {
-                    let issues = me.get_issues_for_project(project.key.clone()).await?;
-                    debug!(
-                        "Extracted {} issues. Applying filter {:?}",
-                        issues.len(),
-                        filter
-                    );
-                    let issues: Vec<Issue> = issues
-                        .into_iter()
-                        .filter(|issue| {
-                            filter.is_empty()
-                                || !filter.is_empty() && filter.contains(&issue.key.value)
-                        })
-                        .collect();
-                    debug!("Filtered {} issues for {}", issues.len(), &project.key);
-                    let _old = std::mem::replace(&mut project.issues, issues);
-                    for issue in &mut project.issues {
-                        debug!("Retrieving worklogs for issue {}", &issue.key);
-                        let key = issue.key.to_string();
-                        let mut worklogs =
-                            match me.get_work_logs_for_issue(key, started_after).await {
-                                Ok(result) => result,
-                                Err(e) => return Err(e),
-                            };
-                        debug!(
-                            "Issue {} has {} worklog entries",
-                            issue.key.value,
-                            worklogs.len()
-                        );
-                        issue.worklogs.append(&mut worklogs);
-                    }
-                    Ok(project)
-                })
-            })
-            .buffer_unordered(FUTURE_BUFFER_SIZE);
-
-        let mut result = Vec::<Project>::new();
-        while let Some(r) = futures_stream.next().await {
-            match r.unwrap() {
-                Ok(jp) => {
-                    info!("Data retrieved from Jira for project {}", jp.key);
-                    result.push(jp);
-                }
-                Err(e) => eprintln!("Error: {e:?}"),
-            }
-        }
-        Ok(result)
-    }
 
     /// Inserts a worklog for a specific issue in Jira.
     ///

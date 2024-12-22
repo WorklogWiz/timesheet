@@ -7,6 +7,8 @@ use serde::{Deserialize, Deserializer, Serialize};
 use std::env;
 use std::time::Instant;
 
+/// Holds Responses from Jira when performing JQL queries, which
+/// will always return a collection of Issues with potential sub structures.
 #[derive(Debug, Serialize)]
 struct IssuesResponse<T>
 where
@@ -19,7 +21,8 @@ where
 
 impl<T> IssuesResponse<T> where T: DeserializeOwned {}
 
-// Manually implement `Deserialize` for `IssuesResponse<T>`
+// Manually implement `Deserialize` for `IssuesResponse<T>` to handle
+// Deserialization of whatever is contained in `issues`
 impl<'de, T> Deserialize<'de> for IssuesResponse<T>
 where
     T: DeserializeOwned,
@@ -42,6 +45,7 @@ where
         })
     }
 }
+
 #[derive(Debug, Serialize, Deserialize)]
 struct IssueSummary {
     expand: String,
@@ -175,28 +179,6 @@ async fn fetch_work_logs_for_keys(
     let jql = &format!("key in ({}) and worklogAuthor is not empty", key_string);
 
     Ok(fetch_issues_from_jql::<IssueSummaryAndWorklog>(jira, jql, vec!["key", "summary", "components", "statusCategory", "worklog"]).await?)
-
-/*    let jql_encoded = urlencoding::encode(jql);
-
-    let mut next_page_token = None;
-
-    loop {
-        let url = if let Some(token) = next_page_token {
-            format!("/search/jql?jql={}&fields=key,summary,components,statusCategory,worklog&maxResults={}&nextPageToken={}", jql_encoded, MAX_RESULTS, token)
-        } else {
-            format!("/search/jql?jql={}&fields=key,summary,components,statusCategory,worklog&maxResults={}", jql_encoded, MAX_RESULTS)
-        };
-
-        let result: IssuesWorklogsResult = jira.get(&url).await?;
-        issue_worklogs.extend(result.issues.into_iter());
-        if let Some(token) = result.next_page_token {
-            println!("Found more issues, continuing... {token}");
-            next_page_token = Some(token);
-        } else {
-            break;
-        }
-    }
-*/
 }
 
 async fn fetch_issues_from_jql<T>(jira: Jira, jql: &str, fields: Vec<&str>) -> Result<Vec<T>, Box<dyn std::error::Error>>
