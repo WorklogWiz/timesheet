@@ -566,47 +566,6 @@ impl Jira {
         Ok(worklogs)
     }
 
-    /// Retrieves all Jira issues for a given project.
-    ///
-    /// This function handles paginated results from the Jira API to fetch all issues
-    /// associated with a specific project. It ensures that all issues are collected by
-    /// iterating over all available pages while avoiding any potential data loss.
-    ///
-    /// # Arguments
-    ///
-    /// * `project_key` - The key of the Jira project for which issues are being retrieved.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` containing a `Vec` of `Issue` if successful, or an error otherwise.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if:
-    /// * Network requests fail.
-    /// * Parsing the response fails.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,ignore
-    /// let jira_client = JiraClient::new("https://your-jira-instance.com", "username", "token");
-    /// let project_key = "PRJ1".to_string();
-    /// let issues = jira_client.get_issues_for_project(project_key).await?;
-    /// for issue in issues {
-    ///     println!("Jira Issue: {}", issue.summary);
-    /// }
-    /// ```
-    #[allow(
-        clippy::cast_sign_loss,
-        clippy::cast_possible_truncation,
-        clippy::cast_possible_wrap
-    )]
-    pub async fn get_issues_for_project(&self, project_key: String) -> Result<Vec<IssueSummary>> {
-        let jql = format!("project=\"{project_key}\" and resolution=Unresolved");
-        Ok(self
-            .fetch_with_jql(&jql, vec!["id", "key", "summary"])
-            .await?)
-    }
 
 
     /// Retrieves a specific worklog for a given issue.
