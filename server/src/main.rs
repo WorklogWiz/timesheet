@@ -6,7 +6,7 @@ use axum::{
     Router,
 };
 use chrono::{Duration, Local};
-use jira::models::{core::JiraKey, issue::Issue};
+use jira::models::{core::IssueKey};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::Mutex;
 use tower_http::cors::{Any, CorsLayer};
@@ -39,19 +39,6 @@ impl IntoResponse for ServerError {
     }
 }
 
-//#[debug_handler]
-#[allow(dead_code)]
-async fn get_tracking_candidates(
-    State(state): State<AppState>,
-) -> Result<Json<Vec<Issue>>, ServerError> {
-    let runtime = state.runtime.lock().await;
-    let operation_result = &runtime.execute(worklog::Operation::Codes).await?;
-
-    match operation_result {
-        worklog::OperationResult::Issues(issues) => Ok(Json(issues.clone())),
-        _ => Err(ServerError::InternalServerError),
-    }
-}
 
 async fn get_worklogs(
     State(state): State<AppState>,
@@ -59,7 +46,7 @@ async fn get_worklogs(
     let runtime = state.runtime.lock().await;
     let wls = runtime.worklog_service();
     let keys = wls.find_unique_keys()?;
-    let keys: Vec<JiraKey> = keys.into_iter().map(JiraKey::from).collect();
+    let keys: Vec<IssueKey> = keys.into_iter().map(IssueKey::from).collect();
     let worklogs = wls.find_worklogs_after(
         Local::now()
             .checked_sub_signed(Duration::days(365))

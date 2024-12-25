@@ -1,16 +1,17 @@
 use crate::error::WorklogError;
 use chrono::{DateTime, Local};
-use jira::models::{core::JiraKey, issue::Issue, worklog::Worklog};
+use jira::models::{core::IssueKey, worklog::Worklog};
 use log::debug;
 use rusqlite::{named_params, params, Connection};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path};
+use jira::models::issue::IssueSummary;
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Clone)]
 #[allow(non_snake_case)]
 #[allow(clippy::module_name_repetitions)]
 pub struct LocalWorklog {
-    pub issue_key: JiraKey,
+    pub issue_key: IssueKey,
     pub id: String, // Numeric, really
     pub author: String,
     pub created: DateTime<Local>,
@@ -24,16 +25,16 @@ pub struct LocalWorklog {
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, Clone)]
 pub struct JiraIssueInfo {
-    pub issue_key: JiraKey,
+    pub issue_key: IssueKey,
     pub summary: String,
 }
 
 impl LocalWorklog {
     /// Converts a Jira `Worklog` entry into a `LocalWorklog` entry
     #[must_use]
-    pub fn from_worklog(worklog: &Worklog, issue_key: JiraKey) -> Self {
+    pub fn from_worklog(worklog: &Worklog, issue_key: &IssueKey) -> Self {
         LocalWorklog {
-            issue_key,
+            issue_key : issue_key.clone(),
             id: worklog.id.clone(),
             author: worklog.author.displayName.clone(),
             created: worklog.created.with_timezone(&Local),
@@ -55,7 +56,7 @@ pub struct WorklogStorage {
 impl WorklogStorage {
     #[allow(clippy::missing_panics_doc)]
     #[allow(clippy::missing_errors_doc)]
-    pub fn add_jira_issues(&self, jira_issues: &Vec<Issue>) -> Result<(), WorklogError> {
+    pub fn add_jira_issues(&self, jira_issues: &Vec<IssueSummary>) -> Result<(), WorklogError> {
         let mut stmt = self.connection.prepare(
             "INSERT INTO jira_issue (issue_key, summary)
             VALUES (?1, ?2)
@@ -75,7 +76,7 @@ impl WorklogStorage {
     #[allow(clippy::missing_errors_doc)]
     pub fn get_jira_issues_filtered_by_keys(
         &self,
-        keys: &Vec<JiraKey>,
+        keys: &Vec<IssueKey>,
     ) -> Result<Vec<JiraIssueInfo>, WorklogError> {
         if keys.is_empty() {
             // Return an empty vector if no keys are provided
@@ -100,7 +101,7 @@ impl WorklogStorage {
         let issues = stmt
             .query_map(rusqlite::params_from_iter(params), |row| {
                 Ok(JiraIssueInfo {
-                    issue_key: JiraKey::new(&row.get::<_, String>(0)?),
+                    issue_key: IssueKey::new(&row.get::<_, String>(0)?),
                     summary: row.get(1)?,
                 })
             })?
@@ -257,7 +258,7 @@ impl WorklogStorage {
         let id: i32 = worklog_id.parse().expect("Invalid number");
         let worklog = stmt.query_row(params![id], |row| {
             Ok(LocalWorklog {
-                issue_key: JiraKey::from(row.get::<_, String>(0)?),
+                issue_key: IssueKey::from(row.get::<_, String>(0)?),
                 id: row.get::<_, i32>(1)?.to_string(),
                 author: row.get(2)?,
                 created: row.get(3)?,
@@ -278,7 +279,7 @@ impl WorklogStorage {
     pub fn find_worklogs_after(
         &self,
         start_datetime: DateTime<Local>,
-        keys: &[JiraKey],
+        keys: &[IssueKey],
     ) -> Result<Vec<LocalWorklog>, WorklogError> {
         // Base SQL query
         let mut sql = String::from(
@@ -312,7 +313,7 @@ impl WorklogStorage {
         let worklogs = stmt
             .query_map(params_slice.as_slice(), |row| {
                 Ok(LocalWorklog {
-                    issue_key: JiraKey::new(&row.get::<_, String>(0)?),
+                    issue_key: IssueKey::new(&row.get::<_, String>(0)?),
                     id: row.get::<_, i32>(1)?.to_string(),
                     author: row.get(2)?,
                     created: row.get(3)?,
@@ -369,7 +370,7 @@ pub fn create_local_worklog_schema(connection: &Connection) -> Result<(), Worklo
 mod tests {
     use super::*;
     use chrono::{Days, Local};
-    use jira::models::core::JiraFields;
+    use jira::models::core::Fields;
 
     use rusqlite::Connection;
 
@@ -389,7 +390,7 @@ mod tests {
     #[test]
     fn add_worklog_entry() -> Result<(), WorklogError> {
         let worklog = LocalWorklog {
-            issue_key: JiraKey::from("ABC-123"),
+            issue_key: IssueKey::from("ABC-123"),
             id: "1".to_string(),
             author: "Ola Dunk".to_string(),
             created: Local::now(),
@@ -414,7 +415,7 @@ mod tests {
     #[test]
     fn add_worklog_entries() -> Result<(), WorklogError> {
         let worklog = LocalWorklog {
-            issue_key: JiraKey::from("ABC-123"),
+            issue_key: IssueKey::from("ABC-123"),
             id: "1".to_string(),
             author: "John Doe".to_string(),
             created: Local::now(),
@@ -440,7 +441,7 @@ mod tests {
         let lws = setup()?;
 
         let worklog = LocalWorklog {
-            issue_key: JiraKey::from("ABC-123"),
+            issue_key: IssueKey::from("ABC-123"),
             id: "1".to_string(),
             author: "John Doe".to_string(),
             created: Local::now(),
@@ -465,31 +466,25 @@ mod tests {
         let lws = setup()?;
         // Example JiraIssue data
         let issues = vec![
-            Issue {
+            IssueSummary {
                 id: "1".to_string(),
-                self_url: "https://example.com/issue/1".to_string(),
-                key: JiraKey::new("ISSUE-1"),
-                worklogs: vec![],
-                fields: JiraFields {
+                key: IssueKey::new("ISSUE-1"),
+                fields: Fields {
                     summary: "This is the first issue.".to_string(),
-                    asset: None,
                 },
             },
-            Issue {
+            IssueSummary {
                 id: "2".to_string(),
-                self_url: "https://example.com/issue/2".to_string(),
-                key: JiraKey::new("ISSUE-2"),
-                worklogs: vec![],
-                fields: JiraFields {
+                key: IssueKey::new("ISSUE-2"),
+                fields: Fields {
                     summary: "This is the second issue.".to_string(),
-                    asset: None,
                 },
             },
         ];
         lws.add_jira_issues(&issues)?;
         let issues = lws.get_jira_issues_filtered_by_keys(&vec![
-            JiraKey::from("ISSUE-1"),
-            JiraKey::from("Issue-2"),
+            IssueKey::from("ISSUE-1"),
+            IssueKey::from("Issue-2"),
         ])?;
         assert_eq!(issues.len(), 2);
 

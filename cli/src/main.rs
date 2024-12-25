@@ -68,7 +68,7 @@ async fn main() -> Result<(), WorklogError> {
             let operation_result: &worklog::OperationResult =
                 &get_runtime().execute(Operation::Codes).await?;
             match operation_result {
-                worklog::OperationResult::Issues(issues) => {
+                worklog::OperationResult::IssueSummaries(issues) => {
                     for issue in issues {
                         println!("{} {}", issue.key, issue.fields.summary);
                     }
