@@ -415,12 +415,11 @@ impl Jira {
         }
         debug!("search_issues() :- Composed this JQL: {jql}");
 
-        self
-            .fetch_with_jql(
-                &jql,
-                vec!["id", "key", "summary", "components"], // TODO: Add "component" to list of fields to retrieve
-            )
-            .await
+        self.fetch_with_jql(
+            &jql,
+            vec!["id", "key", "summary", "components"], // TODO: Add "component" to list of fields to retrieve
+        )
+        .await
     }
 
     ///
@@ -880,7 +879,6 @@ impl Jira {
         let global_settings = self.get::<GlobalSettings>("/configuration").await?;
         Ok(global_settings.timeTrackingConfiguration)
     }
-
 
     ///
     /// Fetches work logs for a list of issues in chunks, starting after the specified naive date-time.

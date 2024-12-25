@@ -70,8 +70,7 @@ pub async fn execute(sync_cmd: Synchronisation) -> Result<(), WorklogError> {
     eprintln!("Found {} work logs", all_issue_work_logs.len());
 
     // Updates the database with the issue summary information
-    runtime
-        .sync_jira_issue_information(&issue_summaries)?;
+    runtime.sync_jira_issue_information(&issue_summaries)?;
 
     let issue_map: std::collections::HashMap<String, &IssueSummary> = issue_summaries
         .iter()
