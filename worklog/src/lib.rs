@@ -1,9 +1,7 @@
 use crate::error::WorklogError;
 use config::AppConfiguration;
-use jira::{
-
-    Credentials, Jira,
-};
+use jira::models::issue::IssueSummary;
+use jira::{Credentials, Jira};
 use log::debug;
 use operation::{
     add::{self, Add},
@@ -11,7 +9,6 @@ use operation::{
     issues,
 };
 use std::path::PathBuf;
-use jira::models::issue::IssueSummary;
 use storage::{LocalWorklog, WorklogStorage};
 
 pub mod config;

@@ -1,9 +1,9 @@
+use chrono::Local;
 use jira::models::core::IssueKey;
+use jira::models::issue::IssueSummary;
 use jira::{Credentials, Jira};
 use std::env;
 use std::time::Instant;
-use chrono::{ Local};
-use jira::models::issue::IssueSummary;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -18,7 +18,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Searching for all issues with worklogs");
     let start_time = Instant::now();
-    let issue_keys: Vec<IssueSummary> = jira.fetch_with_jql("worklogAuthor IS NOT EMPTY", vec!["key","summary"]).await?;
+    let issue_keys: Vec<IssueSummary> = jira
+        .fetch_with_jql("worklogAuthor IS NOT EMPTY", vec!["key", "summary"])
+        .await?;
 
     // let issue_keys = issue_keys_with_work_logs(jira.clone()).await?;
     println!(
@@ -32,16 +34,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start_fetch_two = Instant::now();
     let keys = issue_keys
         .iter()
-        .map(|i| {i.key.clone()})
+        .map(|i| i.key.clone())
         .collect::<Vec<IssueKey>>();
 
-    jira.chunked_work_logs(&keys.iter().take(2).cloned().collect(), start_after ).await?;
+    jira.chunked_work_logs(&keys.iter().take(2).cloned().collect(), start_after)
+        .await?;
     println!(
         "Finished fetching worklogs for 2 issues in {:.2?}ms",
         start_fetch_two.elapsed().as_millis()
     );
 
-    println!("Fetching the worklogs for all ({})issues with startAfter={}", issue_keys.len(),start_after.and_utc().timestamp_millis());
+    println!(
+        "Fetching the worklogs for all ({})issues with startAfter={}",
+        issue_keys.len(),
+        start_after.and_utc().timestamp_millis()
+    );
     let start_fetch_all = Instant::now();
 
     let final_result = jira.chunked_work_logs(&keys, start_after).await?;
@@ -56,5 +63,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Total elapsed time {}ms", start_time.elapsed().as_millis());
     return Ok(());
 }
-
-

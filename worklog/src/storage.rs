@@ -1,11 +1,11 @@
 use crate::error::WorklogError;
 use chrono::{DateTime, Local};
+use jira::models::issue::IssueSummary;
 use jira::models::{core::IssueKey, worklog::Worklog};
 use log::debug;
 use rusqlite::{named_params, params, Connection};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path};
-use jira::models::issue::IssueSummary;
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Clone)]
 #[allow(non_snake_case)]
@@ -34,7 +34,7 @@ impl LocalWorklog {
     #[must_use]
     pub fn from_worklog(worklog: &Worklog, issue_key: &IssueKey) -> Self {
         LocalWorklog {
-            issue_key : issue_key.clone(),
+            issue_key: issue_key.clone(),
             id: worklog.id.clone(),
             author: worklog.author.displayName.clone(),
             created: worklog.created.with_timezone(&Local),

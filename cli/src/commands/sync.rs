@@ -2,7 +2,7 @@ use chrono::{DateTime, Days, Local};
 use log::debug;
 use std::process::exit;
 
-use jira::models::core::{ IssueKey};
+use jira::models::core::IssueKey;
 use jira::models::issue::IssueSummary;
 use worklog::{date, error::WorklogError, storage::LocalWorklog, ApplicationRuntime};
 
@@ -27,8 +27,6 @@ pub async fn execute(sync_cmd: Synchronisation) -> Result<(), WorklogError> {
     let start_after_naive_date_time = DateTime::from_timestamp_millis(date_time.timestamp_millis())
         .expect("Invalid timestamp")
         .naive_local();
-
-
 
     let issue_summaries = prepare_issue_keys_for_sync(&sync_cmd, &runtime).await?;
     if issue_summaries.is_empty() {
@@ -93,8 +91,7 @@ pub async fn execute(sync_cmd: Synchronisation) -> Result<(), WorklogError> {
         debug!("Adding {} {:?}", &worklog.issueId, &worklog);
 
         let issue_summary = issue_map.get(&worklog.issueId).unwrap();
-        let local_worklog =
-            LocalWorklog::from_worklog(&worklog, &issue_summary.key);
+        let local_worklog = LocalWorklog::from_worklog(&worklog, &issue_summary.key);
         if let Err(err) = runtime.worklog_service().add_entry(&local_worklog) {
             eprintln!(
                 "Insert into database failed for {:?}, cause: {:?}",

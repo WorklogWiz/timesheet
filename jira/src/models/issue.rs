@@ -1,11 +1,8 @@
-use super::{
-    core::{ IssueKey},
-    worklog::Worklog,
-};
-use crate::models::project::JiraProjectKey;
-use serde::{Deserialize, Deserializer, Serialize};
-use serde::de::DeserializeOwned;
+use super::{core::IssueKey, worklog::Worklog};
 use crate::models::core::Fields;
+use crate::models::project::JiraProjectKey;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer, Serialize};
 
 /// Holds Responses from Jira when performing JQL queries, which
 /// will always return a collection of Issues with potential sub structures.
@@ -49,10 +46,9 @@ where
 #[derive(Debug, Serialize, Deserialize, PartialOrd, PartialEq, Ord, Eq)]
 pub struct IssueSummary {
     pub id: String,
-    pub key: IssueKey,  // TODO: Add components
+    pub key: IssueKey, // TODO: Add components
     pub fields: Fields,
 }
-
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Worklogs {

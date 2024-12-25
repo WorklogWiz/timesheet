@@ -20,7 +20,10 @@ async fn main() {
             .expect("Failed to get projects");
 
         println!("Found {} projects", projects.len());
-        println!("{:>3} {:6} {:6} {:40} {}", "No","ID", "KEY", "NAME", "PRIVATE");
+        println!(
+            "{:>3} {:6} {:6} {:40} {}",
+            "No", "ID", "KEY", "NAME", "PRIVATE"
+        );
         for (i, project) in projects.iter().enumerate() {
             println!(
                 "{:>3} {:6} {:6} {:40}, {}",

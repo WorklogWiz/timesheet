@@ -1,10 +1,10 @@
 use chrono::{DateTime, Days, Local, NaiveDateTime};
 use futures::StreamExt;
+use jira::models::issue::IssueSummary;
 use jira::models::worklog::Worklog;
 use jira::{Credentials, Jira};
 use std::env;
 use std::time::Instant;
-use jira::models::issue::IssueSummary;
 
 #[tokio::main]
 async fn main() {
@@ -15,7 +15,7 @@ async fn main() {
     let start_time = Instant::now();
     println!("Searching for issues, be patient this can take a while\n (minutes possibly, depending on the number of issues and the Jira instance you are using) ....");
 
-    let issue_summaries = match jira.get_issue_summaries(&vec!["KT,PT"], &[], true ).await {
+    let issue_summaries = match jira.get_issue_summaries(&vec!["KT,PT"], &[], true).await {
         Ok(issues) => issues,
         Err(e) => {
             eprintln!("Error searching issues: {}", e);

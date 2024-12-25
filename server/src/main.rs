@@ -6,7 +6,7 @@ use axum::{
     Router,
 };
 use chrono::{Duration, Local};
-use jira::models::{core::IssueKey};
+use jira::models::core::IssueKey;
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::Mutex;
 use tower_http::cors::{Any, CorsLayer};
@@ -38,7 +38,6 @@ impl IntoResponse for ServerError {
         (status_code, message).into_response()
     }
 }
-
 
 async fn get_worklogs(
     State(state): State<AppState>,

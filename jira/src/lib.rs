@@ -8,7 +8,6 @@ use std::{
     collections::BTreeMap,
     error::Error,
     fmt::{self, Formatter},
-
 };
 
 use chrono::{DateTime, Days, Local, NaiveDateTime, TimeZone};
@@ -566,8 +565,6 @@ impl Jira {
         Ok(worklogs)
     }
 
-
-
     /// Retrieves a specific worklog for a given issue.
     ///
     /// This function fetches a worklog corresponding to the provided issue ID
@@ -883,11 +880,8 @@ impl Jira {
         issue_keys: &Vec<IssueKey>,
         start_after_naive_date_time: NaiveDateTime,
     ) -> Result<Vec<Worklog>> {
-
         let futures = stream::iter(issue_keys)
-            .map(|key| {
-                self.get_work_logs_for_issue(key, start_after_naive_date_time)
-            })
+            .map(|key| self.get_work_logs_for_issue(key, start_after_naive_date_time))
             .buffer_unordered(10);
 
         let issue_worklogs: Vec<_> = futures
