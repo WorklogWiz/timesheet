@@ -1,7 +1,7 @@
 use chrono::{DateTime, Datelike, Days, Duration, Local, NaiveDate};
 use log::debug;
 
-use jira::models::core::JiraKey;
+use jira::models::core::IssueKey;
 use std::cmp;
 use std::collections::BTreeMap;
 use worklog::{
@@ -28,7 +28,7 @@ pub fn table_report_weekly(worklog_entries: &[LocalWorklog]) {
         return;
     }
     // Holds the accumulated work hours per date and then per issue key
-    let mut daily_totals_for_all_jira_key: BTreeMap<&JiraKey, BTreeMap<NaiveDate, i32>> =
+    let mut daily_totals_for_all_jira_key: BTreeMap<&IssueKey, BTreeMap<NaiveDate, i32>> =
         BTreeMap::new();
     debug!("table_report() :- {:?}", &worklog_entries);
 
@@ -176,7 +176,7 @@ fn print_double_dashed_line() {
 mod tests {
     use crate::table_report_weekly::{find_min_max_started, table_report_weekly};
     use chrono::{Days, Local};
-    use jira::models::core::JiraKey;
+    use jira::models::core::IssueKey;
     use std::ops::Sub;
     use worklog::storage::LocalWorklog;
 
@@ -185,7 +185,7 @@ mod tests {
         let now = Local::now();
         let worklogs = vec![
             LocalWorklog {
-                issue_key: JiraKey::from("ISSUE-1"),
+                issue_key: IssueKey::from("ISSUE-1"),
                 id: "1".to_string(),
                 author: "user1".to_string(),
                 created: now,
@@ -197,7 +197,7 @@ mod tests {
                 comment: Some("Worklog 1".to_string()),
             },
             LocalWorklog {
-                issue_key: JiraKey::from("ISSUE-2"),
+                issue_key: IssueKey::from("ISSUE-2"),
                 id: "2".to_string(),
                 author: "user2".to_string(),
                 created: now,
@@ -209,7 +209,7 @@ mod tests {
                 comment: Some("Worklog 2".to_string()),
             },
             LocalWorklog {
-                issue_key: JiraKey::from("ISSUE-3"),
+                issue_key: IssueKey::from("ISSUE-3"),
                 id: "3".to_string(),
                 author: "user3".to_string(),
                 created: now,

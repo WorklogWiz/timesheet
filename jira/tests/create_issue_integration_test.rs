@@ -1,7 +1,6 @@
 mod test_helpers;
 
 use crate::test_helpers::jira_client::create_jira_client;
-use jira::models::core::JiraKey;
 use jira::models::project::JiraProjectKey;
 use log::debug;
 use std::string::ToString;

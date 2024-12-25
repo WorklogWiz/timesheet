@@ -2,7 +2,7 @@ use crate::test_helpers::jira_client::create_jira_client;
 use chrono::{DateTime, Duration, Local};
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
-use jira::models::core::JiraKey;
+use jira::models::core::IssueKey;
 use jira::models::project::JiraProjectKey;
 // Ensure JiraProjectKey is defined to derive Clone
 use jira::models::worklog::Worklog;
@@ -14,7 +14,7 @@ use std::ops::Range;
 pub async fn create_batch_of_issues(
     qty: i32,
     jira_project_key: JiraProjectKey,
-) -> Result<Vec<JiraKey>, Box<dyn std::error::Error>> {
+) -> Result<Vec<IssueKey>, Box<dyn std::error::Error>> {
     let jira_client = create_jira_client().await;
 
     // Create a stream of futures to process in parallel
@@ -38,7 +38,7 @@ pub async fn create_batch_of_issues(
                 Ok(issue) => {
                     assert!(!issue.key.is_empty());
                     debug!("Created issue {}", issue.key);
-                    Ok(JiraKey::from(issue.key))
+                    Ok(IssueKey::from(issue.key))
                 }
                 Err(e) => {
                     eprintln!("Failed to create issue: {}", e);
@@ -63,7 +63,7 @@ pub async fn create_batch_of_issues(
 }
 
 #[allow(dead_code)]
-pub async fn delete_batch_of_issues_by_key(issue_keys: &Vec<JiraKey>) {
+pub async fn delete_batch_of_issues_by_key(issue_keys: &Vec<IssueKey>) {
     let start_time = std::time::Instant::now();
 
     let mut delete_futures = FuturesUnordered::new();
@@ -93,7 +93,7 @@ pub async fn delete_batch_of_issues_by_key(issue_keys: &Vec<JiraKey>) {
 
 #[allow(dead_code)] // This is a bug in the Rust linter, this function is called
 pub async fn add_random_work_logs_to_issues(
-    issues: &Vec<JiraKey>,
+    issues: &Vec<IssueKey>,
     worklog_qty_range: Range<i32>,
 ) -> Vec<Worklog> {
     let mut work_log_results = Vec::new();

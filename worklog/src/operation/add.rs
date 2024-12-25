@@ -2,7 +2,7 @@ use anyhow::Result;
 use chrono::{Datelike, Local, TimeZone, Weekday};
 use jira::{
     models::{
-        core::JiraKey,
+        core::IssueKey,
         setting::{GlobalSettings, TimeTrackingConfiguration},
     },
     Jira,
@@ -185,6 +185,6 @@ async fn add_single_entry(
 
     Ok(LocalWorklog::from_worklog(
         &result,
-        JiraKey::from(issue_key),
+        &IssueKey::from(issue_key),
     ))
 }

@@ -1,7 +1,7 @@
 use std::process::exit;
 
 use chrono::{Datelike, Days, Local};
-use jira::models::core::JiraKey;
+use jira::models::core::IssueKey;
 use log::debug;
 use worklog::{
     date,
@@ -24,9 +24,9 @@ pub async fn execute(status: Status) -> Result<(), WorklogError> {
         Some(date) => Some(date),
     };
 
-    let mut jira_keys_to_report = Vec::<JiraKey>::new();
+    let mut jira_keys_to_report = Vec::<IssueKey>::new();
     if let Some(keys) = status.issues {
-        jira_keys_to_report.extend(keys.into_iter().map(JiraKey::from));
+        jira_keys_to_report.extend(keys.into_iter().map(IssueKey::from));
     }
 
     eprintln!(
@@ -64,14 +64,14 @@ pub async fn execute(status: Status) -> Result<(), WorklogError> {
 
 fn print_info_about_time_codes(
     worklog_service: &WorklogStorage,
-    mut jira_keys_to_report: Vec<JiraKey>,
+    mut jira_keys_to_report: Vec<IssueKey>,
 ) {
     if jira_keys_to_report.is_empty() {
         jira_keys_to_report = worklog_service
             .find_unique_keys()
             .unwrap_or_default()
             .iter()
-            .map(|k| JiraKey::from(k.as_str()))
+            .map(|k| IssueKey::from(k.as_str()))
             .collect();
     }
 

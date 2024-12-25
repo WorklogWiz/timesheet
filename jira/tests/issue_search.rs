@@ -27,6 +27,7 @@ use jira::models::project::JiraProjectKey;
 ///
 /// # Returns:
 /// - Returns `Ok(())` on success.
+///
 #[tokio::test] // Requires a valid user token in configuration
 async fn search_issues_test() -> Result<(), Box<dyn std::error::Error>> {
     let issues = test_data::create_batch_of_issues(3, JiraProjectKey { key: "NOR" }).await?;
@@ -34,7 +35,9 @@ async fn search_issues_test() -> Result<(), Box<dyn std::error::Error>> {
     let _work_logs = test_data::add_random_work_logs_to_issues(&issues, 1..3).await;
 
     let jira_client = create_jira_client().await;
-    let search_result = jira_client.search_issues(&vec!["NOR"], &vec![]).await?;
+    let search_result = jira_client
+        .get_issue_summaries(&vec!["NOR"], &vec![], true)
+        .await?;
     assert!(!issues.is_empty());
 
     // We expect at least same number of issues when we search

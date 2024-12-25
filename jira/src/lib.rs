@@ -11,10 +11,9 @@ use std::{
 };
 
 use chrono::{DateTime, Days, Local, NaiveDateTime, TimeZone};
-use futures::StreamExt;
-use log::{debug, info, warn};
+use futures::{stream, StreamExt};
+use log::{debug, warn};
 use models::{
-    issue::{Issue, IssuesPage},
     project::{JiraProjectsPage, Project},
     user::User,
     worklog::{Insert, Worklog, WorklogsPage},
@@ -24,8 +23,10 @@ use reqwest::{
     Client, Method, RequestBuilder, StatusCode,
 };
 
-use crate::models::core::JiraKey;
-use crate::models::issue::{JiraIssueFields, JiraIssueType, JiraNewIssue, JiraNewIssueResponse};
+use crate::models::core::IssueKey;
+use crate::models::issue::{
+    IssueFields, IssueSummary, IssueType, IssuesResponse, NewIssue, NewIssueResponse,
+};
 use crate::models::project::JiraProjectKey;
 use crate::models::setting::{GlobalSettings, TimeTrackingConfiguration};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -35,7 +36,7 @@ pub mod models;
 
 type Result<T> = std::result::Result<T, JiraError>;
 
-const FUTURE_BUFFER_SIZE: usize = 20;
+const MAX_RESULTS: i32 = 100; // Value of Jira `maxResults` variable when fetching data
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Errors {
@@ -297,7 +298,67 @@ impl Jira {
             .await
     }
 
-    /// Searches for Jira issues based on provided projects and/or issue keys.
+    /// Fetches issues from Jira using a specified JQL query and response fields.
+    ///
+    /// This function sends a JQL query to the Jira server to retrieve issues that
+    /// match the specified criteria. This supports pagination and will continue
+    /// fetching until all issues are retrieved.
+    ///
+    ///
+    /// # Parameters
+    /// - `jql`: A reference to a string containing the JQL query.
+    /// - `fields`: A vector of field names to include in the response.
+    ///
+    /// # Returns
+    /// - Returns a `Result` containing a vector of issues of type `T` on success.
+    /// - Returns an appropriate error if the operation fails, such as network issues
+    ///   or authentication problems.
+    ///
+    /// # Errors
+    /// This function may return:
+    /// - `WorklogError::NetworkError` if there's an issue connecting to the server.
+    /// - `WorklogError::JiraResponse` if Jira responds with an error, such as invalid query syntax
+    ///   or permissions issues.
+    pub async fn fetch_with_jql<T>(&self, jql: &str, fields: Vec<&str>) -> Result<Vec<T>>
+    where
+        T: DeserializeOwned,
+    {
+        let jql_encoded = urlencoding::encode(jql);
+        let mut results: Vec<T> = Vec::new();
+
+        let mut next_page_token = None;
+        loop {
+            let resource = if let Some(token) = next_page_token {
+                format!(
+                    "/search/jql?jql={}&fields={}&maxResults={}&nextPageToken={}",
+                    jql_encoded,
+                    fields.join(","),
+                    MAX_RESULTS,
+                    token
+                )
+            } else {
+                format!(
+                    "/search/jql?jql={}&fields={}&maxResults={}",
+                    jql_encoded,
+                    fields.join(","),
+                    MAX_RESULTS
+                )
+            };
+            debug!("http get '{:?}'", resource);
+            let response: IssuesResponse<T> = self.get(&resource).await?;
+            results.extend(response.issues);
+
+            if let Some(token) = response.next_page_token {
+                next_page_token = Some(token);
+            } else {
+                break;
+            }
+        }
+        Ok(results)
+    }
+
+    /// Searches for Jira issues where `worklogAuthor` IS NOT EMPTY
+    /// based on provided projects and/or issue keys.
     ///
     /// # Parameters
     /// * `projects`: A vector of project keys (e.g., `["TEST", "PROJ"]`). Can be empty.
@@ -314,23 +375,25 @@ impl Jira {
     ///
     /// # Examples
     /// This function requires proper setup of Jira client and works asynchronously.
-    pub async fn search_issues(
+    pub async fn get_issue_summaries(
         &self,
-        projects: &Vec<&str>,
-        issue_keys: &[JiraKey],
-    ) -> Result<Vec<Issue>> {
-        if projects.is_empty() && issue_keys.is_empty() {
+        project_filter: &Vec<&str>,
+        issue_key_filter: &[IssueKey],
+        all_users: bool,
+    ) -> Result<Vec<IssueSummary>> {
+        if project_filter.is_empty() && issue_key_filter.is_empty() {
             warn!("No projects or issue keys provided");
-            return Ok(Vec::<Issue>::new());
+            return Ok(vec![]);
         }
 
         let mut jql = String::new();
-        if !projects.is_empty() {
-            jql = format!("project in ({})", projects.join(","));
+
+        if !project_filter.is_empty() {
+            jql = format!("project in ({})", project_filter.join(","));
         }
-        if !issue_keys.is_empty() {
-            // and comma-separated list of issue keys
-            let keys_spec = issue_keys
+        if !issue_key_filter.is_empty() {
+            // creates comma-separated list of issue the keys
+            let keys_spec = issue_key_filter
                 .iter()
                 .map(std::string::ToString::to_string)
                 .collect::<Vec<_>>()
@@ -338,63 +401,25 @@ impl Jira {
 
             if jql.is_empty() {
                 // No Project clause, so only add the issue keys
-                jql.push_str(format!("issuekey in ({keys_spec})").as_str());
+                jql.push_str(format!("issueKey in ({keys_spec})").as_str());
             } else {
-                // Appends the set of issue keys, if project clause exists
-                let s = format!("{jql} and issuekey in ({keys_spec})");
+                // Appends the set of issue keys, after project filter
+                let s = format!("{jql} and issueKey in ({keys_spec})");
                 jql = s;
             }
         }
-
-        jql.push_str(" AND worklogAuthor is not EMPTY ");
-        let jql_encoded = urlencoding::encode(&jql);
+        if all_users {
+            jql.push_str(" AND worklogAuthor is not EMPTY ");
+        } else {
+            jql.push_str(" AND worklogAuthor=currentUser() ");
+        }
         debug!("search_issues() :- Composed this JQL: {jql}");
 
-        let jira_issues = self.fetch_jql_result(jql_encoded.as_ref()).await?;
-        Ok(jira_issues)
-    }
-
-    /// Fetches paginated JQL results from the Jira server
-    #[allow(clippy::cast_possible_wrap)]
-    #[allow(clippy::cast_sign_loss)]
-    async fn fetch_jql_result(&self, jql_encoded: &str) -> Result<Vec<Issue>> {
-        let mut resource = Self::compose_resource_for_next_jql_page(jql_encoded, 0, 50);
-
-        let mut jira_issues: Vec<Issue> = Vec::new();
-        loop {
-            debug!("Fetching next page of search results ...");
-            let mut jira_issues_page = self.get::<IssuesPage>(&resource).await?;
-            let last_page = jira_issues_page.issues.is_empty()
-                || jira_issues_page.issues.len() < jira_issues_page.max_results as usize;
-            if !last_page {
-                resource = Self::compose_resource_for_next_jql_page(
-                    jql_encoded,
-                    jira_issues_page.start_at
-                        + i32::try_from(jira_issues_page.issues.len()).unwrap(),
-                    jira_issues_page.max_results,
-                );
-            }
-            jira_issues.append(&mut jira_issues_page.issues);
-
-            debug!("Fetched {} issues", jira_issues.len());
-            if last_page {
-                break;
-            }
-        }
-        Ok(jira_issues)
-    }
-
-    /// Composes the resource string for the next page of JQL results
-    fn compose_resource_for_next_jql_page(
-        jql_encoded: &str,
-        start_at: i32,
-        max_results: i32,
-    ) -> String {
-        let resource = format!(
-            "/search?jql={}&startAt={}&maxResults={}&fields={}",
-            jql_encoded, start_at, max_results, "id,key,summary,components,description"
-        );
-        resource
+        self.fetch_with_jql(
+            &jql,
+            vec!["id", "key", "summary", "components"], // TODO: Add "component" to list of fields to retrieve
+        )
+        .await
     }
 
     ///
@@ -452,6 +477,7 @@ impl Jira {
                 .collect(),
         );
 
+        // TODO: replace project search with pagination logic startAt, isLast, etc.
         // While there is a URL for the next page ...
         while let Some(url) = &project_page.next_page {
             // Fetch next page of data
@@ -468,63 +494,80 @@ impl Jira {
         Ok(projects)
     }
 
-    /// Retrieves all Jira issues for a given project.
     ///
-    /// This function handles paginated results from the Jira API to fetch all issues
-    /// associated with a specific project. It ensures that all issues are collected by
-    /// iterating over all available pages while avoiding any potential data loss.
+    /// Retrieves all work logs for a specific Jira issue, starting from a given time.
+    ///
+    /// This function fetches paginated work logs for a Jira issue by querying the Jira API.
+    /// It continues retrieving work logs until no more pages are available.
     ///
     /// # Arguments
     ///
-    /// * `project_key` - The key of the Jira project for which issues are being retrieved.
+    /// * `issue_key` - The key of the Jira issue for which work logs are being retrieved.
+    /// * `started_after` - A `NaiveDateTime` indicating the cutoff time for the work logs to retrieve.
     ///
     /// # Returns
     ///
-    /// A `Result` containing a `Vec` of `Issue` if successful, or an error otherwise.
+    /// A `Result` containing a `Vec` of `Worklog` if successful, or an error otherwise.
     ///
     /// # Errors
     ///
-    /// Returns an error if:
-    /// * Network requests fail.
-    /// * Parsing the response fails.
+    /// This function returns an error if:
+    /// * Network requests to retrieve worklogs fail.
+    /// * Parsing the Jira API responses fails.
     ///
     /// # Examples
     ///
     /// ```rust,ignore
     /// let jira_client = JiraClient::new("https://your-jira-instance.com", "username", "token");
-    /// let project_key = "PRJ1".to_string();
-    /// let issues = jira_client.get_issues_for_project(project_key).await?;
-    /// for issue in issues {
-    ///     println!("Jira Issue: {}", issue.summary);
+    /// let issue_key = "ISSUE-123".to_string();
+    /// let started_after = NaiveDateTime::parse_from_str("2023-01-01 00:00:00", "%Y-%m-%d %H:%M:%S")?;
+    /// let worklogs = jira_client
+    ///     .get_worklogs_for_issue(issue_key, started_after)
+    ///     .await?;
+    /// for worklog in worklogs {
+    ///     println!("Worklog author: {}, time spent: {}", worklog.author, worklog.time_spent);
     /// }
     /// ```
+    /// # Panics
+    ///
+    /// This function will panic if:
+    /// - The `issue_key` is empty, as it is required to specify an issue key.
+    ///
+    /// Ensure that the `issue_key` parameter is properly provided before calling this method.
     #[allow(
         clippy::cast_sign_loss,
         clippy::cast_possible_truncation,
         clippy::cast_possible_wrap
     )]
-    pub async fn get_issues_for_project(&self, project_key: String) -> Result<Vec<Issue>> {
-        let mut resource = Self::compose_resource_and_params(&project_key, 0, 1024);
+    pub async fn get_work_logs_for_issue(
+        &self,
+        issue_key: &IssueKey,
+        started_after: NaiveDateTime,
+    ) -> Result<Vec<Worklog>> {
+        assert!(!issue_key.is_empty(), "Must specify an issue key");
+        let mut resource_name =
+            Self::compose_work_logs_url(issue_key.as_str(), 0, 5000, started_after);
+        let mut worklogs: Vec<Worklog> = Vec::<Worklog>::new();
 
-        let mut issues = Vec::<Issue>::new();
+        debug!("Retrieving work logs for {}", issue_key);
+        // Loops through the result pages until last page received
         loop {
-            let mut issue_page = self.get::<IssuesPage>(&resource).await?;
-
-            // issues.len() will be invalid once we move the contents of the issues into our result
-            let is_last_page = issue_page.issues.len() < issue_page.max_results as usize;
+            let mut worklog_page = self.get::<WorklogsPage>(&resource_name).await?;
+            let is_last_page = worklog_page.worklogs.len() < worklog_page.max_results as usize;
             if !is_last_page {
-                resource = Self::compose_resource_and_params(
-                    &project_key,
-                    issue_page.start_at + issue_page.issues.len() as i32,
-                    issue_page.max_results,
+                resource_name = Self::compose_work_logs_url(
+                    issue_key.as_str(),
+                    worklog_page.startAt + worklog_page.worklogs.len(),
+                    worklog_page.max_results,
+                    started_after,
                 );
             }
-            issues.append(&mut issue_page.issues);
+            worklogs.append(&mut worklog_page.worklogs);
             if is_last_page {
                 break;
             }
         }
-        Ok(issues)
+        Ok(worklogs)
     }
 
     /// Retrieves a specific worklog for a given issue.
@@ -554,76 +597,6 @@ impl Jira {
     ) -> Result<Worklog> {
         let resource = format!("/issue/{issue_id}/worklog/{worklog_id}");
         self.get::<Worklog>(&resource).await
-    }
-
-    ///
-    /// Fetches worklogs for a list of issues concurrently, starting from a given time.
-    ///
-    /// This function performs asynchronous fetching of worklogs for multiple Jira issues
-    /// in parallel. It limits the number of concurrent tasks to avoid overwhelming the system.
-    ///
-    /// # Arguments
-    ///
-    /// * `issues` - A vector of `Issue` objects for which worklogs are to be retrieved.
-    /// * `start_after` - A `NaiveDateTime` specifying the cutoff start time to filter the worklogs.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` containing a `Vec` of `Worklog` objects if successful. Returns an appropriate
-    /// error if fetching any of the worklogs fails or there is a network issue.
-    ///
-    /// # Errors
-    ///
-    /// This function may return:
-    /// * Errors related to API connectivity or network issues.
-    /// * Parsing errors when handling the API responses.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,ignore
-    /// let jira_client = JiraClient::new("https://your-jira-instance.com", "username", "token");
-    /// let issues = vec![
-    ///     Issue { key: "ISSUE-1".to_string(), ..Default::default() },
-    ///     Issue { key: "ISSUE-2".to_string(), ..Default::default() },
-    /// ];
-    /// let start_after = NaiveDateTime::parse_from_str("2023-01-01 00:00:00", "%Y-%m-%d %H:%M:%S")?;
-    ///
-    /// let work_logs = jira_client
-    ///     .fetch_work_logs_for_issues_concurrently(issues, start_after)
-    ///     .await?;
-    ///
-    /// for work_log in work_logs {
-    ///     println!("Work log author: {}, time spent: {}", work_log.author, work_log.time_spent);
-    /// }
-    /// ```
-    pub async fn fetch_work_logs_for_issues_concurrently(
-        &self,
-        issue_keys: &[JiraKey],
-        start_after: NaiveDateTime,
-    ) -> Result<Vec<Worklog>> {
-        let futures = issue_keys.iter().map(|issue| {
-            let issue_key = issue; // No clone needed here
-            let me = self.clone();
-            async move {
-                me.get_work_logs_for_issue(issue_key.to_string(), start_after)
-                    .await
-            }
-        });
-
-        let results = futures::stream::iter(futures)
-            .buffer_unordered(10) // Max 10 concurrent tasks
-            .collect::<Vec<_>>()
-            .await;
-
-        let mut work_logs = Vec::new();
-        for result in results {
-            match result {
-                Ok(logs) => work_logs.extend(logs),
-                Err(err) => return Err(err), // Return the first error
-            }
-        }
-
-        Ok(work_logs)
     }
 
     /// Retrieves all worklogs for the currently authenticated user associated with a specific issue.
@@ -662,7 +635,7 @@ impl Jira {
             .unwrap()
             .naive_local();
         let result = self
-            .get_work_logs_for_issue(issue_key.to_string(), naive_date_time)
+            .get_work_logs_for_issue(&IssueKey::new(issue_key), naive_date_time)
             .await?;
         debug!("Work logs retrieved, filtering them for current user ....");
         let current_user = self.get_current_user().await?;
@@ -672,77 +645,6 @@ impl Jira {
             .collect())
     }
 
-    ///
-    /// Retrieves all work logs for a specific Jira issue, starting from a given time.
-    ///
-    /// This function fetches paginated work logs for a Jira issue by querying the Jira API.
-    /// It continues retrieving work logs until no more pages are available.
-    ///
-    /// # Arguments
-    ///
-    /// * `issue_key` - The key of the Jira issue for which work logs are being retrieved.
-    /// * `started_after` - A `NaiveDateTime` indicating the cutoff time for the work logs to retrieve.
-    ///
-    /// # Returns
-    ///
-    /// A `Result` containing a `Vec` of `Worklog` if successful, or an error otherwise.
-    ///
-    /// # Errors
-    ///
-    /// This function returns an error if:
-    /// * Network requests to retrieve worklogs fail.
-    /// * Parsing the Jira API responses fails.
-    ///
-    /// # Examples
-    ///
-    /// ```rust,ignore
-    /// let jira_client = JiraClient::new("https://your-jira-instance.com", "username", "token");
-    /// let issue_key = "ISSUE-123".to_string();
-    /// let started_after = NaiveDateTime::parse_from_str("2023-01-01 00:00:00", "%Y-%m-%d %H:%M:%S")?;
-    /// let worklogs = jira_client
-    ///     .get_worklogs_for_issue(issue_key, started_after)
-    ///     .await?;
-    /// for worklog in worklogs {
-    ///     println!("Worklog author: {}, time spent: {}", worklog.author, worklog.time_spent);
-    /// }
-    /// ```
-    #[allow(
-        clippy::cast_sign_loss,
-        clippy::cast_possible_truncation,
-        clippy::cast_possible_wrap
-    )]
-    pub async fn get_work_logs_for_issue(
-        &self,
-        issue_key: String,
-        started_after: NaiveDateTime,
-    ) -> Result<Vec<Worklog>> {
-        let mut resource_name =
-            Self::compose_worklogs_url(issue_key.as_str(), 0, 5000, started_after);
-        let mut worklogs: Vec<Worklog> = Vec::<Worklog>::new();
-
-        debug!("Retrieving worklogs for {}", issue_key);
-        // Loops through the result pages until last page received
-        loop {
-            let mut worklog_page = self.get::<WorklogsPage>(&resource_name).await?;
-            let is_last_page = worklog_page.worklogs.len() < worklog_page.max_results as usize;
-            if !is_last_page {
-                resource_name = Self::compose_worklogs_url(
-                    issue_key.as_str(),
-                    worklog_page.startAt + worklog_page.worklogs.len() as i32,
-                    worklog_page.max_results,
-                    started_after,
-                );
-            }
-            worklogs.append(&mut worklog_page.worklogs);
-            if is_last_page {
-                break;
-            }
-        }
-        Ok(worklogs)
-    }
-
-    // -----------------------
-    // Static methods
     fn project_search_resource(start_at: i32, project_keys: Vec<String>) -> String {
         // Seems 50 is the max value of maxResults
         let mut resource = format!("/project/search?maxResults=50&startAt={start_at}");
@@ -755,10 +657,10 @@ impl Jira {
         resource
     }
 
-    fn compose_worklogs_url(
+    fn compose_work_logs_url(
         issue_key: &str,
-        start_at: i32,
-        max_results: i32,
+        start_at: usize,
+        max_results: usize,
         started_after: NaiveDateTime,
     ) -> String {
         format!(
@@ -768,142 +670,6 @@ impl Jira {
             max_results,
             Local.from_utc_datetime(&started_after).timestamp_millis()
         )
-    }
-
-    fn compose_resource_and_params(project_key: &str, start_at: i32, max_results: i32) -> String {
-        let jql = format!("project=\"{project_key}\" and resolution=Unresolved");
-        let jql_encoded = urlencoding::encode(&jql);
-
-        let resource = format!(
-            "/search?jql={}&startAt={}&maxResults={}&fields={}",
-            jql_encoded, start_at, max_results, "summary"
-        );
-        resource
-    }
-
-    #[allow(dead_code)]
-    #[allow(clippy::missing_errors_doc)]
-    async fn augment_projects_with_their_issues(
-        self,
-        projects: Vec<Project>,
-    ) -> Result<Vec<Project>> {
-        let mut futures_stream = futures::stream::iter(projects)
-            .map(|mut project| {
-                let me = self.clone();
-                tokio::spawn(async move {
-                    let Ok(issues) = me.get_issues_for_project(project.key.clone()).await else {
-                        todo!()
-                    };
-                    let _old = std::mem::replace(&mut project.issues, issues);
-                    project
-                })
-            })
-            .buffer_unordered(FUTURE_BUFFER_SIZE);
-
-        let mut result = Vec::<Project>::new();
-        while let Some(r) = futures_stream.next().await {
-            match r {
-                Ok(jp) => result.push(jp),
-                Err(e) => eprintln!("Error: {e:?}"),
-            }
-        }
-        Ok(result)
-    }
-
-    /// Retrieves issues and their associated worklogs for the specified projects.
-    ///
-    /// # Arguments
-    /// * `projects` - A vector of `Project` instances from which to retrieve issues and worklogs.
-    /// * `issues_filter` - A vector of issue keys to filter issues by. If empty, all issues are included.
-    /// * `started_after` - A `NaiveDateTime` instance to filter worklog entries that started after this date.
-    ///
-    /// # Returns
-    /// A `Result` containing a vector of updated `Project` instances with their issues and associated worklogs,
-    /// or an error if any operation fails.
-    ///
-    /// # Errors
-    /// This function can return an error if:
-    /// * Retrieving issues for a specific project fails.
-    /// * Retrieving worklogs for an issue fails.
-    /// * Internal futures processing encounters a failure.
-    ///
-    /// # Example
-    /// ```rust,ignore
-    /// use chrono::NaiveDate;
-    ///
-    /// let projects = vec![]; // Assume projects are populated.
-    /// let issues_filter = vec!["ISSUE-1".to_string(), "ISSUE-2".to_string()];
-    /// let started_after = NaiveDate::from_ymd(2023, 10, 01).and_hms(0, 0, 0);
-    ///
-    /// let result = instance.get_issues_and_worklogs(projects, issues_filter, started_after).await;
-    /// match result {
-    ///     Ok(updated_projects) => println!("Retrieved {} projects", updated_projects.len()),
-    ///     Err(e) => println!("Error: {}", e),
-    /// }
-    /// ```
-    #[allow(dead_code)]
-    async fn get_issues_and_worklogs(
-        self,
-        projects: Vec<Project>,
-        issues_filter: Vec<String>,
-        started_after: NaiveDateTime,
-    ) -> Result<Vec<Project>> {
-        let mut futures_stream = futures::stream::iter(projects)
-            .map(|mut project| {
-                debug!(
-                    "Creating future for {}, filters={:?}",
-                    &project.key, issues_filter
-                );
-
-                let filter = issues_filter.clone();
-                let me = self.clone(); // Clones the vector to allow async move
-                tokio::spawn(async move {
-                    let issues = me.get_issues_for_project(project.key.clone()).await?;
-                    debug!(
-                        "Extracted {} issues. Applying filter {:?}",
-                        issues.len(),
-                        filter
-                    );
-                    let issues: Vec<Issue> = issues
-                        .into_iter()
-                        .filter(|issue| {
-                            filter.is_empty()
-                                || !filter.is_empty() && filter.contains(&issue.key.value)
-                        })
-                        .collect();
-                    debug!("Filtered {} issues for {}", issues.len(), &project.key);
-                    let _old = std::mem::replace(&mut project.issues, issues);
-                    for issue in &mut project.issues {
-                        debug!("Retrieving worklogs for issue {}", &issue.key);
-                        let key = issue.key.to_string();
-                        let mut worklogs =
-                            match me.get_work_logs_for_issue(key, started_after).await {
-                                Ok(result) => result,
-                                Err(e) => return Err(e),
-                            };
-                        debug!(
-                            "Issue {} has {} worklog entries",
-                            issue.key.value,
-                            worklogs.len()
-                        );
-                        issue.worklogs.append(&mut worklogs);
-                    }
-                    Ok(project)
-                })
-            })
-            .buffer_unordered(FUTURE_BUFFER_SIZE);
-
-        let mut result = Vec::<Project>::new();
-        while let Some(r) = futures_stream.next().await {
-            match r.unwrap() {
-                Ok(jp) => {
-                    info!("Data retrieved from Jira for project {}", jp.key);
-                    result.push(jp);
-                }
-                Err(e) => eprintln!("Error: {e:?}"),
-            }
-        }
-        Ok(result)
     }
 
     /// Inserts a worklog for a specific issue in Jira.
@@ -1003,13 +769,13 @@ impl Jira {
         jira_project_key: &JiraProjectKey,
         summary: &str,
         description: Option<String>,
-    ) -> Result<JiraNewIssueResponse> {
-        let new_issue = JiraNewIssue {
-            fields: JiraIssueFields {
+    ) -> Result<NewIssueResponse> {
+        let new_issue = NewIssue {
+            fields: IssueFields {
                 project: JiraProjectKey {
                     key: jira_project_key.key,
                 },
-                issuetype: JiraIssueType {
+                issuetype: IssueType {
                     name: "Task".to_string(),
                 },
                 summary: summary.to_string(),
@@ -1020,7 +786,7 @@ impl Jira {
         let url = "/issue";
 
         let result = self
-            .post::<JiraNewIssueResponse, JiraNewIssue>(url, new_issue)
+            .post::<NewIssueResponse, NewIssue>(url, new_issue)
             .await?;
         debug!("Created issue {:?}", result);
         Ok(result)
@@ -1067,9 +833,9 @@ impl Jira {
     /// This function may return:
     /// - `WorklogError::NetworkError` if there's a problem establishing a connection.
     /// - `WorklogError::JiraResponse` if Jira responds with an error (e.g., issue not found or insufficient permissions).
-    pub async fn delete_issue(&self, jira_key: &JiraKey) -> Result<()> {
+    pub async fn delete_issue(&self, jira_key: &IssueKey) -> Result<()> {
         let url = format!("/issue/{}", jira_key.value);
-        self.delete::<Option<JiraKey>>(&url).await?;
+        self.delete::<Option<IssueKey>>(&url).await?;
         Ok(())
     }
 
@@ -1112,6 +878,52 @@ impl Jira {
     pub async fn get_time_tracking_options(&self) -> Result<TimeTrackingConfiguration> {
         let global_settings = self.get::<GlobalSettings>("/configuration").await?;
         Ok(global_settings.timeTrackingConfiguration)
+    }
+
+    ///
+    /// Fetches work logs for a list of issues in chunks, starting after the specified naive date-time.
+    ///
+    /// This function retrieves worklogs asynchronously for a collection of issues. It requests
+    /// worklog data for each issue key provided in the `issue_keys` parameter and starts
+    /// fetching worklogs chronologically after the given `start_after_naive_date_time`.
+    ///
+    /// The function leverages asynchronous buffering to request data concurrently for up to 10
+    /// issues at a time, merging results into a single collection.
+    ///
+    /// # Parameters
+    /// - `issue_keys`: A reference to a vector of `IssueKey` objects representing the Jira issues
+    ///   for which worklogs should be retrieved.
+    /// - `start_after_naive_date_time`: A `NaiveDateTime` instance representing the cutoff point
+    ///   for retrieving worklogs. Only worklogs created or updated after this date-time will be fetched.
+    ///
+    /// # Returns
+    /// - Returns a `Result` containing a `Vec<Worklog>` on success.
+    /// - Returns an appropriate error if any of the requests fail.
+    ///
+    /// # Errors
+    /// This function may return:
+    /// - `WorklogError::NetworkError` if there's a problem with the connection.
+    /// - `WorklogError::JiraResponse` if an error occurs in any of the Jira server responses.
+    pub async fn chunked_work_logs(
+        &self,
+        issue_keys: &Vec<IssueKey>,
+        start_after_naive_date_time: NaiveDateTime,
+    ) -> Result<Vec<Worklog>> {
+        let futures = stream::iter(issue_keys)
+            .map(|key| self.get_work_logs_for_issue(key, start_after_naive_date_time))
+            .buffer_unordered(10);
+
+        let issue_worklogs: Vec<_> = futures
+            .filter_map(|result| async {
+                match result {
+                    Ok(worklogs) => Some(worklogs),
+                    Err(_) => None,
+                }
+            })
+            .concat()
+            .await;
+
+        Ok(issue_worklogs)
     }
 }
 

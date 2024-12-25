@@ -1,6 +1,6 @@
 use chrono::{DateTime, Days, Local, NaiveDateTime};
 use futures::StreamExt;
-use jira::models::issue::Issue;
+use jira::models::issue::IssueSummary;
 use jira::models::worklog::Worklog;
 use jira::{Credentials, Jira};
 use std::env;
@@ -15,7 +15,7 @@ async fn main() {
     let start_time = Instant::now();
     println!("Searching for issues, be patient this can take a while\n (minutes possibly, depending on the number of issues and the Jira instance you are using) ....");
 
-    let issues = match jira.search_issues(&vec!["KT,PT"], &[]).await {
+    let issue_summaries = match jira.get_issue_summaries(&vec!["KT,PT"], &[], true).await {
         Ok(issues) => issues,
         Err(e) => {
             eprintln!("Error searching issues: {}", e);
@@ -25,7 +25,7 @@ async fn main() {
     let issue_fetch = start_time.elapsed();
     println!(
         "Found {} issues in {}s",
-        issues.len(),
+        issue_summaries.len(),
         issue_fetch.as_secs()
     );
 
@@ -34,7 +34,7 @@ async fn main() {
         .unwrap()
         .naive_local();
     let start_worklogs = Instant::now();
-    let work_logs = match fetch_worklogs_for_issues2(jira, issues, naive_date_time).await {
+    let work_logs = match fetch_worklogs_for_issues2(jira, issue_summaries, naive_date_time).await {
         Ok(logs) => logs,
         Err(e) => {
             eprintln!("Error searching issues for worklogs: {}", e);
@@ -50,15 +50,14 @@ async fn main() {
 
 async fn fetch_worklogs_for_issues2(
     jira: Jira,
-    issues: Vec<Issue>,
+    issue_summaries: Vec<IssueSummary>,
     start_after: NaiveDateTime,
 ) -> Result<Vec<Worklog>, jira::JiraError> {
-    let futures = issues.into_iter().map(|issue| {
-        let issue_key = issue.key; // No clone needed here
+    let futures = issue_summaries.into_iter().map(|issue_summary| {
         let jira_client = jira.clone(); // Clone only once per async block
         async move {
             jira_client
-                .get_work_logs_for_issue(issue_key.to_string(), start_after)
+                .get_work_logs_for_issue(&issue_summary.key, start_after)
                 .await
         }
     });

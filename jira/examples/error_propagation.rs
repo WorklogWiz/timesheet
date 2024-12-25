@@ -62,7 +62,7 @@ fn main() {
 }
 
 fn middle_earth() -> Result<(), MiddleEarth> {
-    underground().map_err(MiddleEarth::from)?; // TODO: what if I need more context here?
+    underground().map_err(MiddleEarth::from)?;
     Ok(())
 }
 
