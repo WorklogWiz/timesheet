@@ -354,7 +354,7 @@ impl Jira {
                 break;
             }
         }
-        return Ok(results);
+        Ok(results)
     }
 
     /// Searches for Jira issues where `worklogAuthor` IS NOT EMPTY
@@ -415,12 +415,12 @@ impl Jira {
         }
         debug!("search_issues() :- Composed this JQL: {jql}");
 
-        Ok(self
+        self
             .fetch_with_jql(
                 &jql,
                 vec!["id", "key", "summary", "components"], // TODO: Add "component" to list of fields to retrieve
             )
-            .await?)
+            .await
     }
 
     ///
@@ -529,6 +529,12 @@ impl Jira {
     ///     println!("Worklog author: {}, time spent: {}", worklog.author, worklog.time_spent);
     /// }
     /// ```
+    /// # Panics
+    ///
+    /// This function will panic if:
+    /// - The `issue_key` is empty, as it is required to specify an issue key.
+    ///
+    /// Ensure that the `issue_key` parameter is properly provided before calling this method.
     #[allow(
         clippy::cast_sign_loss,
         clippy::cast_possible_truncation,
@@ -552,7 +558,7 @@ impl Jira {
             if !is_last_page {
                 resource_name = Self::compose_work_logs_url(
                     issue_key.as_str(),
-                    worklog_page.startAt + worklog_page.worklogs.len() as i32,
+                    worklog_page.startAt + worklog_page.worklogs.len(),
                     worklog_page.max_results,
                     started_after,
                 );
@@ -654,8 +660,8 @@ impl Jira {
 
     fn compose_work_logs_url(
         issue_key: &str,
-        start_at: i32,
-        max_results: i32,
+        start_at: usize,
+        max_results: usize,
         started_after: NaiveDateTime,
     ) -> String {
         format!(
@@ -875,6 +881,31 @@ impl Jira {
         Ok(global_settings.timeTrackingConfiguration)
     }
 
+
+    ///
+    /// Fetches work logs for a list of issues in chunks, starting after the specified naive date-time.
+    ///
+    /// This function retrieves worklogs asynchronously for a collection of issues. It requests
+    /// worklog data for each issue key provided in the `issue_keys` parameter and starts
+    /// fetching worklogs chronologically after the given `start_after_naive_date_time`.
+    ///
+    /// The function leverages asynchronous buffering to request data concurrently for up to 10
+    /// issues at a time, merging results into a single collection.
+    ///
+    /// # Parameters
+    /// - `issue_keys`: A reference to a vector of `IssueKey` objects representing the Jira issues
+    ///   for which worklogs should be retrieved.
+    /// - `start_after_naive_date_time`: A `NaiveDateTime` instance representing the cutoff point
+    ///   for retrieving worklogs. Only worklogs created or updated after this date-time will be fetched.
+    ///
+    /// # Returns
+    /// - Returns a `Result` containing a `Vec<Worklog>` on success.
+    /// - Returns an appropriate error if any of the requests fail.
+    ///
+    /// # Errors
+    /// This function may return:
+    /// - `WorklogError::NetworkError` if there's a problem with the connection.
+    /// - `WorklogError::JiraResponse` if an error occurs in any of the Jira server responses.
     pub async fn chunked_work_logs(
         &self,
         issue_keys: &Vec<IssueKey>,

@@ -71,8 +71,7 @@ pub async fn execute(sync_cmd: Synchronisation) -> Result<(), WorklogError> {
 
     // Updates the database with the issue summary information
     runtime
-        .sync_jira_issue_information(&issue_summaries)
-        .await?;
+        .sync_jira_issue_information(&issue_summaries)?;
 
     let issue_map: std::collections::HashMap<String, &IssueSummary> = issue_summaries
         .iter()
@@ -80,18 +79,18 @@ pub async fn execute(sync_cmd: Synchronisation) -> Result<(), WorklogError> {
         .collect();
 
     // Inserts the work log entries into the database
-    for worklog in all_issue_work_logs.iter() {
+    for worklog in &all_issue_work_logs {
         debug!("Removing and adding {:?}", &worklog);
 
         // Delete the existing one if it exists
-        if let Err(e) = runtime.worklog_service().remove_entry(&worklog) {
+        if let Err(e) = runtime.worklog_service().remove_entry(worklog) {
             debug!("Unable to remove {:?}: {}", &worklog, e);
         }
 
         debug!("Adding {} {:?}", &worklog.issueId, &worklog);
 
         let issue_summary = issue_map.get(&worklog.issueId).unwrap();
-        let local_worklog = LocalWorklog::from_worklog(&worklog, &issue_summary.key);
+        let local_worklog = LocalWorklog::from_worklog(worklog, &issue_summary.key);
         if let Err(err) = runtime.worklog_service().add_entry(&local_worklog) {
             eprintln!(
                 "Insert into database failed for {:?}, cause: {:?}",

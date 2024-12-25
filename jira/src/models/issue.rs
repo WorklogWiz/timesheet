@@ -44,6 +44,7 @@ where
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialOrd, PartialEq, Ord, Eq)]
+#[allow(clippy::module_name_repetitions)]
 pub struct IssueSummary {
     pub id: String,
     pub key: IssueKey, // TODO: Add components
@@ -93,6 +94,7 @@ pub struct NewIssue {
     pub fields: IssueFields,
 }
 
+#[allow(clippy::module_name_repetitions)]
 #[derive(Serialize, Debug)]
 pub struct IssueFields {
     pub project: JiraProjectKey,
@@ -101,6 +103,7 @@ pub struct IssueFields {
     pub description: Option<String>,
 }
 
+#[allow(clippy::module_name_repetitions)]
 #[derive(Serialize, Debug)]
 pub struct IssueType {
     pub name: String,

@@ -6,10 +6,10 @@ use super::core::Author;
 #[derive(Debug, Serialize, Deserialize)]
 #[allow(non_snake_case)]
 pub struct WorklogsPage {
-    pub startAt: i32,
+    pub startAt: usize,
     #[serde(alias = "maxResults")]
-    pub max_results: i32,
-    pub total: i32,
+    pub max_results: usize,
+    pub total: usize,
     pub worklogs: Vec<Worklog>,
 }
 

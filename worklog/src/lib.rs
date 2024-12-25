@@ -90,14 +90,12 @@ impl ApplicationRuntime {
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub async fn sync_jira_issue_information(
+    pub fn sync_jira_issue_information(
         &self,
         issue_summaries: &Vec<IssueSummary>,
     ) -> Result<(), WorklogError> {
         debug!("Searching for Jira issues (information)...");
 
-        self.worklog_service().add_jira_issues(&issue_summaries)?;
-
-        Ok(())
+        self.worklog_service().add_jira_issues(&issue_summaries)
     }
 }
