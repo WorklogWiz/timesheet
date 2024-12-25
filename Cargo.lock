@@ -2828,6 +2828,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "directories",
+ "env_logger",
  "jira",
  "lazy_static",
  "log",

@@ -123,10 +123,7 @@ async fn prepare_issue_keys_for_sync(
     if issue_keys_to_sync.is_empty() && sync_cmd.projects.is_empty() {
         issue_keys_to_sync = runtime
             .worklog_service()
-            .find_unique_keys()?
-            .iter()
-            .map(|k| IssueKey::new(k))
-            .collect::<Vec<IssueKey>>();
+            .find_unique_keys()?;
     }
 
     let projects_as_str: Vec<&str> = sync_cmd.projects.iter().map(String::as_str).collect();

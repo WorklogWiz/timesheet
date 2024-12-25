@@ -68,11 +68,7 @@ fn print_info_about_time_codes(
 ) {
     if jira_keys_to_report.is_empty() {
         jira_keys_to_report = worklog_service
-            .find_unique_keys()
-            .unwrap_or_default()
-            .iter()
-            .map(|k| IssueKey::from(k.as_str()))
-            .collect();
+            .find_unique_keys().unwrap();
     }
 
     debug!(

@@ -1,5 +1,6 @@
 use crate::error::WorklogError;
 use chrono::{DateTime, Local};
+use jira::models::core::Component;
 use jira::models::issue::IssueSummary;
 use jira::models::{core::IssueKey, worklog::Worklog};
 use log::debug;
@@ -51,6 +52,45 @@ impl LocalWorklog {
 #[allow(clippy::module_name_repetitions)]
 pub struct WorklogStorage {
     connection: Connection,
+}
+
+impl WorklogStorage {
+    pub fn add_component(
+        &self,
+        issue_key: &IssueKey,
+        components: &Vec<Component>,
+    ) -> Result<(), WorklogError> {
+        eprintln!("add_component()");
+
+        let mut insert_component_stmt = self.connection.prepare(
+            "INSERT INTO component (id, name)
+            VALUES (?1, ?2)
+            ON CONFLICT(id) DO UPDATE SET name = excluded.name",
+        )?;
+
+        eprintln!("Adding components for issue {}", issue_key);
+        for component in components {
+            if let Err(e) =
+                insert_component_stmt.execute(params![component.id, component.name.clone()])
+            {
+                panic!(
+                    "Unable to insert component({},{}): {}",
+                    component.id, component.name, e
+                );
+            }
+        }
+        let mut insert_issue_component_stmt = self.connection.prepare(
+            "INSERT OR IGNORE INTO issue_component (issue_key, component_id) VALUES (?1, ?2)")?;
+        for component in components {
+            if let Err(e) = insert_issue_component_stmt.execute(params![issue_key.value(), component.id]) {
+                panic!(
+                    "Unable to insert issue_component({},{}): {}",
+                    issue_key.value(), component.id, e
+                );
+            }
+        }
+        Ok(())
+    }
 }
 
 impl WorklogStorage {
@@ -235,13 +275,15 @@ impl WorklogStorage {
     ///
     /// # Errors
     /// Returns an error something goes wrong
-    // TODO: Replace Jira keys as String with the type JiraKey
-    pub fn find_unique_keys(&self) -> Result<Vec<String>, WorklogError> {
+    pub fn find_unique_keys(&self) -> Result<Vec<IssueKey>, WorklogError> {
         let mut stmt = self
             .connection
             .prepare("SELECT DISTINCT(issue_key) FROM worklog ORDER BY issue_key asc")?;
-        let issue_keys: Vec<String> = stmt
-            .query_map([], |row| row.get::<_, String>(0))?
+        let issue_keys: Vec<IssueKey> = stmt
+            .query_map([], |row| {
+                let key: String = row.get::<_, String>(0)?;
+                Ok(IssueKey::from(key))
+            })?
             .filter_map(Result::ok)
             .collect();
         Ok(issue_keys)
@@ -356,13 +398,36 @@ pub fn create_local_worklog_schema(connection: &Connection) -> Result<(), Worklo
     let sql = r"
         CREATE TABLE IF NOT EXISTS jira_issue (
             issue_key varchar(32) primary key,
-            summary varchar(1024)
+            summary varchar(1024) not null
         );
     ";
     connection
         .execute(sql, [])
         .map_err(|e| WorklogError::Sql(format!("Unable to create table 'jira_issue': {e}")))?;
 
+    let sql = r"
+        create table if not exists component (
+            id integer primary key not null,
+            name varchar(1024) not null
+        );
+    ";
+    connection
+        .execute(sql, [])
+        .map_err(|e| WorklogError::Sql(format!("Unable to create table 'component': {e}")))?;
+
+    let sql = r"
+    CREATE TABLE if not exists issue_component (
+        id INTEGER PRIMARY KEY NOT NULL,
+        issue_key VARCHAR(32) NOT NULL,
+        component_id INTEGER NOT NULL,
+        FOREIGN KEY (issue_key) REFERENCES jira_issue(issue_key),
+        FOREIGN KEY (component_id) REFERENCES component(id),
+        UNIQUE(issue_key, component_id)
+    );
+    ";
+    connection
+        .execute(sql, [])
+        .map_err(|e| WorklogError::Sql(format!("Unable to create table 'issue_component': {e}")))?;
     Ok(())
 }
 
@@ -471,6 +536,7 @@ mod tests {
                 key: IssueKey::new("ISSUE-1"),
                 fields: Fields {
                     summary: "This is the first issue.".to_string(),
+                    components: vec![],
                 },
             },
             IssueSummary {
@@ -478,6 +544,7 @@ mod tests {
                 key: IssueKey::new("ISSUE-2"),
                 fields: Fields {
                     summary: "This is the second issue.".to_string(),
+                    components: vec![],
                 },
             },
         ];
