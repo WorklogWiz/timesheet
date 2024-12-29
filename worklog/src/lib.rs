@@ -96,6 +96,6 @@ impl ApplicationRuntime {
     ) -> Result<(), WorklogError> {
         debug!("Searching for Jira issues (information)...");
 
-        self.worklog_service().add_jira_issues(&issue_summaries)
+        self.worklog_service().add_jira_issues(issue_summaries)
     }
 }
