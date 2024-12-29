@@ -3,6 +3,8 @@ use jira::{Credentials, Jira};
 use std::env;
 use worklog::ApplicationRuntime;
 
+// TODO: insert an issue, add components and work log entries to make test_component_insert() work
+#[ignore]
 #[tokio::test]
 async fn test_component_insert() -> Result<(), Box<dyn std::error::Error>> {
     let host = env::var("JIRA_HOST")?;
@@ -12,6 +14,8 @@ async fn test_component_insert() -> Result<(), Box<dyn std::error::Error>> {
     let jira =
         Jira::new(&host, Credentials::Basic(user, token)).expect("Error initializing Jira client");
 
+    // Find issues with component and work log entries and
+    // insert the components into the database
     let issue_summaries = jira
         .fetch_with_jql::<IssueSummary>(
             "component is not empty and worklogAuthor is not empty",
