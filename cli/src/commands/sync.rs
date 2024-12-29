@@ -121,9 +121,7 @@ async fn prepare_issue_keys_for_sync(
     // have a look in the database and create a unique list from
     // entries in the past
     if issue_keys_to_sync.is_empty() && sync_cmd.projects.is_empty() {
-        issue_keys_to_sync = runtime
-            .worklog_service()
-            .find_unique_keys()?;
+        issue_keys_to_sync = runtime.worklog_service().find_unique_keys()?;
     }
 
     let projects_as_str: Vec<&str> = sync_cmd.projects.iter().map(String::as_str).collect();

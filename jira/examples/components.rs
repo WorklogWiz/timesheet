@@ -15,7 +15,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Searching for all issues with worklogs");
     let issue_summaries: Vec<IssueSummary> = jira
-        .fetch_with_jql("component is not empty and worklogAuthor is not empty", vec!["key", "summary","components"])
+        .fetch_with_jql(
+            "component is not empty and worklogAuthor is not empty",
+            vec!["key", "summary", "components"],
+        )
         .await?;
     assert!(!issue_summaries.is_empty(), "No issues found");
     eprintln!("Found {} issues", issue_summaries.len());
@@ -27,5 +30,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     Ok(())
-
 }

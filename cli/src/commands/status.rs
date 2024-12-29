@@ -67,8 +67,7 @@ fn print_info_about_time_codes(
     mut jira_keys_to_report: Vec<IssueKey>,
 ) {
     if jira_keys_to_report.is_empty() {
-        jira_keys_to_report = worklog_service
-            .find_unique_keys().unwrap();
+        jira_keys_to_report = worklog_service.find_unique_keys().unwrap();
     }
 
     debug!(

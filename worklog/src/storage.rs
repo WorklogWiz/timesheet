@@ -80,12 +80,17 @@ impl WorklogStorage {
             }
         }
         let mut insert_issue_component_stmt = self.connection.prepare(
-            "INSERT OR IGNORE INTO issue_component (issue_key, component_id) VALUES (?1, ?2)")?;
+            "INSERT OR IGNORE INTO issue_component (issue_key, component_id) VALUES (?1, ?2)",
+        )?;
         for component in components {
-            if let Err(e) = insert_issue_component_stmt.execute(params![issue_key.value(), component.id]) {
+            if let Err(e) =
+                insert_issue_component_stmt.execute(params![issue_key.value(), component.id])
+            {
                 panic!(
                     "Unable to insert issue_component({},{}): {}",
-                    issue_key.value(), component.id, e
+                    issue_key.value(),
+                    component.id,
+                    e
                 );
             }
         }

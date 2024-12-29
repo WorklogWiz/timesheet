@@ -5,7 +5,6 @@ use worklog::ApplicationRuntime;
 
 #[tokio::test]
 async fn test_component_insert() -> Result<(), Box<dyn std::error::Error>> {
-
     let host = env::var("JIRA_HOST")?;
     let user = env::var("JIRA_USER")?;
     let token = env::var("JIRA_TOKEN")?;
