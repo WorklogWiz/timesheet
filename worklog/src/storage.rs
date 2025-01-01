@@ -489,6 +489,15 @@ mod tests {
             comment: Some("Worked on the issue".to_string()),
         };
         let lws = setup()?;
+        
+        lws.add_jira_issues(&vec![IssueSummary {
+            id: "123".to_string(),
+            key: IssueKey::from("ABC-123"),
+            fields: Fields {
+                summary: "Test".to_string(),
+                ..Default::default()
+            },
+        }])?;
 
         lws.add_entry(&worklog)?;
 
@@ -502,7 +511,7 @@ mod tests {
     #[test]
     fn add_worklog_entries() -> Result<(), WorklogError> {
         let worklog = LocalWorklog {
-            issue_key: IssueKey::from("ABC-123"),
+            issue_key: IssueKey::from("ABC-789"),
             id: "1".to_string(),
             author: "John Doe".to_string(),
             created: Local::now(),
@@ -514,6 +523,15 @@ mod tests {
             comment: Some("Worked on the issue".to_string()),
         };
         let lws = setup()?;
+        lws.add_jira_issues(&vec![IssueSummary {
+            id: "123".to_string(),
+            key: IssueKey::from("ABC-789"),
+            fields: Fields {
+                summary: "Test".to_string(),
+                ..Default::default()
+            },
+        }])?;
+
         lws.add_worklog_entries(&[worklog])?;
 
         // Assert
@@ -528,7 +546,7 @@ mod tests {
         let lws = setup()?;
 
         let worklog = LocalWorklog {
-            issue_key: IssueKey::from("ABC-123"),
+            issue_key: IssueKey::from("ABC-456"),
             id: "1".to_string(),
             author: "John Doe".to_string(),
             created: Local::now(),
@@ -539,6 +557,15 @@ mod tests {
             issueId: "1001".to_string(),
             comment: Some("Worked on the issue".to_string()),
         };
+        lws.add_jira_issues(&vec![IssueSummary {
+            id: "123".to_string(),
+            key: IssueKey::from("ABC-456"),
+            fields: Fields {
+                summary: "Test".to_string(),
+                ..Default::default()
+            },
+        }])?;
+
         lws.add_entry(&worklog)?;
 
         let result =
