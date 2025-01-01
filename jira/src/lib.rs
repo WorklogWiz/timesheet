@@ -25,9 +25,10 @@ use reqwest::{
 
 use crate::models::core::IssueKey;
 use crate::models::issue::{
-    IssueFields, IssueSummary, IssueType, IssuesResponse, NewIssue, NewIssueResponse,
+    ComponentId, IssueSummary, IssueType, IssuesResponse, NewIssue, NewIssueFields,
+    NewIssueResponse,
 };
-use crate::models::project::JiraProjectKey;
+use crate::models::project::{Component, JiraProjectKey};
 use crate::models::setting::{GlobalSettings, TimeTrackingConfiguration};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use url::{ParseError, Url};
@@ -495,6 +496,44 @@ impl Jira {
     }
 
     ///
+    /// Retrieves all components for a specific Jira project.
+    ///
+    /// This function queries the Jira API to fetch all components associated with the
+    /// provided project key. Components in Jira are used to organize and classify issues
+    /// within a project.
+    ///
+    /// # Arguments
+    ///
+    /// * `project_key` - A reference to a string slice that specifies the key of the Jira project.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` containing a `Vec` of `Component` if successful, or an error if the request fails.
+    ///
+    /// # Errors
+    ///
+    /// This function returns an error if:
+    /// - The network request to the Jira API fails.
+    /// - Parsing of the API response fails.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let jira_client = JiraClient::new("https://your-jira-instance.com", "username", "token");
+    /// let project_key = "PRJ1";
+    /// let components = jira_client.get_components(project_key).await?;
+    /// for component in components {
+    ///     println!("Component: {}", component.name);
+    /// }
+    /// ```
+    pub async fn get_components(&self, project_key: &str) -> Result<Vec<Component>> {
+        let url = format!("/project/{project_key}/components?componentSource=auto");
+        let components = self.get::<Vec<Component>>(&url).await?;
+
+        Ok(components)
+    }
+
+    ///
     /// Retrieves all work logs for a specific Jira issue, starting from a given time.
     ///
     /// This function fetches paginated work logs for a Jira issue by querying the Jira API.
@@ -769,9 +808,10 @@ impl Jira {
         jira_project_key: &JiraProjectKey,
         summary: &str,
         description: Option<String>,
+        components: Vec<ComponentId>,
     ) -> Result<NewIssueResponse> {
         let new_issue = NewIssue {
-            fields: IssueFields {
+            fields: NewIssueFields {
                 project: JiraProjectKey {
                     key: jira_project_key.key,
                 },
@@ -780,6 +820,7 @@ impl Jira {
                 },
                 summary: summary.to_string(),
                 description,
+                components,
             },
         };
 

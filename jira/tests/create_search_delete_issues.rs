@@ -1,8 +1,9 @@
 mod test_helpers;
 
-use crate::test_helpers::jira_client::create_jira_client;
-use crate::test_helpers::test_data;
+use test_helpers::jira_client::create_jira_client;
+use test_helpers::test_data;
 
+use crate::test_helpers::test_data::TEST_PROJECT_KEY;
 use jira::models::project::JiraProjectKey;
 
 /// This asynchronous test verifies the Jira client functionality for searching issues.
@@ -30,13 +31,19 @@ use jira::models::project::JiraProjectKey;
 ///
 #[tokio::test] // Requires a valid user token in configuration
 async fn search_issues_test() -> Result<(), Box<dyn std::error::Error>> {
-    let issues = test_data::create_batch_of_issues(3, JiraProjectKey { key: "NOR" }).await?;
+    let issues = test_data::create_batch_of_issues(
+        3,
+        JiraProjectKey {
+            key: TEST_PROJECT_KEY,
+        },
+    )
+    .await?;
 
     let _work_logs = test_data::add_random_work_logs_to_issues(&issues, 1..3).await;
 
     let jira_client = create_jira_client().await;
     let search_result = jira_client
-        .get_issue_summaries(&vec!["NOR"], &vec![], true)
+        .get_issue_summaries(&vec![TEST_PROJECT_KEY], &vec![], true)
         .await?;
     assert!(!issues.is_empty());
 
@@ -48,6 +55,16 @@ async fn search_issues_test() -> Result<(), Box<dyn std::error::Error>> {
         search_result.len()
     );
 
+    // and there should be a component in the first issue (never mind the others)
+    if let Some(first_issue) = search_result.first() {
+        assert!(
+            !first_issue.fields.components.is_empty(),
+            "The first issue does not have any components."
+        );
+    } else {
+        panic!("No issues were returned in the search result.");
+    }
+    // Remove all the issues to clean up
     test_data::delete_batch_of_issues_by_key(&issues).await;
     Ok(())
 }

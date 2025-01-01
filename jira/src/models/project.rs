@@ -38,3 +38,9 @@ pub struct Project {
 pub struct JiraProjectKey {
     pub key: &'static str,
 }
+
+#[derive(Clone, Debug, Deserialize, Serialize, Default, PartialOrd, PartialEq, Eq, Hash, Ord)]
+pub struct Component {
+    pub id: String,
+    pub name: String,
+}

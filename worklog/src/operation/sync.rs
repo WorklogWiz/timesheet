@@ -2,21 +2,54 @@ use chrono::{DateTime, Days, Local};
 use log::debug;
 use std::process::exit;
 
+use crate::error::WorklogError;
+use crate::storage::LocalWorklog;
+use crate::{date, ApplicationRuntime};
 use jira::models::core::IssueKey;
 use jira::models::issue::IssueSummary;
-use worklog::{date, error::WorklogError, storage::LocalWorklog, ApplicationRuntime};
 
-use crate::{cli::Synchronisation, get_runtime};
-
-fn get_default_start_date() -> DateTime<Local> {
-    Local::now()
-        .checked_sub_days(Days::new(30))
-        .expect("Failed to create default fallback date")
+pub struct Sync {
+    pub started: Option<String>,
+    pub all_users: bool,
+    pub projects: Vec<String>,
+    pub issues: Vec<String>,
 }
 
-pub async fn execute(sync_cmd: Synchronisation) -> Result<(), WorklogError> {
-    let runtime = get_runtime();
 
+/// Executes the main synchronization logic for work logs with Jira.
+///
+/// This function performs the following tasks:
+/// - Parses the start date from the provided `sync_cmd` structure, or falls back to a default date.
+/// - Prepares issue keys for synchronization by resolving them from the command-line input or the local database.
+/// - Logs and outputs the list of issues being synchronized.
+/// - Fetches work log entries from Jira for the specified issues and filters them based on the synchronization options.
+/// - Updates the local database with issue summary information and inserts the fetched work logs.
+///
+/// # Arguments
+/// * `runtime` - The application runtime that provides access to services, including Jira and the worklog database.
+/// * `sync_cmd` - The synchronization command containing options like start date, projects, issues, and user settings.
+///
+/// # Returns
+/// * `Result<(), WorklogError>` - Returns `Ok(())` on successful execution, or a `WorklogError` if any error occurs.
+///
+/// # Errors
+/// This function will return an error if:
+/// - The date parsing fails.
+/// - Work log retrieval or filtering encounters an issue.
+/// - Database operations, like adding or removing entries, fail.
+///
+///
+/// # Panics
+/// This function will panic if:
+/// - The `timestamp` derived from the start date is invalid while creating a `DateTime`.
+/// - The calculation of the default start date (30 days ago) fails.
+///
+/// These panics are due to calls to `expect` when creating `DateTime` or during date manipulation.
+/// Ensure the input data is valid and that system date/time functionality behaves as expected.
+/// # Behavior
+/// If no issues are found, the function will print an error message and exit with a status code of 4.
+/// The function uses debugging logs to trace execution details.
+pub async fn execute(runtime: &ApplicationRuntime, sync_cmd: &Sync) -> Result<(), WorklogError> {
     // Parse the start date or fall back to the default
     let date_time = sync_cmd
         .started
@@ -28,7 +61,7 @@ pub async fn execute(sync_cmd: Synchronisation) -> Result<(), WorklogError> {
         .expect("Invalid timestamp")
         .naive_local();
 
-    let issue_summaries = prepare_issue_keys_for_sync(&sync_cmd, &runtime).await?;
+    let issue_summaries = prepare_issue_keys_for_sync(sync_cmd, runtime).await?;
     if issue_summaries.is_empty() {
         eprintln!(
             "No issue keys to synchronise supplied on commandline or found in the local dbms"
@@ -70,7 +103,7 @@ pub async fn execute(sync_cmd: Synchronisation) -> Result<(), WorklogError> {
     eprintln!("Found {} work logs", all_issue_work_logs.len());
 
     // Updates the database with the issue summary information
-    runtime.sync_jira_issue_information(&issue_summaries)?;
+    sync_jira_issue_information(runtime, &issue_summaries)?;
 
     let issue_map: std::collections::HashMap<String, &IssueSummary> = issue_summaries
         .iter()
@@ -102,6 +135,12 @@ pub async fn execute(sync_cmd: Synchronisation) -> Result<(), WorklogError> {
     Ok(())
 }
 
+fn get_default_start_date() -> DateTime<Local> {
+    Local::now()
+        .checked_sub_days(Days::new(30))
+        .expect("Failed to create default fallback date")
+}
+
 /// Helper function to transform a list of strings into a list of `IssueKey`s
 fn collect_issue_keys(issue_strings: &[String]) -> Vec<IssueKey> {
     issue_strings
@@ -111,7 +150,7 @@ fn collect_issue_keys(issue_strings: &[String]) -> Vec<IssueKey> {
 }
 
 async fn prepare_issue_keys_for_sync(
-    sync_cmd: &Synchronisation,
+    sync_cmd: &Sync,
     runtime: &ApplicationRuntime,
 ) -> Result<Vec<IssueSummary>, WorklogError> {
     // Transform from list of strings to list of IssueKey
@@ -142,4 +181,20 @@ async fn prepare_issue_keys_for_sync(
     issue_keys_to_sync.dedup();
 
     Ok(issue_keys_to_sync)
+}
+
+#[allow(clippy::missing_errors_doc)]
+fn sync_jira_issue_information(
+    runtime: &ApplicationRuntime,
+    issue_summaries: &Vec<IssueSummary>,
+) -> Result<(), WorklogError> {
+    debug!("Searching for Jira issues (information)...");
+
+    runtime.worklog_service().add_jira_issues(issue_summaries)?;
+    for issue in issue_summaries {
+        runtime
+            .worklog_service()
+            .add_component(&issue.key, &issue.fields.components)?;
+    }
+    Ok(())
 }

@@ -6,11 +6,11 @@ use std::process::exit;
 
 use clap::Parser;
 use cli::{Command, LogLevel, Opts};
-use commands::{configuration, status, sync};
+use commands::{configuration, status};
 use env_logger::Env;
 use log::debug;
 
-use worklog::{error::WorklogError, operation, ApplicationRuntime, Operation};
+use worklog::{error::WorklogError, operation, ApplicationRuntime, Operation, OperationResult};
 
 mod cli;
 mod commands;
@@ -24,9 +24,10 @@ async fn main() -> Result<(), WorklogError> {
 
     #[allow(clippy::match_wildcard_for_single_variants)]
     match opts.cmd {
-        Command::Add(add) => {
-            let or: &worklog::OperationResult =
-                &get_runtime().execute(Operation::Add(add.into())).await?;
+        Command::Add(add_cmd) => {
+            let or: &worklog::OperationResult = &get_runtime()
+                .execute(Operation::Add(add_cmd.into()))
+                .await?;
             match or {
                 worklog::OperationResult::Added(items) => {
                     for item in items {
@@ -48,8 +49,8 @@ async fn main() -> Result<(), WorklogError> {
         }
 
         Command::Del(del) => {
-            let or = &get_runtime().execute(Operation::Del(del.into())).await?;
-            match or {
+            let operation_result = &get_runtime().execute(Operation::Del(del.into())).await?;
+            match operation_result {
                 worklog::OperationResult::Deleted(id) => {
                     println!("Jira work log id {id} deleted from Jira");
                 }
@@ -76,11 +77,20 @@ async fn main() -> Result<(), WorklogError> {
                 _ => todo!(),
             }
         }
-        Command::Sync(synchronisation) => {
-            sync::execute(synchronisation).await?;
+        Command::Sync(sync_cmd) => {
+            //sync::execute(sync_cmd).await?;
+
+            let operation_result: &worklog::OperationResult = &get_runtime()
+                .execute(Operation::Sync(sync_cmd.into()))
+                .await?;
+            match operation_result {
+                OperationResult::Synchronised => {}
+                _ => {
+                    unimplemented!()
+                }
+            }
         }
     }
-
     Ok(())
 }
 
@@ -137,15 +147,6 @@ impl From<cli::Add> for operation::add::Add {
             issue: val.issue,
             started: val.started,
             comment: val.comment,
-        }
-    }
-}
-
-impl From<cli::Del> for operation::del::Del {
-    fn from(val: cli::Del) -> Self {
-        operation::del::Del {
-            issue_id: val.issue_id,
-            worklog_id: val.worklog_id,
         }
     }
 }

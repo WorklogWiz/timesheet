@@ -2,11 +2,11 @@ use crate::error::WorklogError;
 use config::AppConfiguration;
 use jira::models::issue::IssueSummary;
 use jira::{Credentials, Jira};
-use log::debug;
 use operation::{
     add::{self, Add},
     del::{self, Del},
     issues,
+    sync::Sync,
 };
 use std::path::PathBuf;
 use storage::{LocalWorklog, WorklogStorage};
@@ -28,12 +28,14 @@ pub enum Operation {
     Add(Add),
     Del(Del),
     Codes,
+    Sync(Sync),
 }
 
 pub enum OperationResult {
     Added(Vec<LocalWorklog>),
     Deleted(String),
     IssueSummaries(Vec<IssueSummary>),
+    Synchronised,
 }
 
 impl ApplicationRuntime {
@@ -86,16 +88,10 @@ impl ApplicationRuntime {
                 let issues = issues::execute(self).await?;
                 Ok(OperationResult::IssueSummaries(issues))
             }
+            Operation::Sync(sync_cmd) => {
+                operation::sync::execute(self, &sync_cmd).await?;
+                Ok(OperationResult::Synchronised)
+            }
         }
-    }
-
-    #[allow(clippy::missing_errors_doc)]
-    pub fn sync_jira_issue_information(
-        &self,
-        issue_summaries: &Vec<IssueSummary>,
-    ) -> Result<(), WorklogError> {
-        debug!("Searching for Jira issues (information)...");
-
-        self.worklog_service().add_jira_issues(issue_summaries)
     }
 }

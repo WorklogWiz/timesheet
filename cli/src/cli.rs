@@ -1,6 +1,8 @@
 use std::fmt::{self, Formatter};
 
+use crate::cli;
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use worklog::operation;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
 pub(crate) enum LogLevel {
@@ -76,6 +78,15 @@ pub(crate) struct Add {
     pub started: Option<String>,
     #[arg(name = "comment", short, long)]
     pub comment: Option<String>,
+}
+
+impl From<cli::Del> for operation::del::Del {
+    fn from(val: cli::Del) -> Self {
+        operation::del::Del {
+            issue_id: val.issue_id,
+            worklog_id: val.worklog_id,
+        }
+    }
 }
 
 #[derive(Args)]
@@ -158,4 +169,15 @@ pub(crate) struct Synchronisation {
     /// Retrieves all registered Jira users, not just you
     #[arg(short, long)]
     pub all_users: bool,
+}
+
+impl From<cli::Synchronisation> for operation::sync::Sync {
+    fn from(value: Synchronisation) -> Self {
+        operation::sync::Sync {
+            started: value.started,
+            issues: value.issues,
+            projects: value.projects,
+            all_users: value.all_users,
+        }
+    }
 }
