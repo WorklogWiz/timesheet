@@ -3,13 +3,65 @@ use chrono::{DateTime, Duration, Local};
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
 use jira::models::core::IssueKey;
-use jira::models::project::JiraProjectKey;
 // Ensure JiraProjectKey is defined to derive Clone
+use jira::models::issue::ComponentId;
+use jira::models::project::JiraProjectKey;
 use jira::models::worklog::Worklog;
+use jira::Jira;
 use log::debug;
 use rand::{thread_rng, Rng};
 use std::ops::Range;
 
+/// The constant `TEST_PROJECT_KEY` represents the key of the test project
+/// in the Jira environment used for testing purposes.
+///
+/// This constant is useful for testing functions that require a Jira project key.
+///
+/// # Example
+///
+/// ```rust
+/// assert_eq!(TEST_PROJECT_KEY, "TWIZ");
+/// ```
+#[allow(dead_code)]
+pub const TEST_PROJECT_KEY: &str = "TWIZ";
+
+// Constant for reuse
+#[allow(dead_code)]
+const TEST_ISSUE_TYPE: &str = "Task";
+#[allow(dead_code)]
+const TEST_ISSUE_TITLE: &str = "Test issue";
+
+/// Helper function to create a Jira issue asynchronously
+/// Extracted for reusability and code clarity.
+#[allow(dead_code)]
+async fn create_issue_task(
+    jira_client: Jira,
+    project_key: JiraProjectKey,
+    components: Vec<ComponentId>,
+) -> Result<IssueKey, Box<dyn std::error::Error>> {
+    let issue_response = jira_client
+        .create_issue(
+            &project_key,
+            TEST_ISSUE_TITLE,
+            Some("create_batch_of_issues()".to_string()),
+            components,
+        )
+        .await;
+
+    match issue_response {
+        Ok(issue) => {
+            assert!(!issue.key.is_empty());
+            debug!("Created issue: {}", issue.key);
+            Ok(IssueKey::from(issue.key))
+        }
+        Err(e) => {
+            eprintln!("Failed to create issue: {}", e);
+            Err(e.into())
+        }
+    }
+}
+
+/// Creates a batch of issues for a specific Jira project.
 #[allow(dead_code)]
 pub async fn create_batch_of_issues(
     qty: i32,
@@ -17,48 +69,35 @@ pub async fn create_batch_of_issues(
 ) -> Result<Vec<IssueKey>, Box<dyn std::error::Error>> {
     let jira_client = create_jira_client().await;
 
-    // Create a stream of futures to process in parallel
-    let mut issue_futures = FuturesUnordered::new();
+    // Fetch the first component if available
+    let first_component = jira_client
+        .get_components(jira_project_key.key)
+        .await?
+        .into_iter()
+        .next()
+        .map(|component| vec![ComponentId { id: component.id }])
+        .unwrap_or_else(Vec::new);
 
-    let start_time = std::time::Instant::now();
+    // Process creation of issues in parallel
+    let mut issue_futures = FuturesUnordered::new();
     for _ in 0..qty {
-        let jira_client_clone = jira_client.clone(); // Clone the client to use in each task
-        let project_key = jira_project_key.clone(); // Move to capture project_key behavior.
-                                                    // Task must return a Result
-        issue_futures.push(async move {
-            let new_issue = jira_client_clone
-                .create_issue(
-                    &project_key,
-                    "Test issue",
-                    Some("Test description".to_string()),
-                )
-                .await;
-            debug!("Created issue");
-            match new_issue {
-                Ok(issue) => {
-                    assert!(!issue.key.is_empty());
-                    debug!("Created issue {}", issue.key);
-                    Ok(IssueKey::from(issue.key))
-                }
-                Err(e) => {
-                    eprintln!("Failed to create issue: {}", e);
-                    Err(e)
-                }
-            }
-        });
+        issue_futures.push(create_issue_task(
+            jira_client.clone(),
+            jira_project_key.clone(),
+            first_component.clone(),
+        ));
     }
 
+    // Collect results
     let mut issues = Vec::new();
-
     while let Some(result) = issue_futures.next().await {
         match result {
-            Ok(ok_result) => issues.push(ok_result),
-            Err(e) => eprintln!("Task failed: {e}"), // Handle task panics
+            Ok(issue_key) => issues.push(issue_key),
+            Err(e) => eprintln!("Task failed: {e}"),
         }
     }
 
-    let elapsed_time = start_time.elapsed();
-    debug!("Elapsed time: {:?}", elapsed_time);
+    debug!("Successfully created {} issues", issues.len());
     Ok(issues)
 }
 

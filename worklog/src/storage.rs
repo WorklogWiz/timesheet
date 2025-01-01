@@ -1,7 +1,7 @@
 use crate::error::WorklogError;
 use chrono::{DateTime, Local};
-use jira::models::core::Component;
 use jira::models::issue::IssueSummary;
+use jira::models::project::Component;
 use jira::models::{core::IssueKey, worklog::Worklog};
 use log::debug;
 use rusqlite::{named_params, params, Connection};
@@ -77,16 +77,16 @@ impl WorklogStorage {
         issue_key: &IssueKey,
         components: &Vec<Component>,
     ) -> Result<(), WorklogError> {
-        eprintln!("add_component()");
-
         let mut insert_component_stmt = self.connection.prepare(
             "INSERT INTO component (id, name)
             VALUES (?1, ?2)
             ON CONFLICT(id) DO UPDATE SET name = excluded.name",
         )?;
 
-        eprintln!("Adding components for issue {issue_key}");
+        debug!("Adding components for issue {issue_key}");
         for component in components {
+            // Consider using the return value to count number of rows that were actually
+            // inserted
             if let Err(e) =
                 insert_component_stmt.execute(params![component.id, component.name.clone()])
             {
@@ -96,6 +96,7 @@ impl WorklogStorage {
                 );
             }
         }
+        // Links the components with the issues to maintain the many-to-many relationship
         let mut insert_issue_component_stmt = self.connection.prepare(
             "INSERT OR IGNORE INTO issue_component (issue_key, component_id) VALUES (?1, ?2)",
         )?;
@@ -118,14 +119,14 @@ impl WorklogStorage {
     #[allow(clippy::missing_errors_doc)]
     pub fn add_jira_issues(&self, jira_issues: &Vec<IssueSummary>) -> Result<(), WorklogError> {
         let mut stmt = self.connection.prepare(
-            "INSERT INTO jira_issue (issue_key, summary)
+            "INSERT INTO issue (issue_key, summary)
             VALUES (?1, ?2)
             ON CONFLICT(issue_key) DO UPDATE SET summary = excluded.summary",
         )?;
         for issue in jira_issues {
             if let Err(e) = stmt.execute(params![issue.key.to_string(), issue.fields.summary]) {
                 panic!(
-                    "Unable to insert jira_issue({},{}): {}",
+                    "Unable to insert issue({},{}): {}",
                     issue.key, issue.fields.summary, e
                 );
             }
@@ -134,7 +135,7 @@ impl WorklogStorage {
     }
 
     #[allow(clippy::missing_errors_doc)]
-    pub fn get_jira_issues_filtered_by_keys(
+    pub fn get_issues_filtered_by_keys(
         &self,
         keys: &Vec<IssueKey>,
     ) -> Result<Vec<JiraIssueInfo>, WorklogError> {
@@ -143,13 +144,13 @@ impl WorklogStorage {
             return Ok(Vec::new());
         }
 
-        debug!("selecting jira_issue from database for keys {:?}", keys);
+        debug!("selecting issue from database for keys {:?}", keys);
 
         // Build the `IN` clause dynamically
         let placeholders = keys.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
         let sql = format!(
             "SELECT issue_key, summary
-            FROM jira_issue
+            FROM issue
             WHERE issue_key IN ({placeholders})"
         );
 
@@ -398,6 +399,16 @@ impl WorklogStorage {
 /// Returns an error something goes wrong
 pub fn create_local_worklog_schema(connection: &Connection) -> Result<(), WorklogError> {
     let sql = r"
+        CREATE TABLE IF NOT EXISTS issue (
+            issue_key varchar(32) primary key,
+            summary varchar(1024) not null
+        );
+    ";
+    connection
+        .execute(sql, [])
+        .map_err(|e| WorklogError::Sql(format!("Unable to create table 'issue': {e}")))?;
+
+    let sql = r"
         CREATE TABLE IF NOT EXISTS worklog (
             id integer primary key not null,
             issue_key varchar(32),
@@ -408,22 +419,13 @@ pub fn create_local_worklog_schema(connection: &Connection) -> Result<(), Worklo
             started datetime,
             time_spent varchar(32),
             time_spent_seconds intger,
-            comment varchar(1024)
+            comment varchar(1024),
+            FOREIGN KEY (issue_key) REFERENCES issue(issue_key) ON DELETE CASCADE
         );
     ";
     connection
         .execute(sql, [])
         .map_err(|e| WorklogError::Sql(format!("Unable to create table 'worklog': {e}")))?;
-
-    let sql = r"
-        CREATE TABLE IF NOT EXISTS jira_issue (
-            issue_key varchar(32) primary key,
-            summary varchar(1024) not null
-        );
-    ";
-    connection
-        .execute(sql, [])
-        .map_err(|e| WorklogError::Sql(format!("Unable to create table 'jira_issue': {e}")))?;
 
     let sql = r"
         create table if not exists component (
@@ -440,8 +442,8 @@ pub fn create_local_worklog_schema(connection: &Connection) -> Result<(), Worklo
         id INTEGER PRIMARY KEY NOT NULL,
         issue_key VARCHAR(32) NOT NULL,
         component_id INTEGER NOT NULL,
-        FOREIGN KEY (issue_key) REFERENCES jira_issue(issue_key),
-        FOREIGN KEY (component_id) REFERENCES component(id),
+        FOREIGN KEY (issue_key) REFERENCES issue(issue_key) ON DELETE CASCADE,
+        FOREIGN KEY (component_id) REFERENCES component(id) ON DELETE CASCADE,
         UNIQUE(issue_key, component_id)
     );
     ";
@@ -488,6 +490,15 @@ mod tests {
         };
         let lws = setup()?;
 
+        lws.add_jira_issues(&vec![IssueSummary {
+            id: "123".to_string(),
+            key: IssueKey::from("ABC-123"),
+            fields: Fields {
+                summary: "Test".to_string(),
+                ..Default::default()
+            },
+        }])?;
+
         lws.add_entry(&worklog)?;
 
         // Assert
@@ -500,7 +511,7 @@ mod tests {
     #[test]
     fn add_worklog_entries() -> Result<(), WorklogError> {
         let worklog = LocalWorklog {
-            issue_key: IssueKey::from("ABC-123"),
+            issue_key: IssueKey::from("ABC-789"),
             id: "1".to_string(),
             author: "John Doe".to_string(),
             created: Local::now(),
@@ -512,6 +523,15 @@ mod tests {
             comment: Some("Worked on the issue".to_string()),
         };
         let lws = setup()?;
+        lws.add_jira_issues(&vec![IssueSummary {
+            id: "123".to_string(),
+            key: IssueKey::from("ABC-789"),
+            fields: Fields {
+                summary: "Test".to_string(),
+                ..Default::default()
+            },
+        }])?;
+
         lws.add_worklog_entries(&[worklog])?;
 
         // Assert
@@ -526,7 +546,7 @@ mod tests {
         let lws = setup()?;
 
         let worklog = LocalWorklog {
-            issue_key: IssueKey::from("ABC-123"),
+            issue_key: IssueKey::from("ABC-456"),
             id: "1".to_string(),
             author: "John Doe".to_string(),
             created: Local::now(),
@@ -537,6 +557,15 @@ mod tests {
             issueId: "1001".to_string(),
             comment: Some("Worked on the issue".to_string()),
         };
+        lws.add_jira_issues(&vec![IssueSummary {
+            id: "123".to_string(),
+            key: IssueKey::from("ABC-456"),
+            fields: Fields {
+                summary: "Test".to_string(),
+                ..Default::default()
+            },
+        }])?;
+
         lws.add_entry(&worklog)?;
 
         let result =
@@ -569,7 +598,7 @@ mod tests {
             },
         ];
         lws.add_jira_issues(&issues)?;
-        let issues = lws.get_jira_issues_filtered_by_keys(&vec![
+        let issues = lws.get_issues_filtered_by_keys(&vec![
             IssueKey::from("ISSUE-1"),
             IssueKey::from("Issue-2"),
         ])?;

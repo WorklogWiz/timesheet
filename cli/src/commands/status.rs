@@ -76,7 +76,7 @@ fn print_info_about_time_codes(
     );
 
     let result = worklog_service
-        .get_jira_issues_filtered_by_keys(&jira_keys_to_report)
+        .get_issues_filtered_by_keys(&jira_keys_to_report)
         .expect("Unable to retrieve Jira Issue information");
     debug!("Retrieved {} entries from jira_issue table", result.len());
 

@@ -1,7 +1,7 @@
 mod test_helpers;
 
-use crate::test_helpers::jira_client::create_jira_client;
 use std::string::ToString;
+use test_helpers::jira_client::create_jira_client;
 
 #[tokio::test] // Requires a valid user token in configuration
 async fn test_get_current_user_info() -> Result<(), Box<dyn std::error::Error>> {

@@ -85,24 +85,29 @@ pub struct Issue {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct NewIssueResponse {
     pub id: String,
-    pub key: String,
+    pub key: IssueKey,
 }
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Serialize, Debug)]
 pub struct NewIssue {
-    pub fields: IssueFields,
+    pub fields: NewIssueFields,
 }
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Serialize, Debug)]
-pub struct IssueFields {
+pub struct NewIssueFields {
     pub project: JiraProjectKey,
     pub issuetype: IssueType,
     pub summary: String,
     pub description: Option<String>,
+    pub components: Vec<ComponentId>,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ComponentId {
+    pub id: String,
+}
 #[allow(clippy::module_name_repetitions)]
 #[derive(Serialize, Debug)]
 pub struct IssueType {
