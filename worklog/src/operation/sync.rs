@@ -15,7 +15,6 @@ pub struct Sync {
     pub issues: Vec<String>,
 }
 
-
 /// Executes the main synchronization logic for work logs with Jira.
 ///
 /// This function performs the following tasks:

@@ -489,7 +489,7 @@ mod tests {
             comment: Some("Worked on the issue".to_string()),
         };
         let lws = setup()?;
-        
+
         lws.add_jira_issues(&vec![IssueSummary {
             id: "123".to_string(),
             key: IssueKey::from("ABC-123"),
