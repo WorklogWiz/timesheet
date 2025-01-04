@@ -30,11 +30,16 @@ pub async fn execute(status: Status) -> Result<(), WorklogError> {
     }
 
     eprintln!(
-        "Locating local worklog entries after {}",
+        "Locating local work log entries after {}",
         start_after.expect("Must specify --after ")
     );
-    let worklogs =
-        worklog_service.find_worklogs_after(start_after.unwrap(), &jira_keys_to_report)?;
+
+    let worklogs = if status.all_users {
+        worklog_service.find_worklogs_after(start_after.unwrap(), &jira_keys_to_report, &[])?
+    } else {
+        let user = runtime.jira_client().get_current_user().await?;
+        worklog_service.find_worklogs_after(start_after.unwrap(), &jira_keys_to_report, &[user])?
+    };
 
     eprintln!("Found {} local worklog entries", worklogs.len());
     let count_before = worklogs.iter().len();
@@ -58,10 +63,11 @@ pub async fn execute(status: Status) -> Result<(), WorklogError> {
     // Prints the report
     table_report_weekly(&worklogs);
 
-    print_info_about_time_codes(worklog_service, jira_keys_to_report);
+    // print_info_about_time_codes(worklog_service, jira_keys_to_report);
     Ok(())
 }
 
+#[allow(dead_code)]
 fn print_info_about_time_codes(
     worklog_service: &WorklogStorage,
     mut jira_keys_to_report: Vec<IssueKey>,
@@ -109,7 +115,7 @@ fn issue_and_entry_report(entries: &[LocalWorklog]) {
                 "{}",
                 e.started.with_timezone(&Local).format("%Y-%m-%d %H:%M %z")
             ),
-            date::seconds_to_hour_and_min(&e.timeSpentSeconds),
+            date::seconds_to_hour_and_min(e.timeSpentSeconds),
             e.comment.as_deref().unwrap_or("")
         );
     }

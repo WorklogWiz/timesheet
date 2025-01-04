@@ -51,7 +51,8 @@ async fn get_worklogs(
             .checked_sub_signed(Duration::days(365))
             .unwrap(),
         &keys,
-    )?;
+        &[],
+    )?; // TODO: @ohvamstad, this will retrieve for all users, i.e. no filtering
 
     // Return the timesheet data as a JSON response
     Ok(Json(worklogs))

@@ -2,6 +2,7 @@ use crate::error::WorklogError;
 use chrono::{DateTime, Local};
 use jira::models::issue::IssueSummary;
 use jira::models::project::Component;
+use jira::models::user::User;
 use jira::models::{core::IssueKey, worklog::Worklog};
 use log::debug;
 use rusqlite::{named_params, params, Connection};
@@ -85,6 +86,7 @@ impl WorklogStorage {
 
         debug!("Adding components for issue {issue_key}");
         for component in components {
+            debug!("Adding component id {} for issue {issue_key}", component.id);
             // Consider using the return value to count number of rows that were actually
             // inserted
             if let Err(e) =
@@ -101,6 +103,10 @@ impl WorklogStorage {
             "INSERT OR IGNORE INTO issue_component (issue_key, component_id) VALUES (?1, ?2)",
         )?;
         for component in components {
+            debug!(
+                "Adding issue_component ({}, {})",
+                issue_key.value, component.id
+            );
             if let Err(e) =
                 insert_issue_component_stmt.execute(params![issue_key.value(), component.id])
             {
@@ -115,8 +121,34 @@ impl WorklogStorage {
         Ok(())
     }
 
-    #[allow(clippy::missing_panics_doc)]
-    #[allow(clippy::missing_errors_doc)]
+    ///
+    /// Adds multiple Jira issues to the local database.
+    ///
+    /// This function inserts Jira issues into the `issue` table of the local database.
+    /// If an issue with the same `issue_key` already exists, its `summary` is updated.
+    ///
+    /// # Arguments
+    ///
+    /// * `jira_issues` - A vector of `IssueSummary` objects to be added to the database.
+    ///
+    /// # Errors
+    ///
+    /// Returns a `WorklogError` if any SQL operation fails during the insertion or update.
+    ///
+    /// # Panics
+    ///
+    /// This method panics if any SQL statement execution fails due to unexpected conditions.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let issues = vec![
+    ///     IssueSummary { key: IssueKey::new("ISSUE-1"), fields: Fields { summary: "Issue 1".to_string() } },
+    ///     IssueSummary { key: IssueKey::new("ISSUE-2"), fields: Fields { summary: "Issue 2".to_string() } },
+    /// ];
+    ///
+    /// worklog_storage.add_jira_issues(&issues)?;
+    /// ```
     pub fn add_jira_issues(&self, jira_issues: &Vec<IssueSummary>) -> Result<(), WorklogError> {
         let mut stmt = self.connection.prepare(
             "INSERT INTO issue (issue_key, summary)
@@ -134,7 +166,39 @@ impl WorklogStorage {
         Ok(())
     }
 
-    #[allow(clippy::missing_errors_doc)]
+    ///
+    /// Retrieves a list of issues from the database filtered by the provided issue keys.
+    ///
+    /// This function queries the local database for issues whose keys match those
+    /// provided in the `keys` parameter. It dynamically constructs the SQL query
+    /// to handle a variable number of keys using placeholders. If no keys are provided,
+    /// it will return an empty vector.
+    ///
+    /// # Arguments
+    ///
+    /// * `keys` - A vector of issue keys of type `IssueKey` to filter the issues.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing a vector of `JiraIssueInfo` objects representing the
+    /// matching issues. If an error occurs while querying the database, a `WorklogError` is returned.
+    ///
+    /// # Errors
+    ///
+    /// This function may return a `WorklogError` if an error occurs while preparing or
+    /// executing the SQL statement, or while processing the result rows.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore  
+    /// let issue_keys = vec![IssueKey::new("ISSUE-1"), IssueKey::new("ISSUE-2")];
+    /// let issues = worklog_storage.get_issues_filtered_by_keys(&issue_keys)?;
+    ///
+    /// for issue in issues {
+    ///     println!("Issue Key: {}, Summary: {}", issue.issue_key.value(), issue.summary);
+    /// }
+    /// ```
+    ///
     pub fn get_issues_filtered_by_keys(
         &self,
         keys: &Vec<IssueKey>,
@@ -342,7 +406,8 @@ impl WorklogStorage {
     pub fn find_worklogs_after(
         &self,
         start_datetime: DateTime<Local>,
-        keys: &[IssueKey],
+        keys_filter: &[IssueKey],
+        users_filter: &[User],
     ) -> Result<Vec<LocalWorklog>, WorklogError> {
         // Base SQL query
         let mut sql = String::from(
@@ -355,19 +420,39 @@ impl WorklogStorage {
         let mut params: Vec<Box<dyn rusqlite::ToSql>> = vec![Box::new(start_datetime.to_rfc3339())];
 
         // Add `issue_key` filter if `keys` is not empty
-        if !keys.is_empty() {
-            let placeholders = keys.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
+        if !keys_filter.is_empty() {
+            let placeholders = keys_filter
+                .iter()
+                .map(|_| "?")
+                .collect::<Vec<_>>()
+                .join(", ");
             sql.push_str(&format!(" AND issue_key IN ({placeholders})"));
 
             // Add owned `String` values to the parameters and cast to `Box<dyn ToSql>`
             params.extend(
-                keys.iter()
+                keys_filter
+                    .iter()
                     .map(|key| Box::new(key.value().to_string()) as Box<dyn rusqlite::ToSql>),
+            );
+        }
+        if !users_filter.is_empty() {
+            let placeholders = users_filter
+                .iter()
+                .map(|_| "?")
+                .collect::<Vec<_>>()
+                .join(", ");
+            sql.push_str(&format!(" AND author IN ({placeholders})"));
+            params.extend(
+                users_filter
+                    .iter()
+                    .map(|user| Box::new(user.display_name.clone()) as Box<dyn rusqlite::ToSql>),
             );
         }
 
         // Convert `params` to a slice of `&dyn ToSql`
         let params_slice: Vec<&dyn rusqlite::ToSql> = params.iter().map(AsRef::as_ref).collect();
+
+        debug!("find_worklogs_after():- {sql}");
 
         // Prepare the query
         let mut stmt = self.connection.prepare(&sql)?;
@@ -568,10 +653,26 @@ mod tests {
 
         lws.add_entry(&worklog)?;
 
-        let result =
-            lws.find_worklogs_after(Local::now().checked_sub_days(Days::new(60)).unwrap(), &[])?;
+        let result = lws.find_worklogs_after(
+            Local::now().checked_sub_days(Days::new(60)).unwrap(),
+            &[],
+            &[],
+        )?;
         assert!(!result.is_empty(), "No data found in worklog dbms",);
         assert!(!result.is_empty(), "Expected a not empty collection");
+
+        let result = lws.find_worklogs_after(
+            Local::now().checked_sub_days(Days::new(60)).unwrap(),
+            &[],
+            &[User {
+                display_name: "John Doe".to_string(),
+                ..Default::default()
+            }],
+        )?;
+        assert!(
+            !result.is_empty(),
+            "No data found in worklog dbms for John Doe",
+        );
         Ok(())
     }
 

@@ -78,8 +78,6 @@ async fn main() -> Result<(), WorklogError> {
             }
         }
         Command::Sync(sync_cmd) => {
-            //sync::execute(sync_cmd).await?;
-
             let operation_result: &worklog::OperationResult = &get_runtime()
                 .execute(Operation::Sync(sync_cmd.into()))
                 .await?;

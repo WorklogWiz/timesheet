@@ -17,6 +17,7 @@ Jira instance for testing: https://norns.atlassian.net
     * [Separating unit tests and integration tests](#separating-unit-tests-and-integration-tests)
       * [Integration tests execution](#integration-tests-execution)
   * [Cross compiling to Windows on MacOS](#cross-compiling-to-windows-on-macos)
+  * [Commit messages and semantic versioning](#commit-messages-and-semantic-versioning)
 <!-- TOC -->
 
 ## Directory structure
