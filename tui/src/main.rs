@@ -8,7 +8,8 @@ use ratatui::{
 use std::error::Error;
 use worklog::{
     config,
-    storage::{LocalWorklog, WorklogStorage},
+    storage::dbms_repository::{DbmsRepository},
+    types::LocalWorklog,
 };
 
 use chrono::{
@@ -69,7 +70,7 @@ fn map_to_week_view(worklogs: &[LocalWorklog]) -> (Vec<(String, [u32; 7], u32)>,
 
 #[allow(clippy::type_complexity)]
 fn fetch_weekly_data(
-    worklog_service: &WorklogStorage,
+    worklog_service: &DbmsRepository,
     start_of_week: DateTime<Local>,
 ) -> (Vec<(String, [u32; 7], u32)>, [u32; 7], u32) {
     /*
@@ -104,7 +105,7 @@ fn fetch_weekly_data(
 
 #[allow(clippy::unused_async)]
 async fn run(mut terminal: DefaultTerminal) -> Result<(), Box<dyn Error>> {
-    let worklog_service = WorklogStorage::new(&config::worklog_file())?;
+    let worklog_service = DbmsRepository::new(&config::worklog_file())?;
     let mut current_date = Local::now();
 
     loop {

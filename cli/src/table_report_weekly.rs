@@ -6,7 +6,7 @@ use std::cmp;
 use std::collections::BTreeMap;
 use worklog::{
     date::{self, seconds_to_hour_and_min},
-    storage::LocalWorklog,
+    types::LocalWorklog,
 };
 
 pub fn table_report_weekly(worklog_entries: &[LocalWorklog]) {
@@ -219,7 +219,7 @@ mod tests {
     use chrono::{Days, Local};
     use jira::models::core::IssueKey;
     use std::ops::Sub;
-    use worklog::storage::LocalWorklog;
+    use worklog::types::LocalWorklog;
 
     #[test]
     fn test_find_min_max_started() {

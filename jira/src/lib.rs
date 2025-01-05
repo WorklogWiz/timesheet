@@ -2,7 +2,7 @@
 //! `jira_lib` is a collection of useful functions when interacting with
 //! Jira using the official REST interface.
 //!
-//! Many of the types have been declared specifically for the purpose of work log management,
+//! Many of the types_old have been declared specifically for the purpose of work log management,
 //! and are hence not generic.
 use std::{
     collections::BTreeMap,

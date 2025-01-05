@@ -10,7 +10,7 @@ use jira::models::core::IssueKey;
 use std::{net::SocketAddr, sync::Arc};
 use tokio::sync::Mutex;
 use tower_http::cors::{Any, CorsLayer};
-use worklog::{error::WorklogError, storage::LocalWorklog, ApplicationRuntime};
+use worklog::{error::WorklogError, types::LocalWorklog, ApplicationRuntime};
 
 use serde_json::json;
 
