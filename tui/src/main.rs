@@ -91,7 +91,7 @@ fn fetch_weekly_data(
         }))
         .await;
      */
-    let mut all_local = match worklog_service.find_worklogs_after(start_of_week, &[]) {
+    let mut all_local = match worklog_service.find_worklogs_after(start_of_week, &[], &[]) {
         Ok(worklogs) => worklogs,
         Err(e) => {
             panic!("Unable to retrieve worklogs from local work log database {e}");

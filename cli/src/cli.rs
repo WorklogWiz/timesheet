@@ -80,6 +80,14 @@ pub(crate) struct Add {
     pub comment: Option<String>,
 }
 
+#[derive(Args)]
+pub(crate) struct Del {
+    #[arg(short, long, required = true)]
+    pub issue_id: String,
+    #[arg(short = 'w', long, required = true)]
+    pub worklog_id: String,
+}
+
 impl From<cli::Del> for operation::del::Del {
     fn from(val: cli::Del) -> Self {
         operation::del::Del {
@@ -87,14 +95,6 @@ impl From<cli::Del> for operation::del::Del {
             worklog_id: val.worklog_id,
         }
     }
-}
-
-#[derive(Args)]
-pub(crate) struct Del {
-    #[arg(short, long, required = true)]
-    pub issue_id: String,
-    #[arg(short = 'w', long, required = true)]
-    pub worklog_id: String,
 }
 
 #[derive(Args)]
@@ -107,6 +107,9 @@ pub(crate) struct Status {
     /// Retrieves all entries after the given date
     #[arg(short, long)]
     pub start_after: Option<String>,
+    /// Reports on all registered Jira users, not just you
+    #[arg(short, long)]
+    pub all_users: bool,
 }
 
 #[derive(Args)]

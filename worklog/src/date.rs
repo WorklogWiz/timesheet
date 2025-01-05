@@ -300,9 +300,9 @@ pub fn is_new_week(current_week: u32, dt: &NaiveDate) -> bool {
 }
 
 #[must_use]
-pub fn seconds_to_hour_and_min(seconds: &i32) -> String {
-    let hour = *seconds / 3600;
-    let min = *seconds % 3600 / 60;
+pub fn seconds_to_hour_and_min(seconds: i32) -> String {
+    let hour = seconds / 3600;
+    let min = seconds % 3600 / 60;
     let duration = format!("{hour:02}:{min:02}");
     duration
 }

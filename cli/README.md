@@ -25,6 +25,7 @@ Disclaimer: Network latency and the response time of Jira is the main culprit of
       * [Removing local configuration files](#removing-local-configuration-files)
   * [How to specify the duration](#how-to-specify-the-duration)
     * [Local database file](#local-database-file)
+  * [Re-installing a new version](#re-installing-a-new-version)
   * [Examples](#examples)
     * [Adding worklog entries](#adding-worklog-entries)
     * [Status of your worklog entries](#status-of-your-worklog-entries)
@@ -33,6 +34,7 @@ Disclaimer: Network latency and the response time of Jira is the main culprit of
     * [Synchronising the local database with Jira](#synchronising-the-local-database-with-jira)
     * [Listing all available time codes](#listing-all-available-time-codes)
     * [Debug](#debug)
+  * [Creating reports with SQL](#creating-reports-with-sql)
 <!-- TOC -->
 
 ````shell
@@ -166,6 +168,13 @@ The local database file can be found here:
 
 NOTE! I have neither access to a Windows nor a Linux system, so the specified paths might not be correct.
 
+## Re-installing a new version
+
+The database (*Sqlite*) file, can be removed and re-created at any time.
+
+Simply remove the local database file and run the `sync` command again, see
+[Synchronising the local database with Jira](#synchronising-the-local-database-with-jira)
+
 ## Examples
 
 Here are some examples on how to use the utility.
@@ -297,3 +306,5 @@ TIME-40  85002        304589     Tue     2024-08-06 08:00 +0200       07:30
 ````
 
 You can specify one of `debug`, `info`, `warn` or `error`
+
+## Creating reports with SQL
