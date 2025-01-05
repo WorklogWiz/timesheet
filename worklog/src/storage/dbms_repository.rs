@@ -2,10 +2,10 @@ use std::fs;
 use std::path::Path;
 use rusqlite::Connection;
 use crate::error::WorklogError;
-use crate::storage::create_local_worklog_schema;
+use crate::storage::schema::create_schema;
 
 pub struct DbmsRepository {
-    connection: Connection,
+    pub(crate) connection: Connection,
 }
 
 impl DbmsRepository {
@@ -39,7 +39,7 @@ impl DbmsRepository {
 
         connection.path();
         // Creates the schema if needed
-        create_local_worklog_schema(&connection)?;
+        create_schema(&connection)?;
 
         Ok(DbmsRepository { connection })
     }
@@ -48,4 +48,11 @@ impl DbmsRepository {
     pub fn get_dbms_path(&self) -> &str {
         self.connection.path().unwrap_or_default()
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    
 }
