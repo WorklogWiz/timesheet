@@ -1,5 +1,3 @@
-use crate::error::WorklogError;
-use rusqlite::Connection;
 
 pub mod dbms_repository;
 mod component;

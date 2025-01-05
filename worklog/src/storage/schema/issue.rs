@@ -1,3 +1,4 @@
+
 const CREATE_ISSUE_TABLE_SQL: &str = r"
     CREATE TABLE IF NOT EXISTS issue (
         issue_key varchar(32) primary key,

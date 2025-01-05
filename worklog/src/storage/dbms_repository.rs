@@ -51,8 +51,21 @@ impl DbmsRepository {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
-    
-    
+
+
+    fn setup_in_memory_db() -> Result<Connection, WorklogError> {
+        let conn = Connection::open_in_memory()?;
+        crate::storage::schema::create_schema(&conn)?;
+        Ok(conn)
+    }
+
+    pub fn setup() -> Result<crate::storage::dbms_repository::DbmsRepository, WorklogError> {
+        let lws = crate::storage::dbms_repository::DbmsRepository {
+            connection: setup_in_memory_db()?,
+        };
+        Ok(lws)
+    }
+
 }
