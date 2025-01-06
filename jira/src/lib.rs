@@ -317,9 +317,12 @@ impl Jira {
     ///
     /// # Errors
     /// This function may return:
-    /// - `WorklogError::NetworkError` if there's an issue connecting to the server.
-    /// - `WorklogError::JiraResponse` if Jira responds with an error, such as invalid query syntax
-    ///   or permissions issues.
+    /// * `JiraError::Unauthorized` if the authorization fails.
+    /// * `JiraError::MethodNotAllowed` if the HTTP method is not allowed.
+    /// * `JiraError::NotFound` if the resource could not be located.
+    /// * `JiraError::UriTooLong` if the request URI is excessively long.
+    /// * `JiraError::Fault` if there is a client error with additional details.
+    /// * An error while deserializing the response into the expected type `T`.
     pub async fn fetch_with_jql<T>(&self, jql: &str, fields: Vec<&str>) -> Result<Vec<T>>
     where
         T: DeserializeOwned,
@@ -625,11 +628,14 @@ impl Jira {
     ///   Jira API-related errors.
     ///
     /// # Errors
-    /// This function may return:
-    /// - `WorklogError::NetworkError` if there's an issue connecting to the Jira server.
-    /// - `WorklogError::JiraResponse` if Jira responds with an error, such as an invalid worklog ID
-    ///   or insufficient permissions.
-    pub async fn get_work_log_by_isssue_and_id(
+    ///
+    /// This function may return the following kinds of errors:
+    /// - Errors originating from the `self.get` method, such as network-related issues, unauthorized access, or resource not found.
+    /// - Deserialization errors if the response from the Jira API does not match the expected `Worklog` structure.
+    ///
+    /// These errors will be encapsulated in the `Result` type based on the error-handling mechanism of the `reqwest` library or the custom error type `JiraError` used in the `self.get` implementation.
+    
+    pub async fn get_work_log_by_issue_and_id(
         &self,
         issue_id: &str,
         worklog_id: &str,
@@ -654,10 +660,8 @@ impl Jira {
     /// - If the operation fails, it returns an appropriate error, such as network issues or Jira API-related errors.
     ///
     /// # Errors
-    /// This function may return:
-    /// - `WorklogError::NetworkError` if there's an issue connecting to the Jira server.
-    /// - `WorklogError::JiraResponse` if the Jira API responds with an error, such as insufficient permissions or issue not found.
     ///
+    /// 
     /// # Panics
     /// This function will panic if `issue_key` is an empty string.
     pub async fn get_work_logs_for_current_user(
@@ -848,8 +852,12 @@ impl Jira {
     ///
     /// # Errors
     /// This function may return:
-    /// - `WorklogError::NetworkError` if there's an issue connecting to the server.
-    /// - `WorklogError::JiraResponse` if Jira responds with an error (e.g., invalid worklog ID or insufficient permissions).
+    /// - `JiraError`: The primary error type returned in case of failure. This includes:
+    ///     - Network-related errors, such as connection issues or timeouts, originating from the `reqwest` library.
+    ///     - API-related errors, such as authentication failures or resource not found.
+    ///     - Deserialization errors if the response from the Jira API does not match the expected `Worklog` structure.
+    /// - Any other errors that may occur during internal processing, encapsulated as a `JiraError`.
+
     pub async fn delete_worklog(&self, issue_id: String, worklog_id: String) -> Result<()> {
         let url = format!("/issue/{}/worklog/{}", &issue_id, &worklog_id);
         let _ = self.delete::<Option<Worklog>>(&url).await?;
@@ -872,8 +880,11 @@ impl Jira {
     ///
     /// # Errors
     /// This function may return:
-    /// - `WorklogError::NetworkError` if there's a problem establishing a connection.
-    /// - `WorklogError::JiraResponse` if Jira responds with an error (e.g., issue not found or insufficient permissions).
+    /// - `JiraError`: The primary error type returned in case of failure. This includes:
+    ///     - Network-related errors, such as connection issues or timeouts, originating from the `reqwest` library.
+    ///     - API-related errors, such as authentication failures or resource not found.
+    ///     - Deserialization errors if the response from the Jira API does not match the expected `Worklog` structure.
+    /// - Any other errors that may occur during internal processing, encapsulated as a `JiraError`.
     pub async fn delete_issue(&self, jira_key: &IssueKey) -> Result<()> {
         let url = format!("/issue/{}", jira_key.value);
         self.delete::<Option<IssueKey>>(&url).await?;
@@ -893,9 +904,11 @@ impl Jira {
     ///
     /// # Errors
     /// This function may return:
-    /// - `WorklogError::NetworkError` if there's a problem connecting to the Jira server.
-    /// - `WorklogError::JiraResponse` if Jira responds with an error, such as invalid credentials
-    ///   or insufficient permissions.
+    /// - `JiraError`: The primary error type returned in case of failure. This includes:
+    ///     - Network-related errors, such as connection issues or timeouts, originating from the `reqwest` library.
+    ///     - API-related errors, such as authentication failures or resource not found.
+    ///     - Deserialization errors if the response from the Jira API does not match the expected `Worklog` structure.
+    /// - Any other errors that may occur during internal processing, encapsulated as a `JiraError`.
     pub async fn get_current_user(&self) -> Result<User> {
         self.get::<User>("/myself").await
     }
@@ -914,8 +927,11 @@ impl Jira {
     ///
     /// # Errors
     /// This function may return:
-    /// - `WorklogError::NetworkError` if there's an issue connecting to the server.
-    /// - `WorklogError::JiraResponse` if Jira responds with an error, such as insufficient permissions.
+    /// - `JiraError`: The primary error type returned in case of failure. This includes:
+    ///     - Network-related errors, such as connection issues or timeouts, originating from the `reqwest` library.
+    ///     - API-related errors, such as authentication failures or resource not found.
+    ///     - Deserialization errors if the response from the Jira API does not match the expected `Worklog` structure.
+    /// - Any other errors that may occur during internal processing, encapsulated as a `JiraError`.
     pub async fn get_time_tracking_options(&self) -> Result<TimeTrackingConfiguration> {
         let global_settings = self.get::<GlobalSettings>("/configuration").await?;
         Ok(global_settings.timeTrackingConfiguration)
@@ -943,8 +959,11 @@ impl Jira {
     ///
     /// # Errors
     /// This function may return:
-    /// - `WorklogError::NetworkError` if there's a problem with the connection.
-    /// - `WorklogError::JiraResponse` if an error occurs in any of the Jira server responses.
+    /// - `JiraError`: The primary error type returned in case of failure. This includes:
+    ///     - Network-related errors, such as connection issues or timeouts, originating from the `reqwest` library.
+    ///     - API-related errors, such as authentication failures or resource not found.
+    ///     - Deserialization errors if the response from the Jira API does not match the expected `Worklog` structure.
+    /// - Any other errors that may occur during internal processing, encapsulated as a `JiraError`.
     pub async fn chunked_work_logs(
         &self,
         issue_keys: &Vec<IssueKey>,

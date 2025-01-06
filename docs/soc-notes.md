@@ -5,6 +5,80 @@
 - [ ] Derive keychain service name from the application name space name
 - [ ] Define a separate Jira account for the integration tests `norn@balder.no` or something like that.
       I am not sure if we can use a fake name or need the name to be an actual email account somewhere.
+
+## Repostiory pattern
+
+```plantuml
+frame main {
+}
+package dbms <<module>> {
+    struct "sqlite" <<file>> {
+        fn create_connection() -> Result<Connection>
+    }
+}
+
+package repository <<module>> {
+    frame "mod rs" {
+        interface UserRepository <<trait>> {
+          create_user(user: &User)
+          find_user(id: i32)
+          find_all_users()
+          update_user(user: &User)
+        }
+    }
+    frame "user_repo" {
+        entity SqliteUserRepository {
+            impl UserRepository for SqliteUserRepository {}
+        }
+    }
+    SqliteUserRepository -up-|> UserRepository
+}
+
+package domain <<module>> {
+    entity Issue <<Entity>> {
+        id: String,
+        name: String,
+        email: String
+        --
+    }
+    entity User {}
+    entity WorkLog {}
+    entity Component {}
+    entity IssueComponent {}
+    
+}
+
+package service <<module>> {
+    frame "user_service" {
+        entity UserService<R: UserRepository> {
+            impl<R: UserRepository> UserService<R> {
+                create_new_user(name, email, ..)
+            }
+        }
+        
+    }
+}
+```
+
+```plantuml
+participant main
+participant "dbms::sqlite" as sqlite
+participant "repository::user_repo::\nSqliteUserRepository" as user_repo
+participant "service::user_service::\nUserService" as user_service
+
+main -> sqlite : create_connection()
+main <-- sqlite : connection
+|||
+main -> user_repo: new(connection)
+main <-- user_repo: user_repo
+|||
+main -> user_service : new(user_repo)
+main <-- user_service : user_service
+|||
+main -> user_service : create_new_user(user)
+main <-- user_service : Result<User>
+
+```
 ## Setting the environment variables
 
 ```
@@ -48,69 +122,82 @@ deactivate wl
 
 ## Generic Data model for timesheet
 
+### Mapping Rust concepts to UML
+* crate => component
+* struct => struct
+* trait => interface
+* impl => methods in struct or class
+* module => *package* or subcomponent
+* sub module => nested package or *subcomponent*
+
+- frame
+- package = crate
+- folder
+- component 
+
 ```plantuml
-@startuml
-entity "User" {
-    * id: UUID
-    * name: String
-    * email: String
-    * role: String <<ENUM>>  // (e.g., "Admin", "Employee", "Manager")
-    --
-    + authenticate()
-    + view_timesheets()
-    + manage_timesheets()
+component cli <<crate>> {
+    frame main {
+    }
+    component cli {
+        enum Command {
+            Add(Add),
+            Del(Del),
+            Status(Status),
+            Config(Config),
+            Codes,
+            Sync(Synchronisation),
+        }
+    }
 }
 
-entity "Project" {
-    * id: UUID
-    * name: String
-    * description: String
-    * start_date: Date
-    * end_date: Date
-    --
-    + assign_users()
-    + add_tasks()
-    + view_timesheets()
+component jira {
+    struct Jira {
+        fn get()
+    }
+    component "models" {
+        package core {
+        }
+        package issue {
+        }
+        package project {
+        }
+        package user {
+        }
+        package settings {
+        }
+        package worklog <<Jira>>{
+        }
+    }
+}
+component "worklog" <<crate>> {
+    struct ApplicationRuntime {
+    }
+    package dbms <<module>> {
+          struct "sqlite" <<file>> {
+              fn create_connection() -> Result<Connection>
+          }
+    }
+    package repository {
+    }
+    package service {
+    }
+    package types {
+    
+    }
+    package operation {
+    }
+    package config {
+    }
+    package error {
+        enum WorklogError {
+        }
+    }
+    package types {
+    }
 }
 
-entity "Task" {
-    * id: UUID
-    * project_id: UUID
-    * name: String
-    * description: String
-    * status: String <<ENUM>>  // (e.g., "Open", "In Progress", "Closed")
-    --
-    + assign_user()
-    + track_progress()
-    + update_time_spent()
-}
+cli -down-> worklog
+worklog -down-> jira
 
-entity "Timesheet" {
-    * id: UUID
-    * user_id: UUID
-    * task_id: UUID
-    * date: Date
-    * hours_worked: Float  // (e.g., 7.5 hours)
-    * comments: String
-    --
-    + add_entry()
-    + edit_entry()
-    + submit_timesheet()
-}
-
-entity "Role" {
-    * id: UUID
-    * name: String // (e.g., "Admin", "Employee", "Manager")
-    * permissions: String[]
-    --
-    + assign_to_user()
-}
-
-User "1" -- "0..*" Timesheet : "creates"
-User "0..*" -- "0..*" Project : "assigned_to"
-Project "1" -- "0..*" Task : "contains"
-Task "1..*" -- "0..*" Timesheet : "logs"
-Role "0..*" -- "1..1" User : "assigned"
-
-@enduml
 ```
