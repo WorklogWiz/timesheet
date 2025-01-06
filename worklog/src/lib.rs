@@ -9,7 +9,7 @@ use operation::{
     sync::Sync,
 };
 use std::path::PathBuf;
-use storage::dbms_repository::{DbmsRepository};
+use storage::dbms::{Dbms};
 use types::LocalWorklog;
 
 pub mod config;
@@ -20,11 +20,13 @@ pub mod storage;
 
 pub mod types;
 
+pub mod repository;
+
 pub struct ApplicationRuntime {
     #[allow(dead_code)]
     config: AppConfiguration,
     client: Jira,
-    worklog_service: DbmsRepository,
+    worklog_service: Dbms,
 }
 
 pub enum Operation {
@@ -73,7 +75,7 @@ impl ApplicationRuntime {
             println!("No support for the old journal. Use 'timesheet sync' to get your work logs from Jira");
         }
 
-        let worklog_service = DbmsRepository::new(&path)?;
+        let worklog_service = Dbms::new(&path)?;
 
         Ok(ApplicationRuntime {
             config,
@@ -86,7 +88,7 @@ impl ApplicationRuntime {
         &self.client
     }
 
-    pub fn worklog_service(&self) -> &DbmsRepository {
+    pub fn worklog_service(&self) -> &Dbms {
         &self.worklog_service
     }
 

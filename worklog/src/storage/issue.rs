@@ -4,9 +4,9 @@ use jira::models::core::IssueKey;
 use jira::models::issue::IssueSummary;
 use crate::error::WorklogError;
 use crate::types::JiraIssueInfo;
-use crate::storage::dbms_repository::DbmsRepository;
+use crate::storage::dbms::Dbms;
 
-impl DbmsRepository {
+impl Dbms {
 
     ///
     /// Adds multiple Jira issues to the local database.
@@ -144,7 +144,7 @@ impl DbmsRepository {
 #[cfg(test)]
 mod tests {
     use jira::models::core::Fields;
-    use crate::storage::dbms_repository::tests::setup;
+    use crate::storage::dbms::tests::setup;
     use super::*;
     #[test]
     fn add_issues() -> Result<(), WorklogError> {

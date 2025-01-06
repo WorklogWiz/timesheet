@@ -1,9 +1,9 @@
 use rusqlite::params;
 use jira::models::user::User;
 use crate::error::WorklogError;
-use crate::storage::dbms_repository::DbmsRepository;
+use crate::storage::dbms::Dbms;
 
-impl DbmsRepository {
+impl Dbms {
     pub fn insert_or_update_current_user(&self, user: &User) -> Result<(), WorklogError> {
         let sql = "INSERT OR IGNORE INTO user (account_id, email, display_name, timezone) VALUES (?, ?, ?, ?)";
         let mut stmt = self.connection.prepare(sql)?;
@@ -34,7 +34,7 @@ impl DbmsRepository {
 
 #[cfg(test)]
 mod tests {
-    use crate::storage::dbms_repository::tests::setup;
+    use crate::storage::dbms::tests::setup;
     use super::*;
     #[test]
     fn test_add_user() -> Result<(), WorklogError> {

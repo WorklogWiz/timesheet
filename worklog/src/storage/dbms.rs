@@ -4,11 +4,11 @@ use rusqlite::Connection;
 use crate::error::WorklogError;
 use crate::storage::schema::create_schema;
 
-pub struct DbmsRepository {
+pub struct Dbms {
     pub(crate) connection: Connection,
 }
 
-impl DbmsRepository {
+impl Dbms {
     ///
     /// Creates a new instance of `DbmsRepository` by opening or creating the specified SQLite database.
     ///
@@ -41,7 +41,7 @@ impl DbmsRepository {
         // Creates the schema if needed
         create_schema(&connection)?;
 
-        Ok(DbmsRepository { connection })
+        Ok(Dbms { connection })
     }
 
     /// Retrieves the path to the current open database
@@ -61,8 +61,8 @@ pub(crate) mod tests {
         Ok(conn)
     }
 
-    pub fn setup() -> Result<crate::storage::dbms_repository::DbmsRepository, WorklogError> {
-        let lws = crate::storage::dbms_repository::DbmsRepository {
+    pub fn setup() -> Result<crate::storage::dbms::Dbms, WorklogError> {
+        let lws = crate::storage::dbms::Dbms {
             connection: setup_in_memory_db()?,
         };
         Ok(lws)

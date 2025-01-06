@@ -1,5 +1,5 @@
 mod component;
-pub mod dbms_repository;
+pub mod dbms;
 mod issue;
 mod user;
 mod worklog;

@@ -6,8 +6,8 @@ use jira::models::user::User;
 use jira::models::worklog::Worklog;
 use crate::error::WorklogError;
 use crate::types::LocalWorklog;
-use crate::storage::dbms_repository::DbmsRepository;
-impl DbmsRepository {
+use crate::storage::dbms::Dbms;
+impl Dbms {
 
     ///
     /// # Errors
@@ -217,7 +217,7 @@ mod tests {
     use chrono::Days;
     use jira::models::core::Fields;
     use jira::models::issue::IssueSummary;
-    use crate::storage::dbms_repository::tests::setup;
+    use crate::storage::dbms::tests::setup;
     use super::*;
     #[test]
     fn add_worklog_entry() -> Result<(), WorklogError> {

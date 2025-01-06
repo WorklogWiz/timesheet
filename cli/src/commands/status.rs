@@ -6,7 +6,7 @@ use log::debug;
 use worklog::{
     date,
     error::WorklogError,
-    storage::dbms_repository::{DbmsRepository},
+    storage::dbms::{Dbms},
     types::LocalWorklog,
 };
 
@@ -71,7 +71,7 @@ pub async fn execute(status: Status) -> Result<(), WorklogError> {
 
 #[allow(dead_code)]
 fn print_info_about_time_codes(
-    worklog_service: &DbmsRepository,
+    worklog_service: &Dbms,
     mut jira_keys_to_report: Vec<IssueKey>,
 ) {
     if jira_keys_to_report.is_empty() {

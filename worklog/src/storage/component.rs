@@ -3,9 +3,9 @@ use rusqlite::params;
 use jira::models::core::IssueKey;
 use jira::models::project::Component;
 use crate::error::WorklogError;
-use crate::storage::dbms_repository::DbmsRepository;
+use crate::storage::dbms::Dbms;
 
-impl DbmsRepository {
+impl Dbms {
     ///
     /// Adds a list of components to the local database and associates them with the given issue key.
     ///
