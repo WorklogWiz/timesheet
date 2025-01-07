@@ -3,11 +3,7 @@ use std::process::exit;
 use chrono::{Datelike, Days, Local};
 use jira::models::core::IssueKey;
 use log::debug;
-use worklog::{
-    date,
-    error::WorklogError,
-    storage::{LocalWorklog, WorklogStorage},
-};
+use worklog::{date, error::WorklogError, storage::dbms::Dbms, types::LocalWorklog};
 
 use crate::{cli::Status, get_runtime, table_report_weekly::table_report_weekly};
 
@@ -34,10 +30,11 @@ pub async fn execute(status: Status) -> Result<(), WorklogError> {
         start_after.expect("Must specify --after ")
     );
 
+    // Retrieves the data from the DBMS, which we will use to create the reports
     let worklogs = if status.all_users {
         worklog_service.find_worklogs_after(start_after.unwrap(), &jira_keys_to_report, &[])?
     } else {
-        let user = runtime.jira_client().get_current_user().await?;
+        let user = worklog_service.find_user()?;
         worklog_service.find_worklogs_after(start_after.unwrap(), &jira_keys_to_report, &[user])?
     };
 
@@ -68,10 +65,7 @@ pub async fn execute(status: Status) -> Result<(), WorklogError> {
 }
 
 #[allow(dead_code)]
-fn print_info_about_time_codes(
-    worklog_service: &WorklogStorage,
-    mut jira_keys_to_report: Vec<IssueKey>,
-) {
+fn print_info_about_time_codes(worklog_service: &Dbms, mut jira_keys_to_report: Vec<IssueKey>) {
     if jira_keys_to_report.is_empty() {
         jira_keys_to_report = worklog_service.find_unique_keys().unwrap();
     }

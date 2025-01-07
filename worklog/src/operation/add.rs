@@ -9,7 +9,7 @@ use jira::{
 };
 use log::{debug, info};
 
-use crate::{date, error::WorklogError, storage::LocalWorklog, ApplicationRuntime};
+use crate::{date, error::WorklogError, types::LocalWorklog, ApplicationRuntime};
 
 pub struct Add {
     pub durations: Vec<String>,

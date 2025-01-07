@@ -3,7 +3,7 @@ use log::debug;
 use std::process::exit;
 
 use crate::error::WorklogError;
-use crate::storage::LocalWorklog;
+use crate::types::LocalWorklog;
 use crate::{date, ApplicationRuntime};
 use jira::models::core::IssueKey;
 use jira::models::issue::IssueSummary;
@@ -49,6 +49,11 @@ pub struct Sync {
 /// If no issues are found, the function will print an error message and exit with a status code of 4.
 /// The function uses debugging logs to trace execution details.
 pub async fn execute(runtime: &ApplicationRuntime, sync_cmd: &Sync) -> Result<(), WorklogError> {
+    let current_user = runtime.jira_client().get_current_user().await?;
+    runtime
+        .worklog_service
+        .insert_or_update_current_user(&current_user)?;
+
     // Parse the start date or fall back to the default
     let date_time = sync_cmd
         .started
@@ -89,9 +94,8 @@ pub async fn execute(runtime: &ApplicationRuntime, sync_cmd: &Sync) -> Result<()
 
     // Filter for current user or all users
     if sync_cmd.all_users {
-        eprintln!("Retrieving all work logs for all users");
+        eprintln!("Synchronising work logs for all users");
     } else {
-        let current_user = runtime.jira_client().get_current_user().await?;
         eprintln!(
             "Filtering work logs for current user: {:?} ",
             current_user.display_name
@@ -103,7 +107,7 @@ pub async fn execute(runtime: &ApplicationRuntime, sync_cmd: &Sync) -> Result<()
 
     // Updates the database with the issue summary information
     sync_jira_issue_information(runtime, &issue_summaries)?;
-
+    // Create map of IssueKey -> IssueSummary
     let issue_map: std::collections::HashMap<String, &IssueSummary> = issue_summaries
         .iter()
         .map(|issue| (issue.id.clone(), issue))
@@ -114,7 +118,7 @@ pub async fn execute(runtime: &ApplicationRuntime, sync_cmd: &Sync) -> Result<()
         debug!("Removing and adding {:?}", &worklog);
 
         // Delete the existing one if it exists
-        if let Err(e) = runtime.worklog_service().remove_entry(worklog) {
+        if let Err(e) = runtime.worklog_service().remove_worklog_entry(worklog) {
             debug!("Unable to remove {:?}: {}", &worklog, e);
         }
 
@@ -193,7 +197,7 @@ fn sync_jira_issue_information(
     for issue in issue_summaries {
         runtime
             .worklog_service()
-            .add_component(&issue.key, &issue.fields.components)?;
+            .create_component(&issue.key, &issue.fields.components)?;
     }
     Ok(())
 }

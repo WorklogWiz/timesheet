@@ -102,12 +102,31 @@ pub struct TimeSpent {
 }
 
 impl TimeSpent {
-    /// Parses strings describing a duration into `TimeSpent`
-    /// Examples:
-    ///  - `1,5d2,5h3m`
-    ///  - `1w2.5d5.5h30m`
-    /// # Errors
-    ///    `crate::date::Error::InvalidInput` if the input string could not be matched against the regexp
+    /// `from_str` attempts to parse a user-provided time duration string into a `TimeSpent` instance.
+    ///
+    /// The string must follow a specific format:
+    ///
+    /// - **Weeks** (`w`): E.g., "1w"
+    /// - **Days** (`d`): E.g., "2.5d" indicates 2 days and 12 hours
+    /// - **Hours** (`h`): E.g., "1.5h" indicates 1 hour and 30 minutes
+    /// - **Minutes** (`m`): E.g., "30m"
+    ///
+    /// These components can be combined in the input string in any order.
+    ///
+    /// Examples of valid input strings:
+    /// - `"1w2.5d5.5h30m"`
+    /// - `"1,5d2,5h3m"` (comma as a decimal separator is accepted)
+    ///
+    /// # Parameters
+    ///
+    /// - `s`: The duration string to parse.
+    /// - `work_hours_per_day`: The number of working hours per day. Used to interpret `d` (days) component.
+    /// - `working_days_per_week`: The number of working days per week. Used to interpret `w` (weeks) component.
+    ///
+    /// # Returns
+    ///
+    /// - On success, returns a `TimeSpent` instance containing both the original string and the parsed duration in seconds.
+    /// - On failure, returns a variant of `Error::InvalidInput` describing the error.
     #[allow(
         clippy::missing_errors_doc,
         clippy::missing_panics_doc,

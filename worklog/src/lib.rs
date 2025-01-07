@@ -9,7 +9,8 @@ use operation::{
     sync::Sync,
 };
 use std::path::PathBuf;
-use storage::{LocalWorklog, WorklogStorage};
+use storage::dbms::Dbms;
+use types::LocalWorklog;
 
 pub mod config;
 pub mod date;
@@ -17,11 +18,15 @@ pub mod error;
 pub mod operation;
 pub mod storage;
 
+pub mod types;
+
+pub mod repository;
+
 pub struct ApplicationRuntime {
     #[allow(dead_code)]
     config: AppConfiguration,
     client: Jira,
-    worklog_service: WorklogStorage,
+    worklog_service: Dbms,
 }
 
 pub enum Operation {
@@ -39,9 +44,23 @@ pub enum OperationResult {
 }
 
 impl ApplicationRuntime {
+    /// Creates a new instance of `ApplicationRuntime`.
+    ///
+    /// # Returns
+    ///
+    /// If successful, returns an `ApplicationRuntime` instance configured with the application
+    /// settings and services like Jira client and worklog storage. Returns an error of type
+    /// `WorklogError` if there's an issue during initialization.
     ///
     /// # Errors
-    /// Returns an error if the initialisation goes wrong
+    ///
+    /// - Returns an error if the configuration fails to load.
+    /// - Returns an error if the creation of the Jira client fails.
+    /// - Returns an error if the initialization of the local worklog storage fails.
+    ///
+    /// # Notes
+    ///
+    /// - If the local worklog path does not exist, a warning is printed, and syncing with Jira is recommended.
     pub fn new() -> Result<Self, WorklogError> {
         let config = config::load()?;
 
@@ -53,10 +72,10 @@ impl ApplicationRuntime {
         let path = PathBuf::from(&config.application_data.local_worklog);
 
         if !path.exists() {
-            println!("No support for the old journal. Use 'timesheet sync' to get your worklogs from Jira");
+            println!("No support for the old journal. Use 'timesheet sync' to get your work logs from Jira");
         }
 
-        let worklog_service = WorklogStorage::new(&path)?;
+        let worklog_service = Dbms::new(&path)?;
 
         Ok(ApplicationRuntime {
             config,
@@ -69,11 +88,43 @@ impl ApplicationRuntime {
         &self.client
     }
 
-    pub fn worklog_service(&self) -> &WorklogStorage {
+    pub fn worklog_service(&self) -> &Dbms {
         &self.worklog_service
     }
 
-    #[allow(clippy::missing_errors_doc)]
+    /// Executes the specified `Operation` and returns the result.
+    ///
+    /// # Arguments
+    ///
+    /// * `operation` - The operation to be executed.
+    ///
+    /// # Returns
+    ///
+    /// A `Result` wrapping an `OperationResult` on success, or a `WorklogError` on failure.
+    ///
+    /// # Errors
+    ///
+    /// This function may return an error (`WorklogError`) in the following scenarios:
+    ///
+    /// - When adding worklogs fails during `Operation::Add`.
+    /// - When deleting a worklog entry fails during `Operation::Del`.
+    /// - When fetching issue summaries fails during `Operation::Codes`.
+    /// - When syncing worklogs with Jira fails during `Operation::Sync`.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// use your_crate::ApplicationRuntime;
+    /// use your_crate::operation::Operation;
+    ///
+    /// async fn example(runtime: &ApplicationRuntime) {
+    ///     let operation = Operation::Sync(Sync::new());
+    ///     match runtime.execute(operation).await {
+    ///         Ok(result) => println!("Operation successful: {:?}", result),
+    ///         Err(err) => eprintln!("Operation failed: {:?}", err),
+    ///     }
+    /// }
+    /// ```
     pub async fn execute(&self, operation: Operation) -> Result<OperationResult, WorklogError> {
         match operation {
             Operation::Add(mut instructions) => {
