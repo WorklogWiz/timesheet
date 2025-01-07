@@ -1,7 +1,7 @@
 use chrono::{DateTime, Local};
-use serde::{Deserialize, Serialize};
 use jira::models::core::IssueKey;
 use jira::models::worklog::Worklog;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Clone)]
 #[allow(non_snake_case)]

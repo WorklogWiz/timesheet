@@ -1,14 +1,13 @@
+use crate::error::WorklogError;
+use crate::storage::dbms::Dbms;
+use crate::types::LocalWorklog;
 use chrono::{DateTime, Local};
-use log::debug;
-use rusqlite::{named_params, params};
 use jira::models::core::IssueKey;
 use jira::models::user::User;
 use jira::models::worklog::Worklog;
-use crate::error::WorklogError;
-use crate::types::LocalWorklog;
-use crate::storage::dbms::Dbms;
+use log::debug;
+use rusqlite::{named_params, params};
 impl Dbms {
-
     ///
     /// # Errors
     /// Returns an error something goes wrong
@@ -133,9 +132,41 @@ impl Dbms {
         })?;
         Ok(worklog)
     }
+
+    /// Finds worklog entries that were started after the given `start_datetime` and optionally,
+    /// filters them by a list of `keys_filter` (issue keys) and `users_filter` (authors).
+    ///
+    /// # Arguments
+    /// * `start_datetime` - A `DateTime` representing the lower bound for the `started` field.
+    /// * `keys_filter` - A slice of `IssueKey` objects to filter the worklogs by their associated issue keys.
+    ///   If empty, no filtering on issue keys is done.
+    /// * `users_filter` - A slice of `User` objects to filter the worklogs by their associated authors.
+    ///   If empty, no filtering on authors is done.
+    ///
+    /// # Returns
+    /// A `Result` containing a `Vec` of `LocalWorklog` objects that match the criteria, or a `WorklogError`
+    /// if something goes wrong during query execution.
     ///
     /// # Errors
-    /// Returns an error if something goes wrong
+    /// * Returns a `WorklogError` if the database query fails for any reason.
+    ///
+    /// # Examples
+    /// ```rust,ignore
+    /// use chrono::prelude::*;
+    /// use crate::storage::dbms::{DbConnector, IssueKey, User};
+    ///
+    /// let db = DbConnector::new("test.db")?;
+    /// let start_time = Local::now() - chrono::Duration::days(7);
+    /// let issue_keys = vec![IssueKey::from("TEST-123")];
+    /// let users = vec![User::new("John Doe".to_string())];
+    ///
+    /// let result = db.find_worklogs_after(start_time, &issue_keys, &users);
+    ///
+    /// match result {
+    ///     Ok(worklogs) => println!("Retrieved {} worklogs.", worklogs.len()),
+    ///     Err(e) => eprintln!("Error: {}", e),
+    /// }
+    /// ```
     pub fn find_worklogs_after(
         &self,
         start_datetime: DateTime<Local>,
@@ -214,11 +245,11 @@ impl Dbms {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::storage::dbms::tests::setup;
     use chrono::Days;
     use jira::models::core::Fields;
     use jira::models::issue::IssueSummary;
-    use crate::storage::dbms::tests::setup;
-    use super::*;
     #[test]
     fn add_worklog_entry() -> Result<(), WorklogError> {
         let worklog = LocalWorklog {
@@ -252,7 +283,6 @@ mod tests {
 
         Ok(())
     }
-
 
     #[test]
     fn add_worklog_entries() -> Result<(), WorklogError> {
@@ -336,6 +366,4 @@ mod tests {
         );
         Ok(())
     }
-
-
 }

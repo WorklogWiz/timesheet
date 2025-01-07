@@ -1,5 +1,5 @@
-use rusqlite::Connection;
 use anyhow::Result;
+use rusqlite::Connection;
 
 /// SQL statement to create the `worklog` table.
 const CREATE_WORKLOG_TABLE_SQL: &str = r"

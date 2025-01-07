@@ -6,11 +6,7 @@ use ratatui::{
     DefaultTerminal,
 };
 use std::error::Error;
-use worklog::{
-    config,
-    storage::dbms::{Dbms},
-    types::LocalWorklog,
-};
+use worklog::{config, storage::dbms::Dbms, types::LocalWorklog};
 
 use chrono::{
     offset::TimeZone, DateTime, Datelike, Duration, Local, NaiveDate, NaiveTime, Weekday,

@@ -1,9 +1,9 @@
-use log::debug;
-use rusqlite::params;
-use jira::models::core::IssueKey;
-use jira::models::project::Component;
 use crate::error::WorklogError;
 use crate::storage::dbms::Dbms;
+use jira::models::core::IssueKey;
+use jira::models::project::Component;
+use log::debug;
+use rusqlite::params;
 
 impl Dbms {
     ///
@@ -70,5 +70,4 @@ impl Dbms {
         }
         Ok(())
     }
-
 }

@@ -93,14 +93,14 @@ pub async fn execute(runtime: &ApplicationRuntime, sync_cmd: &Sync) -> Result<()
         .await?;
 
     // Filter for current user or all users
-    if !sync_cmd.all_users {
+    if sync_cmd.all_users {
+        eprintln!("Synchronising work logs for all users");
+    } else {
         eprintln!(
             "Filtering work logs for current user: {:?} ",
             current_user.display_name
         );
         all_issue_work_logs.retain(|wl| current_user.account_id == wl.author.accountId);
-    } else {
-        eprintln!("Synchronising work logs for all users");
     }
 
     eprintln!("Found {} work logs", all_issue_work_logs.len());

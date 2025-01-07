@@ -2,7 +2,7 @@
 //! `jira_lib` is a collection of useful functions when interacting with
 //! Jira using the official REST interface.
 //!
-//! Many of the types_old have been declared specifically for the purpose of work log management,
+//! Many of the types have been declared specifically for the purpose of work log management,
 //! and are hence not generic.
 use std::{
     collections::BTreeMap,
@@ -634,7 +634,6 @@ impl Jira {
     /// - Deserialization errors if the response from the Jira API does not match the expected `Worklog` structure.
     ///
     /// These errors will be encapsulated in the `Result` type based on the error-handling mechanism of the `reqwest` library or the custom error type `JiraError` used in the `self.get` implementation.
-    
     pub async fn get_work_log_by_issue_and_id(
         &self,
         issue_id: &str,
@@ -661,7 +660,7 @@ impl Jira {
     ///
     /// # Errors
     ///
-    /// 
+    ///
     /// # Panics
     /// This function will panic if `issue_key` is an empty string.
     pub async fn get_work_logs_for_current_user(
@@ -857,7 +856,6 @@ impl Jira {
     ///     - API-related errors, such as authentication failures or resource not found.
     ///     - Deserialization errors if the response from the Jira API does not match the expected `Worklog` structure.
     /// - Any other errors that may occur during internal processing, encapsulated as a `JiraError`.
-
     pub async fn delete_worklog(&self, issue_id: String, worklog_id: String) -> Result<()> {
         let url = format!("/issue/{}/worklog/{}", &issue_id, &worklog_id);
         let _ = self.delete::<Option<Worklog>>(&url).await?;

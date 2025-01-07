@@ -201,3 +201,42 @@ cli -down-> worklog
 worklog -down-> jira
 
 ```
+
+## DDD architecture
+
+```plantuml
+
+component jira <<crate>> {
+    component client {
+    }
+    component error {
+    }
+    component types {
+        component user_dto.rs {
+        }
+        component issue_dto.rs {
+        }
+    }
+}
+
+component repository <<module>> {
+    component user_repo.rs {
+    }
+    component entities {
+        component user_entity.rs {
+        }
+    }
+    component error {
+    }
+}
+
+component worklog <<crate>> {
+    component user_service.rs {
+    }
+    component conversion.rs {
+    }
+    component error.rs {
+    }
+}
+
+```

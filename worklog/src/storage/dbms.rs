@@ -1,8 +1,8 @@
-use std::fs;
-use std::path::Path;
-use rusqlite::Connection;
 use crate::error::WorklogError;
 use crate::storage::schema::create_schema;
+use rusqlite::Connection;
+use std::fs;
+use std::path::Path;
 
 pub struct Dbms {
     pub(crate) connection: Connection,
@@ -10,14 +10,14 @@ pub struct Dbms {
 
 impl Dbms {
     ///
-    /// Creates a new instance of `DbmsRepository` by opening or creating the specified SQLite database.
+    /// Creates a new instance of `DbmsRepository` by opening or creating the specified `SQLite` database.
     ///
     /// This function ensures that the parent directories of the provided database path exist,
     /// creating them if necessary, and initializes the database schema.
     ///
     /// # Arguments
     ///
-    /// * `dbms_path` - The file path to the SQLite database.
+    /// * `dbms_path` - The file path to the `SQLite` database.
     ///
     /// # Returns
     ///
@@ -54,7 +54,6 @@ impl Dbms {
 pub(crate) mod tests {
     use super::*;
 
-
     fn setup_in_memory_db() -> Result<Connection, WorklogError> {
         let conn = Connection::open_in_memory()?;
         crate::storage::schema::create_schema(&conn)?;
@@ -67,5 +66,4 @@ pub(crate) mod tests {
         };
         Ok(lws)
     }
-
 }

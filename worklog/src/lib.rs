@@ -9,7 +9,7 @@ use operation::{
     sync::Sync,
 };
 use std::path::PathBuf;
-use storage::dbms::{Dbms};
+use storage::dbms::Dbms;
 use types::LocalWorklog;
 
 pub mod config;
@@ -48,8 +48,8 @@ impl ApplicationRuntime {
     ///
     /// # Returns
     ///
-    /// If successful, returns an `ApplicationRuntime` instance configured with the application 
-    /// settings and services like Jira client and worklog storage. Returns an error of type 
+    /// If successful, returns an `ApplicationRuntime` instance configured with the application
+    /// settings and services like Jira client and worklog storage. Returns an error of type
     /// `WorklogError` if there's an issue during initialization.
     ///
     /// # Errors
@@ -92,7 +92,6 @@ impl ApplicationRuntime {
         &self.worklog_service
     }
 
-  
     /// Executes the specified `Operation` and returns the result.
     ///
     /// # Arguments

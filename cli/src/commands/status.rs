@@ -3,12 +3,7 @@ use std::process::exit;
 use chrono::{Datelike, Days, Local};
 use jira::models::core::IssueKey;
 use log::debug;
-use worklog::{
-    date,
-    error::WorklogError,
-    storage::dbms::{Dbms},
-    types::LocalWorklog,
-};
+use worklog::{date, error::WorklogError, storage::dbms::Dbms, types::LocalWorklog};
 
 use crate::{cli::Status, get_runtime, table_report_weekly::table_report_weekly};
 
@@ -70,10 +65,7 @@ pub async fn execute(status: Status) -> Result<(), WorklogError> {
 }
 
 #[allow(dead_code)]
-fn print_info_about_time_codes(
-    worklog_service: &Dbms,
-    mut jira_keys_to_report: Vec<IssueKey>,
-) {
+fn print_info_about_time_codes(worklog_service: &Dbms, mut jira_keys_to_report: Vec<IssueKey>) {
     if jira_keys_to_report.is_empty() {
         jira_keys_to_report = worklog_service.find_unique_keys().unwrap();
     }

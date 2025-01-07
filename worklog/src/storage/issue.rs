@@ -1,13 +1,12 @@
-use log::debug;
-use rusqlite::params;
+use crate::error::WorklogError;
+use crate::storage::dbms::Dbms;
+use crate::types::JiraIssueInfo;
 use jira::models::core::IssueKey;
 use jira::models::issue::IssueSummary;
-use crate::error::WorklogError;
-use crate::types::JiraIssueInfo;
-use crate::storage::dbms::Dbms;
+use log::debug;
+use rusqlite::params;
 
 impl Dbms {
-
     ///
     /// Adds multiple Jira issues to the local database.
     ///
@@ -121,7 +120,7 @@ impl Dbms {
 
         Ok(issues)
     }
-    
+
     ///
     /// # Errors
     /// Returns an error something goes wrong
@@ -138,14 +137,13 @@ impl Dbms {
             .collect();
         Ok(issue_keys)
     }
-
 }
 
 #[cfg(test)]
 mod tests {
-    use jira::models::core::Fields;
-    use crate::storage::dbms::tests::setup;
     use super::*;
+    use crate::storage::dbms::tests::setup;
+    use jira::models::core::Fields;
     #[test]
     fn add_issues() -> Result<(), WorklogError> {
         let lws = setup()?;
@@ -177,6 +175,4 @@ mod tests {
 
         Ok(())
     }
-
-
 }

@@ -1,7 +1,6 @@
+use super::core::Author;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-
-use super::core::Author;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[allow(non_snake_case)]
