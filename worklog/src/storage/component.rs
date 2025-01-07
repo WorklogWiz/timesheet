@@ -49,9 +49,9 @@ impl Dbms {
             }
         }
         // Links the components with the issues to maintain the many-to-many relationship
-        let mut insert_issue_component_stmt = self.connection.prepare(
-            "INSERT OR IGNORE INTO issue_component (issue_key, component_id) VALUES (?1, ?2)",
-        )?;
+        let mut insert_issue_component_stmt = self
+            .connection
+            .prepare("INSERT OR IGNORE INTO issue_component (key, component_id) VALUES (?1, ?2)")?;
         for component in components {
             debug!(
                 "Adding issue_component ({}, {})",

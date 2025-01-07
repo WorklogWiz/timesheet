@@ -11,7 +11,7 @@ impl Dbms {
     /// Adds multiple Jira issues to the local database.
     ///
     /// This function inserts Jira issues into the `issue` table of the local database.
-    /// If an issue with the same `issue_key` already exists, its `summary` is updated.
+    /// If an issue with the same `key` already exists, its `summary` is updated.
     ///
     /// # Arguments
     ///
@@ -37,12 +37,16 @@ impl Dbms {
     /// ```
     pub fn add_jira_issues(&self, jira_issues: &Vec<IssueSummary>) -> Result<(), WorklogError> {
         let mut stmt = self.connection.prepare(
-            "INSERT INTO issue (issue_key, summary)
-            VALUES (?1, ?2)
-            ON CONFLICT(issue_key) DO UPDATE SET summary = excluded.summary",
+            "INSERT INTO issue (id, key, summary)
+            VALUES (?1, ?2, ?3)
+            ON CONFLICT(id) DO UPDATE SET summary = excluded.summary, key = excluded.key",
         )?;
         for issue in jira_issues {
-            if let Err(e) = stmt.execute(params![issue.key.to_string(), issue.fields.summary]) {
+            if let Err(e) = stmt.execute(params![
+                issue.id,
+                issue.key.to_string(),
+                issue.fields.summary
+            ]) {
                 panic!(
                     "Unable to insert issue({},{}): {}",
                     issue.key, issue.fields.summary, e
@@ -81,7 +85,7 @@ impl Dbms {
     /// let issues = worklog_storage.get_issues_filtered_by_keys(&issue_keys)?;
     ///
     /// for issue in issues {
-    ///     println!("Issue Key: {}, Summary: {}", issue.issue_key.value(), issue.summary);
+    ///     println!("Issue Key: {}, Summary: {}", issue.key.value(), issue.summary);
     /// }
     /// ```
     ///
@@ -99,9 +103,9 @@ impl Dbms {
         // Build the `IN` clause dynamically
         let placeholders = keys.iter().map(|_| "?").collect::<Vec<_>>().join(", ");
         let sql = format!(
-            "SELECT issue_key, summary
+            "SELECT key, summary
             FROM issue
-            WHERE issue_key IN ({placeholders})"
+            WHERE key IN ({placeholders})"
         );
 
         // Prepare the parameters for the query
@@ -127,7 +131,7 @@ impl Dbms {
     pub fn find_unique_keys(&self) -> Result<Vec<IssueKey>, WorklogError> {
         let mut stmt = self
             .connection
-            .prepare("SELECT DISTINCT(issue_key) FROM worklog ORDER BY issue_key asc")?;
+            .prepare("SELECT DISTINCT(key) FROM worklog ORDER BY key asc")?;
         let issue_keys: Vec<IssueKey> = stmt
             .query_map([], |row| {
                 let key: String = row.get::<_, String>(0)?;
@@ -150,7 +154,7 @@ mod tests {
         // Example JiraIssue data
         let issues = vec![
             IssueSummary {
-                id: "1".to_string(),
+                id: 1.to_string(),
                 key: IssueKey::new("ISSUE-1"),
                 fields: Fields {
                     summary: "This is the first issue.".to_string(),
@@ -158,7 +162,7 @@ mod tests {
                 },
             },
             IssueSummary {
-                id: "2".to_string(),
+                id: 2.to_string(),
                 key: IssueKey::new("ISSUE-2"),
                 fields: Fields {
                     summary: "This is the second issue.".to_string(),

@@ -250,24 +250,26 @@ mod tests {
     use chrono::Days;
     use jira::models::core::Fields;
     use jira::models::issue::IssueSummary;
+
+    const ISSUE_ID: &str = "123";
     #[test]
     fn add_worklog_entry() -> Result<(), WorklogError> {
         let worklog = LocalWorklog {
+            id: "123".to_string(),
             issue_key: IssueKey::from("ABC-123"),
-            id: "1".to_string(),
             author: "Ola Dunk".to_string(),
             created: Local::now(),
             updated: Local::now(),
             started: Local::now(),
             timeSpent: "1h".to_string(),
             timeSpentSeconds: 3600,
-            issueId: "1001".to_string(),
+            issueId: ISSUE_ID.parse().unwrap(),
             comment: Some("Worked on the issue".to_string()),
         };
         let lws = setup()?;
 
         lws.add_jira_issues(&vec![IssueSummary {
-            id: "123".to_string(),
+            id: 123.to_string(),
             key: IssueKey::from("ABC-123"),
             fields: Fields {
                 summary: "Test".to_string(),
@@ -278,8 +280,8 @@ mod tests {
         lws.add_entry(&worklog)?;
 
         // Assert
-        let result = lws.find_worklog_by_id("1")?;
-        assert!(result.id == "1");
+        let result = lws.find_worklog_by_id(ISSUE_ID)?;
+        assert_eq!(result.id, ISSUE_ID, "expected id 123, got {}", result.id);
 
         Ok(())
     }
@@ -295,12 +297,12 @@ mod tests {
             started: Local::now(),
             timeSpent: "1h".to_string(),
             timeSpentSeconds: 3600,
-            issueId: "1001".to_string(),
+            issueId: ISSUE_ID.parse().unwrap(),
             comment: Some("Worked on the issue".to_string()),
         };
         let lws = setup()?;
         lws.add_jira_issues(&vec![IssueSummary {
-            id: "123".to_string(),
+            id: ISSUE_ID.to_string(),
             key: IssueKey::from("ABC-789"),
             fields: Fields {
                 summary: "Test".to_string(),
@@ -312,7 +314,7 @@ mod tests {
 
         // Assert
         let result = lws.find_worklog_by_id("1")?;
-        assert!(result.id == "1");
+        assert_eq!(result.id, "1");
 
         Ok(())
     }
@@ -330,11 +332,11 @@ mod tests {
             started: Local::now(),
             timeSpent: "1h".to_string(),
             timeSpentSeconds: 3600,
-            issueId: "1001".to_string(),
+            issueId: ISSUE_ID.parse().unwrap(),
             comment: Some("Worked on the issue".to_string()),
         };
         lws.add_jira_issues(&vec![IssueSummary {
-            id: "123".to_string(),
+            id: 123.to_string(),
             key: IssueKey::from("ABC-456"),
             fields: Fields {
                 summary: "Test".to_string(),

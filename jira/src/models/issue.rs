@@ -47,7 +47,7 @@ where
 #[allow(clippy::module_name_repetitions)]
 pub struct IssueSummary {
     pub id: String,
-    pub key: IssueKey, // TODO: Add components
+    pub key: IssueKey,
     pub fields: Fields,
 }
 

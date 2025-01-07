@@ -6,7 +6,7 @@ const CREATE_WORKLOG_TABLE_SQL: &str = r"
     CREATE TABLE IF NOT EXISTS worklog (
         id integer primary key not null,
         issue_key varchar(32),
-        issue_id varchar(32),
+        issue_id integer,
         author varchar(1024),
         created datetime,
         updated datetime,
@@ -14,7 +14,7 @@ const CREATE_WORKLOG_TABLE_SQL: &str = r"
         time_spent varchar(32),
         time_spent_seconds integer,
         comment varchar(1024),
-        FOREIGN KEY (issue_key) REFERENCES issue(issue_key) ON DELETE CASCADE
+        FOREIGN KEY (issue_id) REFERENCES issue(id) ON DELETE CASCADE
     );
 ";
 

@@ -234,7 +234,7 @@ mod tests {
                 started: now - chrono::Duration::days(2),
                 timeSpent: "1h".to_string(),
                 timeSpentSeconds: 3600,
-                issueId: "101".to_string(),
+                issueId: 101,
                 comment: Some("Worklog 1".to_string()),
             },
             LocalWorklog {
@@ -246,7 +246,7 @@ mod tests {
                 started: now - chrono::Duration::days(1),
                 timeSpent: "2h".to_string(),
                 timeSpentSeconds: 7200,
-                issueId: "102".to_string(),
+                issueId: 102,
                 comment: Some("Worklog 2".to_string()),
             },
             LocalWorklog {
@@ -258,7 +258,7 @@ mod tests {
                 started: now,
                 timeSpent: "30m".to_string(),
                 timeSpentSeconds: 1800,
-                issueId: "103".to_string(),
+                issueId: 103,
                 comment: None,
             },
         ];

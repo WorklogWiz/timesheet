@@ -1,5 +1,5 @@
 pub mod add;
+pub mod codes;
 pub mod del;
-pub mod issues;
 
 pub mod sync;

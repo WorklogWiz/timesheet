@@ -4,8 +4,8 @@ use jira::models::issue::IssueSummary;
 use jira::{Credentials, Jira};
 use operation::{
     add::{self, Add},
+    codes,
     del::{self, Del},
-    issues,
     sync::Sync,
 };
 use std::path::PathBuf;
@@ -136,7 +136,7 @@ impl ApplicationRuntime {
                 Ok(OperationResult::Deleted(id))
             }
             Operation::Codes => {
-                let issues = issues::execute(self).await?;
+                let issues = codes::execute(self).await?;
                 Ok(OperationResult::IssueSummaries(issues))
             }
             Operation::Sync(sync_cmd) => {

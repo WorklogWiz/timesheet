@@ -15,12 +15,25 @@ pub struct LocalWorklog {
     pub started: DateTime<Local>,
     pub timeSpent: String, // consider migrating to value type
     pub timeSpentSeconds: i32,
-    pub issueId: String, // Numeric FK to issue
+    pub issueId: i32, // Numeric FK to issue
     pub comment: Option<String>,
 }
 
 impl LocalWorklog {
-    /// Converts a Jira `Worklog` entry into a `LocalWorklog` entry
+    /// Converts a Jira `Worklog` entry into a `LocalWorklog` entry.
+    ///
+    /// # Arguments
+    ///
+    /// * `worklog` - A reference to a `Worklog` object from Jira that needs to be converted.
+    /// * `issue_key` - A reference to the `IssueKey` associated with the worklog entry.
+    ///
+    /// # Returns
+    ///
+    /// Returns a new `LocalWorklog` instance containing the converted data.
+    ///
+    /// # Panics
+    ///
+    /// This function will panic if `worklog.issueId` cannot be parsed into an `i32`.
     #[must_use]
     pub fn from_worklog(worklog: &Worklog, issue_key: &IssueKey) -> Self {
         LocalWorklog {
@@ -32,7 +45,7 @@ impl LocalWorklog {
             started: worklog.started.with_timezone(&Local),
             timeSpent: worklog.timeSpent.clone(),
             timeSpentSeconds: worklog.timeSpentSeconds,
-            issueId: worklog.issueId.clone(),
+            issueId: worklog.issueId.parse().unwrap(),
             comment: worklog.comment.clone(),
         }
     }

@@ -39,7 +39,7 @@ fn map_to_week_view(worklogs: &[LocalWorklog]) -> (Vec<(String, [u32; 7], u32)>,
         let day = worklog.started.weekday().num_days_from_monday();
         let mut found = false;
         for (code, times, row_sum) in &mut week_view {
-            if code == &worklog.issueId {
+            if code == &worklog.issueId.to_string() {
                 times[day as usize] += worklog.timeSpentSeconds as u32;
                 *row_sum += worklog.timeSpentSeconds as u32;
                 found = true;
@@ -51,7 +51,7 @@ fn map_to_week_view(worklogs: &[LocalWorklog]) -> (Vec<(String, [u32; 7], u32)>,
             let mut times = [0u32; 7];
             times[day as usize] = worklog.timeSpentSeconds as u32;
             week_view.push((
-                worklog.issueId.clone(),
+                worklog.issueId.to_string(),
                 times,
                 worklog.timeSpentSeconds as u32,
             ));
