@@ -1,11 +1,11 @@
+use crate::error::WorklogError;
+use crate::types::LocalWorklog;
 use chrono::{DateTime, Local};
 use jira::models::core::IssueKey;
 use jira::models::user::User;
 use jira::models::worklog::Worklog;
-use crate::error::WorklogError;
-use crate::types::LocalWorklog;
 
-pub trait WorkLogRepository {
+pub trait WorkLogRepository: Send + Sync {
     ///
     /// # Errors
     /// Returns an error something goes wrong

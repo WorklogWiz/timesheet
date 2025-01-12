@@ -6,7 +6,7 @@ use crate::repository::sqlite::sqlite_user_repo::SqliteUserRepository;
 use crate::repository::sqlite::sqlite_worklog_repo::SqliteWorklogRepository;
 use rusqlite::{Connection, Result};
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 /// Represents parameters for initializing the database connection
 pub enum DatabaseConfig {
@@ -17,6 +17,7 @@ pub enum DatabaseConfig {
     SqliteInMemory,
 
     /// A placeholder for a MySQL database (extendable to support other DBMS types)
+    #[allow(dead_code)]
     MySql {
         host: String,
         port: u16,
@@ -27,7 +28,7 @@ pub enum DatabaseConfig {
 }
 
 pub struct DatabaseManager {
-    connection: Arc<Connection>,
+    connection: Arc<Mutex<Connection>>,
 }
 
 impl DatabaseManager {
@@ -47,7 +48,7 @@ impl DatabaseManager {
             }
         };
 
-        let connection = Arc::new(connection);
+        let connection = Arc::new(Mutex::new(connection));
 
         // Initialize the schema (shared logic across all DB types)
         Self::initialize_schema(connection.clone(), config)?;
@@ -57,7 +58,7 @@ impl DatabaseManager {
 
     /// Internal method to handle schema initialization.
     fn initialize_schema(
-        connection: Arc<Connection>,
+        connection: Arc<Mutex<Connection>>,
         config: &DatabaseConfig,
     ) -> Result<(), WorklogError> {
         match config {
@@ -71,7 +72,7 @@ impl DatabaseManager {
     }
 
     /// Provide access to the shared database connection.
-    pub(crate) fn get_connection(&self) -> Arc<Connection> {
+    pub(crate) fn get_connection(&self) -> Arc<Mutex<Connection>> {
         self.connection.clone()
     }
 

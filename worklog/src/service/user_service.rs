@@ -15,4 +15,8 @@ impl<R: UserRepository> UserService<R> {
     pub fn insert_or_update_current_user(&self, user: &User) -> Result<(), WorklogError> {
         self.repo.insert_or_update_current_user(user)
     }
+
+    pub fn find_user(&self) -> Result<User, WorklogError> {
+        self.repo.find_user()
+    }
 }

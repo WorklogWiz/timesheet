@@ -4,14 +4,14 @@ use jira::models::core::IssueKey;
 use jira::models::project::Component;
 use log::debug;
 use rusqlite::{params, Connection};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-pub(crate) struct SqliteComponentRepository {
-    connection: Arc<Connection>,
+pub struct SqliteComponentRepository {
+    connection: Arc<Mutex<Connection>>,
 }
 
 impl SqliteComponentRepository {
-    pub(crate) fn new(connection: Arc<Connection>) -> Self {
+    pub(crate) fn new(connection: Arc<Mutex<Connection>>) -> Self {
         Self { connection }
     }
 }
@@ -23,7 +23,8 @@ const CREATE_COMPONENT_TABLE_SQL: &str = r"
     );
 ";
 
-pub fn create_component_table(conn: Arc<Connection>) -> Result<(), rusqlite::Error> {
+pub fn create_component_table(conn: Arc<Mutex<Connection>>) -> Result<(), rusqlite::Error> {
+    let conn = conn.lock().expect("component connection mutex poisoned");
     conn.execute(CREATE_COMPONENT_TABLE_SQL, [])?;
     Ok(())
 }
@@ -40,7 +41,10 @@ const CREATE_ISSUE_COMPONENT_TABLE_SQL: &str = r"
     );
 ";
 
-pub fn create_issue_component_table(conn: &rusqlite::Connection) -> Result<(), rusqlite::Error> {
+pub fn create_issue_component_table(conn: Arc<Mutex<Connection>>) -> Result<(), rusqlite::Error> {
+    let conn = conn
+        .lock()
+        .expect("issue component connection mutex poisoned");
     conn.execute(CREATE_ISSUE_COMPONENT_TABLE_SQL, [])?;
     Ok(())
 }
@@ -68,7 +72,11 @@ impl ComponentRepository for SqliteComponentRepository {
         issue_key: &IssueKey,
         components: &Vec<Component>,
     ) -> Result<(), WorklogError> {
-        let mut insert_component_stmt = self.connection.prepare(
+        let conn = self
+            .connection
+            .lock()
+            .expect("component connection mutex poisoned");
+        let mut insert_component_stmt = conn.prepare(
             "INSERT INTO component (id, name)
             VALUES (?1, ?2)
             ON CONFLICT(id) DO UPDATE SET name = excluded.name",
@@ -89,8 +97,11 @@ impl ComponentRepository for SqliteComponentRepository {
             }
         }
         // Links the components with the issues to maintain the many-to-many relationship
-        let mut insert_issue_component_stmt = self
+        let conn = self
             .connection
+            .lock()
+            .expect("component connection mutex poisoned");
+        let mut insert_issue_component_stmt = conn
             .prepare("INSERT OR IGNORE INTO issue_component (key, component_id) VALUES (?1, ?2)")?;
         for component in components {
             debug!(

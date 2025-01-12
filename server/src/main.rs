@@ -1,20 +1,21 @@
+use axum::routing::{get, post};
 use axum::{
     extract::State,
     http::StatusCode,
     response::{IntoResponse, Json, Response},
-    routing::{get, post},
     Router,
 };
 use chrono::{Duration, Local};
 use jira::models::core::IssueKey;
-use std::{net::SocketAddr, sync::Arc};
+use std::net::SocketAddr;
+use std::sync::Arc;
 use tokio::sync::Mutex;
-use tower_http::cors::{Any, CorsLayer};
 use worklog::{error::WorklogError, types::LocalWorklog, ApplicationRuntime};
 
 use serde_json::json;
 
 use thiserror::Error;
+use tower_http::cors::{Any, CorsLayer};
 
 #[derive(Error, Debug)]
 pub enum ServerError {
@@ -43,16 +44,15 @@ async fn get_worklogs(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<LocalWorklog>>, ServerError> {
     let runtime = state.runtime.lock().await;
-    let wls = runtime.worklog_service();
-    let keys = wls.find_unique_keys()?;
+    let keys = runtime.issue_service.find_unique_keys()?;
     let keys: Vec<IssueKey> = keys.into_iter().map(IssueKey::from).collect();
-    let worklogs = wls.find_worklogs_after(
+    let worklogs = runtime.worklog_service().find_worklogs_after(
         Local::now()
             .checked_sub_signed(Duration::days(365))
             .unwrap(),
         &keys,
         &[],
-    )?; // TODO: @ohvamstad, this will retrieve for all users, i.e. no filtering
+    )?; // Use public method to avoid referencing private type
 
     // Return the timesheet data as a JSON response
     Ok(Json(worklogs))
@@ -84,10 +84,10 @@ async fn main() -> Result<(), ServerError> {
         .allow_origin(Any)
         .allow_methods(Any)
         .allow_headers(Any);
-
     let state = AppState {
         runtime: Arc::new(Mutex::new(ApplicationRuntime::new()?)),
     };
+
     let app = Router::new()
         .route("/api/worklogs", get(get_worklogs))
         .route("/api/worklogs", post(post_worklog))

@@ -15,8 +15,8 @@ use operation::{
     add::{self, Add},
     codes,
     del::{self, Del},
-    sync::Sync,
 };
+use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use types::LocalWorklog;
@@ -25,7 +25,6 @@ pub mod config;
 pub mod date;
 pub mod error;
 pub mod operation;
-pub mod storage;
 
 pub mod types;
 
@@ -46,7 +45,7 @@ pub enum Operation {
     Add(Add),
     Del(Del),
     Codes,
-    Sync(Sync),
+    Sync(operation::sync::Sync),
 }
 
 pub enum OperationResult {
@@ -180,6 +179,12 @@ impl ApplicationRuntimeBuilder {
             DatabaseManager::new(&DatabaseConfig::SqliteInMemory)?
         } else {
             let path = PathBuf::from(&self.config.application_data.local_worklog);
+            if let Some(parent) = path.parent() {
+                if !parent.exists() {
+                    fs::create_dir_all(parent)?;
+                }
+            }
+
             DatabaseManager::new(&DatabaseConfig::SqliteOnDisk { path })?
         };
 

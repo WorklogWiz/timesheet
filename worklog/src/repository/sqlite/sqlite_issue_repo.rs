@@ -5,14 +5,14 @@ use jira::models::core::IssueKey;
 use jira::models::issue::IssueSummary;
 use log::debug;
 use rusqlite::{params, Connection};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 pub struct SqliteIssueRepository {
-    connection: Arc<Connection>,
+    connection: Arc<Mutex<Connection>>,
 }
 
 impl SqliteIssueRepository {
-    pub fn new(connection: Arc<Connection>) -> Self {
+    pub fn new(connection: Arc<Mutex<Connection>>) -> Self {
         Self { connection }
     }
 }
@@ -25,7 +25,8 @@ const CREATE_ISSUE_TABLE_SQL: &str = r"
     );
 ";
 
-pub(crate) fn create_issue_table(conn: Arc<Connection>) -> Result<(), rusqlite::Error> {
+pub(crate) fn create_issue_table(conn: Arc<Mutex<Connection>>) -> Result<(), rusqlite::Error> {
+    let conn = conn.lock().unwrap();
     conn.execute(CREATE_ISSUE_TABLE_SQL, [])?;
     Ok(())
 }
@@ -60,7 +61,8 @@ impl IssueRepository for SqliteIssueRepository {
     /// worklog_storage.add_jira_issues(&issues)?;
     /// ```
     fn add_jira_issues(&self, jira_issues: &Vec<IssueSummary>) -> Result<(), WorklogError> {
-        let mut stmt = self.connection.prepare(
+        let conn = self.connection.lock().unwrap();
+        let mut stmt = conn.prepare(
             "INSERT INTO issue (id, key, summary)
             VALUES (?1, ?2, ?3)
             ON CONFLICT(id) DO UPDATE SET summary = excluded.summary, key = excluded.key",
@@ -134,8 +136,8 @@ impl IssueRepository for SqliteIssueRepository {
 
         // Prepare the parameters for the query
         let params: Vec<String> = keys.iter().map(ToString::to_string).collect();
-
-        let mut stmt = self.connection.prepare(&sql)?;
+        let conn = self.connection.lock().unwrap();
+        let mut stmt = conn.prepare(&sql)?;
 
         let issues = stmt
             .query_map(rusqlite::params_from_iter(params), |row| {
@@ -153,9 +155,8 @@ impl IssueRepository for SqliteIssueRepository {
     /// # Errors
     /// Returns an error something goes wrong
     fn find_unique_keys(&self) -> Result<Vec<IssueKey>, WorklogError> {
-        let mut stmt = self
-            .connection
-            .prepare("SELECT DISTINCT(key) FROM worklog ORDER BY key asc")?;
+        let conn = self.connection.lock().unwrap();
+        let mut stmt = conn.prepare("SELECT DISTINCT(key) FROM worklog ORDER BY key asc")?;
         let issue_keys: Vec<IssueKey> = stmt
             .query_map([], |row| {
                 let key: String = row.get::<_, String>(0)?;

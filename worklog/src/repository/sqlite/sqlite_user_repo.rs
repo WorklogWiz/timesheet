@@ -2,14 +2,14 @@ use crate::error::WorklogError;
 use crate::repository::user_repository::UserRepository;
 use jira::models::user::User;
 use rusqlite::{params, Connection};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
-pub(crate) struct SqliteUserRepository {
-    connection: Arc<Connection>,
+pub struct SqliteUserRepository {
+    connection: Arc<Mutex<Connection>>,
 }
 
 impl SqliteUserRepository {
-    pub fn new(connection: Arc<Connection>) -> Self {
+    pub fn new(connection: Arc<Mutex<Connection>>) -> Self {
         Self { connection }
     }
 }
@@ -25,14 +25,16 @@ CREATE TABLE IF NOT EXISTS user (
 ";
 
 /// Creates the `user` table in the database.
-pub(crate) fn create_schema(connection: Arc<Connection>) -> Result<(), WorklogError> {
-    connection.execute(CREATE_USER_TABLE_SQL, [])?;
+pub(crate) fn create_schema(connection: Arc<Mutex<Connection>>) -> Result<(), WorklogError> {
+    let conn = connection.lock().map_err(|_| WorklogError::MutexPoisoned)?;
+    conn.execute(CREATE_USER_TABLE_SQL, [])?;
     Ok(())
 }
 impl UserRepository for SqliteUserRepository {
     fn insert_or_update_current_user(&self, user: &User) -> Result<(), WorklogError> {
         let sql = "INSERT OR IGNORE INTO user (account_id, email, display_name, timezone) VALUES (?, ?, ?, ?)";
-        let mut stmt = self.connection.as_ref().prepare(sql)?;
+        let conn = self.connection.lock().unwrap();
+        let mut stmt = conn.prepare(sql)?;
         stmt.execute(params![
             user.account_id,
             user.email_address,
@@ -45,7 +47,8 @@ impl UserRepository for SqliteUserRepository {
 
     fn find_user(&self) -> Result<User, WorklogError> {
         let sql = "select account_id, email, display_name, timezone from user";
-        let mut stmt = self.connection.prepare(sql)?;
+        let conn = self.connection.lock().unwrap();
+        let mut stmt = conn.prepare(sql)?;
         let mut user_iter = stmt.query_map([], |row| {
             Ok(User {
                 account_id: row.get(0)?,
@@ -67,10 +70,10 @@ impl UserRepository for SqliteUserRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::dbms::tests::setup;
+    use crate::repository::sqlite::tests::test_database_manager;
     #[test]
     fn test_add_user() -> Result<(), WorklogError> {
-        let lws = setup()?;
+        let db_manager = test_database_manager()?;
         let user = User {
             account_id: "712020:719b6d98-78c7-4c63-a564-299916c67765".to_string(),
             email_address: "steinar@gastroplanner.no".to_string(),
@@ -78,8 +81,9 @@ mod tests {
             time_zone: "Europe/Oslo".to_string(),
             self_url: "https://xxxxxxxx.atlassian.net/rest/api/2/user?accountId=713020:719b6d98-78c7-4c63-a564-299916c67765".to_string()
         };
-        lws.insert_or_update_current_user(&user)?;
-        let dbms_usr = lws.find_user()?;
+        let user_repo = db_manager.create_user_repository();
+        user_repo.insert_or_update_current_user(&user)?;
+        let dbms_usr = user_repo.find_user()?;
         assert_eq!(dbms_usr.account_id, user.account_id);
 
         Ok(())

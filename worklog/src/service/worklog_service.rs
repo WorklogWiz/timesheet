@@ -35,14 +35,17 @@ impl<R: WorkLogRepository> WorkLogService<R> {
         self.repo.add_worklog_entries(worklogs)
     }
 
+    #[allow(dead_code)]
     fn get_count(&self) -> Result<i64, WorklogError> {
         self.repo.get_count()
     }
 
+    #[allow(dead_code)]
     fn purge_entire_local_worklog(&self) -> Result<(), WorklogError> {
         self.repo.purge_entire_local_worklog()
     }
 
+    #[allow(dead_code)]
     fn find_worklog_by_id(&self, worklog_id: &str) -> Result<LocalWorklog, WorklogError> {
         self.repo.find_worklog_by_id(worklog_id)
     }

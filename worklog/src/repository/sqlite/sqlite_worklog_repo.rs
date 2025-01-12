@@ -8,9 +8,10 @@ use jira::models::worklog::Worklog;
 use log::debug;
 use rusqlite::{named_params, params, Connection};
 use std::sync::Arc;
+use std::sync::Mutex;
 
-pub(crate) struct SqliteWorklogRepository {
-    connection: Arc<Connection>,
+pub struct SqliteWorklogRepository {
+    connection: Arc<Mutex<Connection>>,
 }
 
 /// SQL statement to create the `worklog` table.
@@ -31,13 +32,14 @@ const CREATE_WORKLOG_TABLE_SQL: &str = r"
 ";
 
 /// Creates the `worklog` table in the database.
-pub fn create_worklog_table(connection: Arc<Connection>) -> Result<(), WorklogError> {
-    connection.execute(CREATE_WORKLOG_TABLE_SQL, [])?;
+pub fn create_worklog_table(connection: Arc<Mutex<Connection>>) -> Result<(), WorklogError> {
+    let conn = connection.lock().unwrap();
+    conn.execute(CREATE_WORKLOG_TABLE_SQL, [])?;
     Ok(())
 }
 
 impl SqliteWorklogRepository {
-    pub(crate) fn new(connection: Arc<Connection>) -> Self {
+    pub(crate) fn new(connection: Arc<Mutex<Connection>>) -> Self {
         Self { connection }
     }
 }
@@ -49,15 +51,21 @@ impl WorkLogRepository for SqliteWorklogRepository {
     }
 
     fn remove_entry_by_worklog_id(&self, wl_id: &str) -> Result<(), WorklogError> {
-        self.connection
-            .execute("DELETE FROM worklog WHERE id = ?1", params![wl_id])?;
+        let conn = self
+            .connection
+            .lock()
+            .map_err(|_| WorklogError::MutexPoisoned)?;
+        conn.execute("DELETE FROM worklog WHERE id = ?1", params![wl_id])?;
         Ok(())
     }
 
     fn add_entry(&self, local_worklog: &LocalWorklog) -> Result<(), WorklogError> {
         debug!("Adding {:?} to DBMS", &local_worklog);
-
-        let result = self.connection.execute(
+        let conn = self
+            .connection
+            .lock()
+            .map_err(|_e| WorklogError::MutexPoisoned)?;
+        let result = conn.execute(
             "INSERT INTO worklog (
             issue_key, id, author, created, updated, started, time_Spent, time_Spent_Seconds, issue_Id, comment
         ) VALUES (
@@ -82,8 +90,12 @@ impl WorkLogRepository for SqliteWorklogRepository {
     }
 
     fn add_worklog_entries(&self, worklogs: &[LocalWorklog]) -> Result<(), WorklogError> {
+        let conn = self
+            .connection
+            .lock()
+            .map_err(|_e| WorklogError::MutexPoisoned)?;
         // Prepare the SQL insert statement
-        let mut stmt = self.connection.prepare(r"
+        let mut stmt = conn.prepare(r"
             INSERT INTO worklog
                 (id, issue_key, issue_id, author, created, updated, started, time_spent, time_spent_seconds, comment)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -108,23 +120,32 @@ impl WorkLogRepository for SqliteWorklogRepository {
     }
 
     fn get_count(&self) -> Result<i64, WorklogError> {
-        let mut stmt = self
+        let conn = self
             .connection
-            .prepare("select count(*) from worklog")
-            .map_err(|e| {
-                WorklogError::Sql(format!("Unable to retrive count(*) from worklog: {e}"))
-            })?;
+            .lock()
+            .map_err(|_e| WorklogError::MutexPoisoned)?;
+        let mut stmt = conn.prepare("select count(*) from worklog").map_err(|e| {
+            WorklogError::Sql(format!("Unable to retrive count(*) from worklog: {e}"))
+        })?;
         let count = stmt.query_row([], |row| row.get(0))?;
         Ok(count)
     }
 
     fn purge_entire_local_worklog(&self) -> Result<(), WorklogError> {
-        self.connection.execute("delete from worklog", [])?;
+        let conn = self
+            .connection
+            .lock()
+            .map_err(|_e| WorklogError::MutexPoisoned)?;
+        conn.execute("delete from worklog", [])?;
         Ok(())
     }
 
     fn find_worklog_by_id(&self, worklog_id: &str) -> Result<LocalWorklog, WorklogError> {
-        let mut stmt = self.connection.prepare("SELECT issue_key, id, author, created, updated, started, time_spent, time_spent_seconds, issue_id, comment FROM worklog WHERE id = ?1")?;
+        let conn = self
+            .connection
+            .lock()
+            .map_err(|_e| WorklogError::MutexPoisoned)?;
+        let mut stmt = conn.prepare("SELECT issue_key, id, author, created, updated, started, time_spent, time_spent_seconds, issue_id, comment FROM worklog WHERE id = ?1")?;
         let id: i32 = worklog_id.parse().expect("Invalid number");
         let worklog = stmt.query_row(params![id], |row| {
             Ok(LocalWorklog {
@@ -195,7 +216,11 @@ impl WorkLogRepository for SqliteWorklogRepository {
         debug!("find_worklogs_after():- {sql}");
 
         // Prepare the query
-        let mut stmt = self.connection.prepare(&sql)?;
+        let conn = self
+            .connection
+            .lock()
+            .map_err(|_e| WorklogError::MutexPoisoned)?;
+        let mut stmt = conn.prepare(&sql)?;
 
         // Execute the query and map results
         let worklogs = stmt
@@ -227,8 +252,7 @@ mod tests {
     use jira::models::core::Fields;
     use jira::models::issue::IssueSummary;
 
-    use crate::repository::sqlite::tests::create_issue_repo_for_test;
-    use crate::repository::sqlite::tests::create_worklog_repo_for_test;
+    use crate::repository::sqlite::tests::test_database_manager;
 
     const ISSUE_ID: &str = "123";
     #[test]
@@ -246,7 +270,8 @@ mod tests {
             comment: Some("Worked on the issue".to_string()),
         };
 
-        let issue_repo_for_test = create_issue_repo_for_test();
+        let db_manager = test_database_manager()?;
+        let issue_repo_for_test = db_manager.create_issue_repository();
 
         issue_repo_for_test.add_jira_issues(&vec![IssueSummary {
             id: 123.to_string(),
@@ -257,7 +282,7 @@ mod tests {
             },
         }])?;
 
-        let worklog_repo_for_test = create_worklog_repo_for_test();
+        let worklog_repo_for_test = db_manager.create_worklog_repository();
 
         worklog_repo_for_test.add_entry(&worklog)?;
 
@@ -282,7 +307,8 @@ mod tests {
             issueId: ISSUE_ID.parse().unwrap(),
             comment: Some("Worked on the issue".to_string()),
         };
-        let issue_repo = create_issue_repo_for_test();
+        let db_manager = test_database_manager()?;
+        let issue_repo = db_manager.create_issue_repository();
         issue_repo.add_jira_issues(&vec![IssueSummary {
             id: ISSUE_ID.to_string(),
             key: IssueKey::from("ABC-789"),
@@ -292,7 +318,7 @@ mod tests {
             },
         }])?;
 
-        let worklog_repo = create_worklog_repo_for_test();
+        let worklog_repo = db_manager.create_worklog_repository();
         worklog_repo.add_worklog_entries(&[worklog])?;
 
         // Assert
@@ -304,7 +330,7 @@ mod tests {
 
     #[test]
     fn find_worklogs_after() -> Result<(), WorklogError> {
-        let test_worklog_repo = create_worklog_repo_for_test();
+        let db_manager = test_database_manager()?;
 
         let worklog = LocalWorklog {
             issue_key: IssueKey::from("ABC-456"),
@@ -318,7 +344,7 @@ mod tests {
             issueId: ISSUE_ID.parse().unwrap(),
             comment: Some("Worked on the issue".to_string()),
         };
-        let test_issue_repo = create_issue_repo_for_test();
+        let test_issue_repo = db_manager.create_issue_repository();
         test_issue_repo.add_jira_issues(&vec![IssueSummary {
             id: 123.to_string(),
             key: IssueKey::from("ABC-456"),
@@ -328,6 +354,7 @@ mod tests {
             },
         }])?;
 
+        let test_worklog_repo = db_manager.create_worklog_repository();
         test_worklog_repo.add_entry(&worklog)?;
 
         let result = test_worklog_repo.find_worklogs_after(

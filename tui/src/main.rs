@@ -6,7 +6,9 @@ use ratatui::{
     DefaultTerminal,
 };
 use std::error::Error;
-use worklog::{config, storage::dbms::Dbms, types::LocalWorklog};
+use worklog::{
+    types::LocalWorklog, ApplicationRuntime, ApplicationRuntimeBuilder,
+};
 
 use chrono::{
     offset::TimeZone, DateTime, Datelike, Duration, Local, NaiveDate, NaiveTime, Weekday,
@@ -66,7 +68,7 @@ fn map_to_week_view(worklogs: &[LocalWorklog]) -> (Vec<(String, [u32; 7], u32)>,
 
 #[allow(clippy::type_complexity)]
 fn fetch_weekly_data(
-    worklog_service: &Dbms,
+    runtime: &ApplicationRuntime,
     start_of_week: DateTime<Local>,
 ) -> (Vec<(String, [u32; 7], u32)>, [u32; 7], u32) {
     /*
@@ -88,7 +90,11 @@ fn fetch_weekly_data(
         }))
         .await;
      */
-    let mut all_local = match worklog_service.find_worklogs_after(start_of_week, &[], &[]) {
+
+    let mut all_local = match runtime
+        .worklog_service()
+        .find_worklogs_after(start_of_week, &[], &[])
+    {
         Ok(worklogs) => worklogs,
         Err(e) => {
             panic!("Unable to retrieve worklogs from local work log database {e}");
@@ -101,12 +107,12 @@ fn fetch_weekly_data(
 
 #[allow(clippy::unused_async)]
 async fn run(mut terminal: DefaultTerminal) -> Result<(), Box<dyn Error>> {
-    let worklog_service = Dbms::new(&config::worklog_file())?;
+    let runtime = ApplicationRuntimeBuilder::new().build()?;
     let mut current_date = Local::now();
 
     loop {
         let (week, start_of_week, end_of_week) = week_bounds(current_date);
-        let (week_data, column_sums, row_sums) = fetch_weekly_data(&worklog_service, start_of_week);
+        let (week_data, column_sums, row_sums) = fetch_weekly_data(&runtime, start_of_week);
 
         let rows: Vec<Row> = week_data
             .iter()
