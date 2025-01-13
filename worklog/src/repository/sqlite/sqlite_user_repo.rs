@@ -3,6 +3,7 @@ use crate::repository::user_repository::UserRepository;
 use jira::models::user::User;
 use rusqlite::{params, Connection};
 use std::sync::{Arc, Mutex};
+use crate::repository::SharedSqliteConnection;
 
 pub struct SqliteUserRepository {
     connection: Arc<Mutex<Connection>>,
@@ -25,7 +26,7 @@ CREATE TABLE IF NOT EXISTS user (
 ";
 
 /// Creates the `user` table in the database.
-pub(crate) fn create_schema(connection: Arc<Mutex<Connection>>) -> Result<(), WorklogError> {
+pub(crate) fn create_schema(connection: &SharedSqliteConnection) -> Result<(), WorklogError> {
     let conn = connection.lock().map_err(|_| WorklogError::LockPoisoned)?;
     conn.execute(CREATE_USER_TABLE_SQL, [])?;
     Ok(())

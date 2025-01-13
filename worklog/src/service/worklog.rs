@@ -38,6 +38,13 @@ impl WorkLogService {
     /// # Returns
     ///
     /// A `Result` indicating success (`Ok`) or a `WorklogError` (`Err`) if the operation fails.
+    ///
+    ///
+    /// # Errors
+    ///
+    /// This function will return a `WorklogError` if:
+    /// - The repository operation fails due to a database issue or unexpected error.
+    /// - The provided worklog ID does not exist in the repository or cannot be removed.
     pub fn remove_worklog_entry(&self, wl: &Worklog) -> Result<(), WorklogError> {
         self.repo.remove_entry_by_worklog_id(wl.id.as_str())
     }
@@ -51,6 +58,12 @@ impl WorkLogService {
     /// # Returns
     ///
     /// A `Result` indicating success (`Ok`) or a `WorklogError` (`Err`) if the operation fails.
+    ///
+    /// # Errors
+    ///
+    /// This function will return a `WorklogError` if:
+    /// - The repository operation fails due to a database issue or unexpected error.
+    /// - The provided worklog ID does not exist in the repository.
     pub fn remove_entry_by_worklog_id(&self, wl_id: &str) -> Result<(), WorklogError> {
         self.repo.remove_entry_by_worklog_id(wl_id)
     }
@@ -64,6 +77,11 @@ impl WorkLogService {
     /// # Returns
     ///
     /// A `Result` indicating success (`Ok`) or a `WorklogError` (`Err`) if the operation fails.
+    ///
+    /// # Errors
+    ///
+    /// This function will return a `WorklogError` if:
+    /// - The repository operation fails due to a database issue or unexpected error.
     pub fn add_entry(&self, local_worklog: &LocalWorklog) -> Result<(), WorklogError> {
         self.repo.add_entry(local_worklog)
     }
@@ -133,6 +151,12 @@ impl WorkLogService {
     /// A `Result`:
     /// - `Ok(Vec<LocalWorklog>)` - A vector of matching `LocalWorklog` entries if found successfully.
     /// - `Err(WorklogError)` - An error if the operation fails or no matching worklogs are found.
+    ///
+    /// # Errors
+    ///
+    /// This function will return a `WorklogError` if:
+    /// - The repository operation fails due to a database issue or unexpected error.
+    /// - No matching worklogs are found based on the provided filters.
     pub fn find_worklogs_after(
         &self,
         start_datetime: DateTime<Local>,

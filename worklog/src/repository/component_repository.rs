@@ -23,6 +23,6 @@ pub trait ComponentRepository: Send + Sync {
     fn create_component(
         &self,
         issue_key: &IssueKey,
-        components: &Vec<Component>,
+        components: &[Component],
     ) -> Result<(), WorklogError>;
 }

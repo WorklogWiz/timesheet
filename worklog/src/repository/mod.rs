@@ -11,6 +11,6 @@ pub(crate) mod worklog_repository;
 pub(crate) mod database_manager;
 pub(crate) mod sqlite;
 
-/// A thread-safe, shared connection to an SQLite database,
+/// A thread-safe, shared connection to an ``SQLite`` database,
 /// used across multiple repository layers.
 pub(crate) type SharedSqliteConnection = Arc<Mutex<Connection>>;

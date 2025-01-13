@@ -9,6 +9,7 @@ use log::debug;
 use rusqlite::{named_params, params, Connection};
 use std::sync::Arc;
 use std::sync::Mutex;
+use crate::repository::SharedSqliteConnection;
 
 pub struct SqliteWorklogRepository {
     connection: Arc<Mutex<Connection>>,
@@ -32,7 +33,7 @@ const CREATE_WORKLOG_TABLE_SQL: &str = r"
 ";
 
 /// Creates the `worklog` table in the database.
-pub fn create_worklog_table(connection: Arc<Mutex<Connection>>) -> Result<(), WorklogError> {
+pub fn create_worklog_table(connection: &SharedSqliteConnection) -> Result<(), WorklogError> {
     let conn = connection.lock().unwrap();
     conn.execute(CREATE_WORKLOG_TABLE_SQL, [])?;
     Ok(())

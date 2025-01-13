@@ -44,6 +44,7 @@ use jira::models::core::IssueKey;
 use jira::models::project::Component;
 use std::sync::Arc;
 
+#[allow(clippy::module_name_repetitions)]
 pub struct ComponentService {
     repository: Arc<dyn ComponentRepository>,
 }
@@ -64,10 +65,20 @@ impl ComponentService {
     ///
     /// * `Ok(())` if the components are successfully created.
     /// * `Err(WorklogError)` if an error occurs while creating the components.
+    ///
+    /// # Errors
+    ///
+    /// This function returns the following errors:
+    ///
+    /// * `WorklogError` - if the repository fails to create the components due to a database or 
+    ///   network issue, or if the input data is invalid.
+    ///
+    /// Ensure that the `ComponentRepository` implementation used by this service handles errors
+    /// correctly and provides meaningful descriptions for debugging.
     pub fn create_component(
         &self,
         issue_key: &IssueKey,
-        components: &Vec<Component>,
+        components: &[Component],
     ) -> Result<(), WorklogError> {
         self.repository.create_component(issue_key, components)
     }

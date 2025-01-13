@@ -8,6 +8,7 @@ use crate::repository::user_repository::UserRepository;
 use jira::models::user::User;
 use std::sync::Arc;
 
+#[allow(clippy::module_name_repetitions)]
 pub struct UserService {
     repo: Arc<dyn UserRepository>,
 }

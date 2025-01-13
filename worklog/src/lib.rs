@@ -14,10 +14,10 @@
 /// * `component_service` - A shared instance of the `ComponentService` for managing components.
 use crate::error::WorklogError;
 use crate::repository::database_manager::{DatabaseConfig, DatabaseManager};
-use crate::service::component_service::ComponentService;
-use crate::service::issue_service::IssueService;
-use crate::service::user_service::UserService;
-use crate::service::worklog_service::WorkLogService;
+use crate::service::component::ComponentService;
+use crate::service::issue::IssueService;
+use crate::service::user::UserService;
+use crate::service::worklog::WorkLogService;
 use config::AppConfiguration;
 use jira::models::issue::IssueSummary;
 use jira::{Credentials, Jira};
@@ -102,22 +102,27 @@ impl ApplicationRuntime {
         ApplicationRuntimeBuilder::new().build()
     }
 
+    #[must_use]
     pub fn jira_client(&self) -> &Jira {
         &self.client
     }
 
+    #[must_use]
     pub fn worklog_service(&self) -> Arc<WorkLogService> {
         self.worklog_service.clone()
     }
 
+    #[must_use]
     pub fn user_service(&self) -> Arc<UserService> {
         self.user_service.clone()
     }
 
+    #[must_use]
     pub fn issue_service(&self) -> Arc<IssueService> {
         self.issue_service.clone()
     }
 
+    #[must_use]
     pub fn component_service(&self) -> Arc<ComponentService> {
         self.component_service.clone()
     }
@@ -200,7 +205,7 @@ impl ApplicationRuntime {
 /// # Builder Methods
 ///
 /// - [`ApplicationRuntimeBuilder::new`] initializes the builder with default configuration.
-/// - [`ApplicationRuntimeBuilder::use_in_memory_db`] configures the runtime to use an in-memory SQLite database,
+/// - [`ApplicationRuntimeBuilder::use_in_memory_db`] configures the runtime to use an in-memory ``SQLite`` database,
 ///   suitable for testing.
 /// - [`ApplicationRuntimeBuilder::build`] finalizes the configuration and creates the `ApplicationRuntime` instance.
 ///
@@ -235,6 +240,37 @@ pub struct ApplicationRuntimeBuilder {
 }
 
 impl ApplicationRuntimeBuilder {
+    /// Creates a new instance of `ApplicationRuntimeBuilder` with default settings.
+    ///
+    /// This method initializes the builder with the application's configuration loaded
+    /// from disk. By default, the created builder uses an on-disk database for persistent
+    /// storage. Use [`ApplicationRuntimeBuilder::use_in_memory_db`] to configure it for
+    /// testing scenarios or temporary setups that do not require persistent storage.
+    ///
+    /// # Returns
+    ///
+    /// A new `ApplicationRuntimeBuilder` instance configured with default values.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use your_crate::ApplicationRuntimeBuilder;
+    ///
+    /// let builder = ApplicationRuntimeBuilder::new();
+    /// let runtime = builder.build().expect("Failed to build ApplicationRuntime");
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// It will panic if the application configuration cannot be loaded from disk.
+    ///
+    ///
+    /// # Panics
+    ///
+    /// This method will panic if the application configuration cannot be loaded from disk.
+    /// Ensure that the configuration file exists and is accessible before calling this method.
+    #[must_use]
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         // Load the configuration from disk as the default.
         let config = config::load().expect("Failed to load configuration");
@@ -244,13 +280,65 @@ impl ApplicationRuntimeBuilder {
         }
     }
 
-    /// Override to use an in-memory SQLite database, used for testing.
+    
+    /// Configures the `ApplicationRuntime` to use an in-memory database.
+    ///
+    /// # Returns
+    ///
+    /// Returns the updated `ApplicationRuntimeBuilder` instance.
+    ///
+    /// # Examples
+    ///
+    /// In the example below, we configure the runtime to use an in-memory database, 
+    /// which is particularly useful for testing scenarios.
+    ///
+    /// ```rust,ignore
+    /// let runtime = ApplicationRuntimeBuilder::new()
+    ///     .use_in_memory_db()
+    ///     .build()
+    ///     .expect("Failed to create runtime with in-memory database");
+    /// ```
+    ///
+    /// This setting prevents any changes to the local filesystem, avoiding persistent
+    /// storage, and instead everything operates within memory.
+    #[must_use]
     pub fn use_in_memory_db(mut self) -> Self {
         self.use_in_memory_db = true;
         self
     }
 
-    /// Builds the runtime, applying any overrides dynamically.
+    
+    /// Finalizes the construction of the `ApplicationRuntime` instance.
+    ///
+    /// This method initializes various components required by `ApplicationRuntime`, such as
+    /// database connection manager, Jira client, and various repositories and services.
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(ApplicationRuntime)` if the runtime is successfully created with all its components initialized.
+    /// - `Err(WorklogError)` if initialization fails at any stage, such as when the database manager
+    ///   or Jira client cannot be created.
+    ///
+    /// # Example
+    ///
+    /// ```rust,ignore
+    /// use your_crate::ApplicationRuntimeBuilder;
+    ///
+    /// let runtime = ApplicationRuntimeBuilder::new()
+    ///     .use_in_memory_db() // Configure for in-memory database, useful for testing
+    ///     .build()
+    ///     .expect("Failed to build ApplicationRuntime");
+    ///
+    /// // Use the runtime for application operations
+    /// ```
+    ///
+    ///
+    /// # Errors
+    ///
+    /// - [`WorklogError::ConfigurationError`]: This error occurs if the configuration fails to load during initialization or contains invalid values.
+    /// - [`WorklogError::DatabaseError`]: This error occurs if the database connection manager fails to initialize either due to invalid configuration or runtime errors.
+    /// - [`WorklogError::ClientInitializationError`]: This error occurs if the Jira client fails to initialize, such as when provided with incorrect credentials or an invalid URL.
+    /// - [`WorklogError::IoError`]: This error occurs when there are issues with file system operations, such as failing to create required directories for on-disk databases.
     pub fn build(&self) -> Result<ApplicationRuntime, WorklogError> {
         let database_manager = &self.initialise_database_connection_manager()?;
 

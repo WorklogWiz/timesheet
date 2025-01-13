@@ -1,9 +1,9 @@
-pub mod user_service;
-pub mod worklog_service;
+pub mod user;
+pub mod worklog;
 
-pub mod issue_service;
+pub mod issue;
 
-pub mod component_service;
+pub mod component;
 
 #[cfg(test)]
 mod tests {}

@@ -2,7 +2,7 @@
 //! for managing and interacting with database connections and repositories.
 //!
 //! The `DatabaseConfig` enum defines supported database configurations,
-//! including SQLite (on-disk and in-memory) and a placeholder for MySQL,
+//! including ``SQLite`` (on-disk and in-memory) and a placeholder for `MySQL`,
 //! which can be extended to support other DBMS types in the future.
 //!
 //! The `DatabaseManager` struct serves as a high-level interface for
@@ -43,14 +43,14 @@ use std::sync::{Arc, Mutex};
 /// A configuration enum that defines the parameters required for initializing
 /// database connections.
 ///
-/// This enum supports SQLite configurations (both on-disk and in-memory) and
-/// contains a placeholder variant for MySQL, which can be extended to support
+/// This enum supports `SQLite` configurations (both on-disk and in-memory) and
+/// contains a placeholder variant for ``MySQL``, which can be extended to support
 /// additional database types in the future.
 ///
 /// # Variants
 ///
 /// * `SqliteOnDisk`
-///   Represents an SQLite database stored on a physical file disk. Requires
+///   Represents an `SQLite` database stored on a physical file disk. Requires
 ///   a file path to specify the database location.
 ///
 ///   Example:
@@ -64,7 +64,7 @@ use std::sync::{Arc, Mutex};
 ///   ```
 ///
 /// * `SqliteInMemory`
-///   Represents an SQLite database that operates entirely in memory. This
+///   Represents an `SQLite` database that operates entirely in memory. This
 ///   option is typically used for development, testing, or scenarios that do
 ///   not require data persistence.
 ///
@@ -75,18 +75,18 @@ use std::sync::{Arc, Mutex};
 ///   ```
 ///
 /// * `MySql`
-///   A placeholder for MySQL database configuration. Includes parameters
+///   A placeholder for `MySQL` database configuration. Includes parameters
 ///   such as `host`, `port`, `username`, `password`, and the database name.
 ///   This variant is currently marked as unimplemented and serves as a
-///   starting point for extending support to MySQL or similar DBMS types.
+///   starting point for extending support to `MySQL` or similar DBMS types.
 pub enum DatabaseConfig {
-    /// SQLite database with a specific file path
+    /// `SQLite` database with a specific file path
     SqliteOnDisk { path: PathBuf },
 
-    /// SQLite database that runs entirely in memory
+    /// `SQLite` database that runs entirely in memory
     SqliteInMemory,
 
-    /// A placeholder for a MySQL database (extendable to support other DBMS types)
+    /// A placeholder for a `MySQL` database (extendable to support other DBMS types)
     #[allow(dead_code)]
     MySql {
         host: String,
@@ -99,21 +99,21 @@ pub enum DatabaseConfig {
 
 /// Represents the configuration options for various database types.
 ///
-/// This enum defines supported database configurations, including SQLite (both on-disk
-/// and in-memory) and provides a placeholder for MySQL support. It can be extended
+/// This enum defines supported database configurations, including `SQLite` (both on-disk
+/// and in-memory) and provides a placeholder for `MySQL` support. It can be extended
 /// further to accommodate other database management systems (DBMS) in the future.
 ///
 /// # Variants
 ///
 /// * `SqliteOnDisk`
-///   Represents an SQLite database stored on disk, using a specific file path.
+///   Represents an ``SQLite`` database stored on disk, using a specific file path.
 ///
 /// * `SqliteInMemory`
-///   Represents an SQLite database that operates entirely in memory. This configuration
+///   Represents an ``SQLite`` database that operates entirely in memory. This configuration
 ///   is typically used for testing or environments where persistence is not required.
 ///
 /// * `MySql`
-///   Provides a placeholder configuration for a MySQL database. This variant includes
+///   Provides a placeholder configuration for a ``MySQL`` database. This variant includes
 ///   parameters such as host, port, username, password, and the database name.
 ///
 /// # Examples
@@ -122,17 +122,17 @@ pub enum DatabaseConfig {
 /// /// use std::path::PathBuf;
 /// use crate::db::DatabaseConfig;
 ///
-/// // Example: Creating an SQLite on-disk database configuration
+/// // Example: Creating an `SQLite` on-disk database configuration
 /// let config = DatabaseConfig::SqliteOnDisk {
 ///     path: PathBuf::from("my_database.db"),
 /// };
 ///
-/// // Example: Creating an SQLite in-memory database configuration
+/// // Example: Creating an `SQLite` in-memory database configuration
 /// let config_in_memory = DatabaseConfig::SqliteInMemory;
 /// ```
 pub enum DbConnection {
     Sqlite(SharedSqliteConnection),
-    // Add other types for MySQL, PostgreSql, etc.
+    // Add other types for `MySQL`, PostgreSql, etc.
 }
 
 pub struct DatabaseManager {
@@ -155,13 +155,13 @@ impl DatabaseManager {
 
         // Initialize the schema (shared logic across all DB types).
         Self::initialize_schema(&connection).map_err(|e| {
-            WorklogError::DatabaseError(format!("Failed to initialize schema: {}", e))
+            WorklogError::DatabaseError(format!("Failed to initialize schema: {e}"))
         })?;
 
         Ok(Self { connection })
     }
 
-    /// Helper function to create a SQLite connection with error handling.
+    /// Helper function to create a ``SQLite`` connection with error handling.
     fn create_sqlite_connection<F, G>(connect: F, context: G) -> Result<DbConnection, WorklogError>
     where
         F: FnOnce() -> rusqlite::Result<Connection>,
@@ -169,7 +169,7 @@ impl DatabaseManager {
     {
         let connection = connect().map_err(|e| {
             WorklogError::DatabaseError(format!(
-                "Failed to open SQLite database ({}): {}",
+                "Failed to open `SQLite` database ({}): {}",
                 context(),
                 e
             ))
@@ -181,14 +181,14 @@ impl DatabaseManager {
     /// Internal method to handle schema initialization.
     fn initialize_schema(connection: &DbConnection) -> Result<(), WorklogError> {
         match connection {
-            DbConnection::Sqlite(conn) => sqlite::create_schema(conn.clone()),
+            DbConnection::Sqlite(conn) => sqlite::create_schema(conn),
         }
     }
 
     /// Creates and returns an `Arc`-wrapped `SqliteIssueRepository` instance.
     ///
     /// This method uses the current database connection to initialize a new
-    /// SQLite-based issue repository.
+    /// `SQLite`-based issue repository.
     ///
     /// # Returns
     ///
@@ -209,7 +209,7 @@ impl DatabaseManager {
     /// Creates and returns an `Arc`-wrapped `SqliteWorklogRepository` instance.
     ///
     /// This method uses the current database connection to initialize a new
-    /// SQLite-based worklog repository.
+    /// `SQLite`-based worklog repository.
     ///
     /// # Returns
     ///
@@ -231,7 +231,7 @@ impl DatabaseManager {
     /// Creates and returns an `Arc`-wrapped `SqliteComponentRepository` instance.
     ///
     /// This method uses the current database connection to initialize a new
-    /// SQLite-based component repository.
+    /// `SQLite`-based component repository.
     ///
     /// # Returns
     ///
@@ -253,7 +253,7 @@ impl DatabaseManager {
     /// Creates and returns an `Arc`-wrapped `SqliteComponentRepository` instance.
     ///
     /// This method utilizes the current database connection to initialize a new
-    /// SQLite-based component repository, which provides operations related to
+    /// `SQLite`-based component repository, which provides operations related to
     /// specific components in the system.
     ///
     /// # Returns

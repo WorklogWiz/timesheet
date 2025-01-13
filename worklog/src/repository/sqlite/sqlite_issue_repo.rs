@@ -25,7 +25,7 @@ const CREATE_ISSUE_TABLE_SQL: &str = r"
     );
 ";
 
-pub(crate) fn create_issue_table(conn: SharedSqliteConnection) -> Result<(), rusqlite::Error> {
+pub(crate) fn create_issue_table(conn: &SharedSqliteConnection) -> Result<(), rusqlite::Error> {
     let conn = conn.lock().unwrap();
     conn.execute(CREATE_ISSUE_TABLE_SQL, [])?;
     Ok(())
@@ -60,7 +60,7 @@ impl IssueRepository for SqliteIssueRepository {
     ///
     /// worklog_storage.add_jira_issues(&issues)?;
     /// ```
-    fn add_jira_issues(&self, jira_issues: &Vec<IssueSummary>) -> Result<(), WorklogError> {
+    fn add_jira_issues(&self, jira_issues: &[IssueSummary]) -> Result<(), WorklogError> {
         let conn = self
             .connection
             .lock()
@@ -120,7 +120,7 @@ impl IssueRepository for SqliteIssueRepository {
     ///
     fn get_issues_filtered_by_keys(
         &self,
-        keys: &Vec<IssueKey>,
+        keys: &[IssueKey],
     ) -> Result<Vec<JiraIssueInfo>, WorklogError> {
         if keys.is_empty() {
             // Return an empty vector if no keys are provided

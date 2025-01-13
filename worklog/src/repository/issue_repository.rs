@@ -32,7 +32,7 @@ pub trait IssueRepository: Sync + Send {
     ///
     /// worklog_storage.add_jira_issues(&issues)?;
     /// ```
-    fn add_jira_issues(&self, jira_issues: &Vec<IssueSummary>) -> Result<(), WorklogError>;
+    fn add_jira_issues(&self, jira_issues: &[IssueSummary]) -> Result<(), WorklogError>;
 
     ///
     /// Retrieves a list of issues from the database filtered by the provided issue keys.
@@ -69,7 +69,7 @@ pub trait IssueRepository: Sync + Send {
     ///
     fn get_issues_filtered_by_keys(
         &self,
-        keys: &Vec<IssueKey>,
+        keys: &[IssueKey],
     ) -> Result<Vec<JiraIssueInfo>, WorklogError>;
 
     ///

@@ -28,10 +28,12 @@ use jira::models::core::IssueKey;
 use jira::models::issue::IssueSummary;
 use std::sync::Arc;
 
+#[allow(clippy::module_name_repetitions)]
 pub struct IssueService {
     repo: Arc<dyn IssueRepository>,
 }
 
+#[allow(clippy::module_name_repetitions)]
 impl IssueService {
     pub fn new(repo: Arc<dyn IssueRepository>) -> Self {
         Self { repo }
@@ -64,7 +66,7 @@ impl IssueService {
     ///
     /// worklog_storage.add_jira_issues(&issues)?;
     /// ```
-    pub fn add_jira_issues(&self, jira_issues: &Vec<IssueSummary>) -> Result<(), WorklogError> {
+    pub fn add_jira_issues(&self, jira_issues: &[IssueSummary]) -> Result<(), WorklogError> {
         self.repo.add_jira_issues(jira_issues)
     }
 
@@ -103,7 +105,7 @@ impl IssueService {
     ///
     pub fn get_issues_filtered_by_keys(
         &self,
-        keys: &Vec<IssueKey>,
+        keys: &[IssueKey],
     ) -> Result<Vec<JiraIssueInfo>, WorklogError> {
         self.repo.get_issues_filtered_by_keys(keys)
     }

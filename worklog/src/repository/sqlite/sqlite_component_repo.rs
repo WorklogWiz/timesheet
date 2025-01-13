@@ -4,8 +4,7 @@ use crate::repository::SharedSqliteConnection;
 use jira::models::core::IssueKey;
 use jira::models::project::Component;
 use log::debug;
-use rusqlite::{params, Connection};
-use std::sync::{Arc, Mutex};
+use rusqlite::params;
 
 pub struct SqliteComponentRepository {
     connection: SharedSqliteConnection,
@@ -24,7 +23,7 @@ const CREATE_COMPONENT_TABLE_SQL: &str = r"
     );
 ";
 
-pub fn create_component_table(conn: SharedSqliteConnection) -> Result<(), rusqlite::Error> {
+pub fn create_component_table(conn: &SharedSqliteConnection) -> Result<(), rusqlite::Error> {
     let conn = conn.lock().expect("component connection mutex poisoned");
     conn.execute(CREATE_COMPONENT_TABLE_SQL, [])?;
     Ok(())
@@ -42,7 +41,7 @@ const CREATE_ISSUE_COMPONENT_TABLE_SQL: &str = r"
     );
 ";
 
-pub fn create_issue_component_table(conn: Arc<Mutex<Connection>>) -> Result<(), rusqlite::Error> {
+pub fn create_issue_component_table(conn: &SharedSqliteConnection) -> Result<(), rusqlite::Error> {
     let conn = conn
         .lock()
         .expect("issue component connection mutex poisoned");
@@ -71,7 +70,7 @@ impl ComponentRepository for SqliteComponentRepository {
     fn create_component(
         &self,
         issue_key: &IssueKey,
-        components: &Vec<Component>,
+        components: &[Component],
     ) -> Result<(), WorklogError> {
         let conn = self
             .connection
