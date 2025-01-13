@@ -1,3 +1,26 @@
+//! This module contains the `IssueService` struct and its associated methods for managing Jira issues.
+//!
+//! The `IssueService` provides various functionalities for interacting with a local database of Jira issues.
+//! It abstracts common operations such as adding, retrieving, and fetching unique keys for Jira issues,
+//! delegating most of the actual database operations to an `IssueRepository`.
+//!
+//! # Structs
+//!
+//! - `IssueService`: A service layer that provides methods for adding and retrieving Jira issues.
+//!
+//! # Errors
+//!
+//! All methods in this module use the `WorklogError` to report errors encountered during database operations.
+//!
+//! # Dependencies
+//!
+//! This module depends on the following external crates:
+//! - `jira`: For handling Jira-related structures such as `IssueKey` and `IssueSummary`.
+//! - `std::sync::Arc`: For handling thread-safe references to the `IssueRepository`.
+//!
+//! # Examples
+//!
+//! Please see individual method documentation for usage examples.
 use crate::error::WorklogError;
 use crate::repository::issue_repository::IssueRepository;
 use crate::types::JiraIssueInfo;
@@ -5,12 +28,12 @@ use jira::models::core::IssueKey;
 use jira::models::issue::IssueSummary;
 use std::sync::Arc;
 
-pub struct IssueService<R: IssueRepository> {
-    repo: Arc<R>,
+pub struct IssueService {
+    repo: Arc<dyn IssueRepository>,
 }
 
-impl<R: IssueRepository> IssueService<R> {
-    pub fn new(repo: Arc<R>) -> Self {
+impl IssueService {
+    pub fn new(repo: Arc<dyn IssueRepository>) -> Self {
         Self { repo }
     }
     ///
@@ -86,8 +109,31 @@ impl<R: IssueRepository> IssueService<R> {
     }
 
     ///
+    /// Retrieves all unique issue keys from the local database.
+    ///
+    /// This function queries the database for unique issue keys stored in the `issue`
+    /// table. It is useful for obtaining a distinct list of all issue keys.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing a vector of `IssueKey` objects. If an error occurs
+    /// during the query execution, a `WorklogError` is returned.
+    ///
     /// # Errors
-    /// Returns an error something goes wrong
+    ///
+    /// This function may return a `WorklogError` when:
+    /// - There is an error in preparing or executing the SQL query.
+    /// - There is an issue processing the result rows fetched from the database.
+    ///
+    /// # Examples
+    ///
+    /// ```rust,ignore
+    /// let unique_keys = worklog_storage.find_unique_keys()?;
+    ///
+    /// for key in unique_keys {
+    ///     println!("Unique Issue Key: {}", key.value());
+    /// }
+    /// ```
     pub fn find_unique_keys(&self) -> Result<Vec<IssueKey>, WorklogError> {
         self.repo.find_unique_keys()
     }

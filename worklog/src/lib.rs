@@ -1,9 +1,19 @@
+/// The `ApplicationRuntime` struct serves as the main runtime environment for the application,
+/// providing access to essential services such as issue management, user management, and
+/// worklog management. It facilitates communication with the Jira API and local worklog
+/// storage.
+///
+/// # Fields
+///
+/// * `config` - Represents the application configuration, including settings for Jira and local
+///   worklogs.
+/// * `client` - An instance of the Jira client used to interact with the Jira API.
+/// * `worklog_service` - A shared instance of the `WorkLogService` for managing worklogs.
+/// * `user_service` - A shared instance of the `UserService` for managing Jira users.
+/// * `issue_service` - A shared instance of the `IssueService` for managing issues.
+/// * `component_service` - A shared instance of the `ComponentService` for managing components.
 use crate::error::WorklogError;
 use crate::repository::database_manager::{DatabaseConfig, DatabaseManager};
-use crate::repository::sqlite::sqlite_component_repo::SqliteComponentRepository;
-use crate::repository::sqlite::sqlite_issue_repo::SqliteIssueRepository;
-use crate::repository::sqlite::sqlite_user_repo::SqliteUserRepository;
-use crate::repository::sqlite::sqlite_worklog_repo::SqliteWorklogRepository;
 use crate::service::component_service::ComponentService;
 use crate::service::issue_service::IssueService;
 use crate::service::user_service::UserService;
@@ -28,17 +38,32 @@ pub mod operation;
 
 pub mod types;
 
-pub mod repository;
+pub(crate) mod repository;
 pub mod service;
 
+/// The `ApplicationRuntime` struct serves as the main runtime environment for the application,
+/// providing access to essential services like issue management, user management, and
+/// worklog management. It facilitates communication with the Jira API and local worklog
+/// storage.
+///
+/// # Fields
+///
+/// * `client` - An instance of the Jira client used to interact with the Jira API.
+/// * `worklog_service` - A shared instance of the `WorkLogService` for managing worklogs.
+/// * `user_service` - A shared instance of the `UserService` for managing Jira users.
+/// * `issue_service` - A shared instance of the `IssueService` for managing issues.
+/// * `component_service` - A shared instance of the `ComponentService` for managing components.
+///
+/// # Notes
+///
+/// This struct plays a central role in orchestrating the different services and allowing
+/// them to operate in harmony within the application runtime environment.
 pub struct ApplicationRuntime {
-    #[allow(dead_code)]
-    config: AppConfiguration,
     client: Jira,
-    pub worklog_service: Arc<WorkLogService<SqliteWorklogRepository>>,
-    pub user_service: Arc<UserService<SqliteUserRepository>>,
-    pub issue_service: Arc<IssueService<SqliteIssueRepository>>,
-    pub component_service: Arc<ComponentService<SqliteComponentRepository>>,
+    pub worklog_service: Arc<WorkLogService>,
+    pub user_service: Arc<UserService>,
+    pub issue_service: Arc<IssueService>,
+    pub component_service: Arc<ComponentService>,
 }
 
 pub enum Operation {
@@ -81,19 +106,19 @@ impl ApplicationRuntime {
         &self.client
     }
 
-    pub fn worklog_service(&self) -> Arc<WorkLogService<SqliteWorklogRepository>> {
+    pub fn worklog_service(&self) -> Arc<WorkLogService> {
         self.worklog_service.clone()
     }
 
-    pub fn user_service(&self) -> Arc<UserService<SqliteUserRepository>> {
+    pub fn user_service(&self) -> Arc<UserService> {
         self.user_service.clone()
     }
 
-    pub fn issue_service(&self) -> Arc<IssueService<SqliteIssueRepository>> {
+    pub fn issue_service(&self) -> Arc<IssueService> {
         self.issue_service.clone()
     }
 
-    pub fn component_service(&self) -> Arc<ComponentService<SqliteComponentRepository>> {
+    pub fn component_service(&self) -> Arc<ComponentService> {
         self.component_service.clone()
     }
 
@@ -152,6 +177,58 @@ impl ApplicationRuntime {
     }
 }
 
+///
+/// A builder for creating an instance of `ApplicationRuntime`.
+///
+/// The `ApplicationRuntimeBuilder` facilitates the configuration and creation of an
+/// `ApplicationRuntime` instance with the ability to control specific behaviors like
+/// using an in-memory database for testing purposes.
+///
+/// # Usage
+///
+/// The typical usage involves creating the builder via [`ApplicationRuntimeBuilder::new`],
+/// optionally configuring it using its methods, and then calling [`ApplicationRuntimeBuilder::build`]
+/// to produce an `ApplicationRuntime` instance.
+///
+/// ```rust,ignore
+/// let runtime = ApplicationRuntimeBuilder::new()
+///     .use_in_memory_db()
+///     .build()
+///     .expect("Failed to create runtime");
+/// ```
+///
+/// # Builder Methods
+///
+/// - [`ApplicationRuntimeBuilder::new`] initializes the builder with default configuration.
+/// - [`ApplicationRuntimeBuilder::use_in_memory_db`] configures the runtime to use an in-memory SQLite database,
+///   suitable for testing.
+/// - [`ApplicationRuntimeBuilder::build`] finalizes the configuration and creates the `ApplicationRuntime` instance.
+///
+/// # Examples
+///
+/// ## Creating a Runtime with Defaults
+/// ```rust,ignore
+/// let runtime = ApplicationRuntimeBuilder::new()
+///     .build()
+///     .expect("Failed to create runtime");
+/// ```
+///
+/// ## Creating a Runtime with In-Memory Database
+/// ```rust,ignore
+/// let runtime = ApplicationRuntimeBuilder::new()
+///     .use_in_memory_db()
+///     .build()
+///     .expect("Failed to create runtime");
+/// ```
+///
+/// # Errors
+///
+/// [`ApplicationRuntimeBuilder::build`] may return a `WorklogError` if any of the necessary
+/// components fail to initialize, such as the Jira client or database connection manager.
+///
+/// [`ApplicationRuntimeBuilder::new`]: #method.new
+/// [`ApplicationRuntimeBuilder::use_in_memory_db`]: #method.use_in_memory_db
+/// [`ApplicationRuntimeBuilder::build`]: #method.build
 pub struct ApplicationRuntimeBuilder {
     config: AppConfiguration,
     use_in_memory_db: bool, // Internal field to toggle in-memory mode.
@@ -174,19 +251,8 @@ impl ApplicationRuntimeBuilder {
     }
 
     /// Builds the runtime, applying any overrides dynamically.
-    pub fn build(self) -> Result<ApplicationRuntime, WorklogError> {
-        let database_manager = if self.use_in_memory_db {
-            DatabaseManager::new(&DatabaseConfig::SqliteInMemory)?
-        } else {
-            let path = PathBuf::from(&self.config.application_data.local_worklog);
-            if let Some(parent) = path.parent() {
-                if !parent.exists() {
-                    fs::create_dir_all(parent)?;
-                }
-            }
-
-            DatabaseManager::new(&DatabaseConfig::SqliteOnDisk { path })?
-        };
+    pub fn build(&self) -> Result<ApplicationRuntime, WorklogError> {
+        let database_manager = &self.initialise_database_connection_manager()?;
 
         let client = Jira::new(
             &self.config.jira.url,
@@ -205,14 +271,71 @@ impl ApplicationRuntimeBuilder {
         let worklog_service = Arc::new(WorkLogService::new(worklog_repo));
         let issue_service = Arc::new(IssueService::new(issue_repo));
         let component_service = Arc::new(ComponentService::new(component_repo));
+        // assert_send_sync(&component_service);
 
         Ok(ApplicationRuntime {
-            config: self.config,
             client,
             worklog_service,
             user_service,
             issue_service,
             component_service,
         })
+    }
+
+    fn initialise_database_connection_manager(&self) -> Result<DatabaseManager, WorklogError> {
+        let database_manager = if self.use_in_memory_db {
+            DatabaseManager::new(&DatabaseConfig::SqliteInMemory)?
+        } else {
+            let path = PathBuf::from(self.config.application_data.local_worklog.clone());
+            if let Some(parent) = path.parent() {
+                if !parent.exists() {
+                    fs::create_dir_all(parent)?;
+                }
+            }
+
+            DatabaseManager::new(&DatabaseConfig::SqliteOnDisk { path })?
+        };
+        Ok(database_manager)
+    }
+}
+
+#[allow(dead_code)]
+fn assert_send_sync<T: Send + Sync>(_: T) {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Ensures that the `ApplicationRuntime` instance created using the builder
+    /// is properly configured for concurrent usage and can support threading
+    /// by implementing the `Send` and `Sync` traits.
+    ///
+    /// This test creates an in-memory runtime for testing purposes,
+    /// avoiding file I/O while maintaining logical integrity of the runtime's services.
+    ///
+    /// # Usage
+    ///
+    /// Run the test using:
+    ///
+    /// ```bash
+    /// cargo test test_create_in_memory_runtime
+    /// ```
+    ///
+    /// # Assertions
+    ///
+    /// - The `ApplicationRuntime` instance must successfully initialize.
+    /// - The runtime instance must implement `Send` and `Sync` traits.
+    ///
+    /// # Errors
+    ///
+    /// If the configuration cannot be loaded or any of the runtime's dependencies
+    /// fail to initialize, the test will panic.
+    #[test]
+    pub fn test_create_in_memory_runtime() {
+        let runtime = ApplicationRuntimeBuilder::new()
+            .use_in_memory_db()
+            .build()
+            .unwrap();
+        assert_send_sync(runtime);
     }
 }

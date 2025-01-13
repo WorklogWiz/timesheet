@@ -43,8 +43,10 @@ impl IntoResponse for ServerError {
 async fn get_worklogs(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<LocalWorklog>>, ServerError> {
+    // TODO: Consider removing this as the ApplicationRuntime should be thread safe now.
     let runtime = state.runtime.lock().await;
-    let keys = runtime.issue_service.find_unique_keys()?;
+
+    let keys = runtime.issue_service().find_unique_keys()?;
     let keys: Vec<IssueKey> = keys.into_iter().map(IssueKey::from).collect();
     let worklogs = runtime.worklog_service().find_worklogs_after(
         Local::now()
@@ -75,6 +77,7 @@ async fn post_worklog(Json(payload): Json<LocalWorklog>) -> impl IntoResponse {
 
 #[derive(Clone)]
 struct AppState {
+    // TODO: consider removing this, as ApplicationRuntime is now thread safe
     runtime: Arc<Mutex<ApplicationRuntime>>,
 }
 

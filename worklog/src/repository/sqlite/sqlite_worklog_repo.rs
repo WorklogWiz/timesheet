@@ -54,7 +54,7 @@ impl WorkLogRepository for SqliteWorklogRepository {
         let conn = self
             .connection
             .lock()
-            .map_err(|_| WorklogError::MutexPoisoned)?;
+            .map_err(|_| WorklogError::LockPoisoned)?;
         conn.execute("DELETE FROM worklog WHERE id = ?1", params![wl_id])?;
         Ok(())
     }
@@ -64,7 +64,7 @@ impl WorkLogRepository for SqliteWorklogRepository {
         let conn = self
             .connection
             .lock()
-            .map_err(|_e| WorklogError::MutexPoisoned)?;
+            .map_err(|_e| WorklogError::LockPoisoned)?;
         let result = conn.execute(
             "INSERT INTO worklog (
             issue_key, id, author, created, updated, started, time_Spent, time_Spent_Seconds, issue_Id, comment
@@ -93,7 +93,7 @@ impl WorkLogRepository for SqliteWorklogRepository {
         let conn = self
             .connection
             .lock()
-            .map_err(|_e| WorklogError::MutexPoisoned)?;
+            .map_err(|_e| WorklogError::LockPoisoned)?;
         // Prepare the SQL insert statement
         let mut stmt = conn.prepare(r"
             INSERT INTO worklog
@@ -123,7 +123,7 @@ impl WorkLogRepository for SqliteWorklogRepository {
         let conn = self
             .connection
             .lock()
-            .map_err(|_e| WorklogError::MutexPoisoned)?;
+            .map_err(|_e| WorklogError::LockPoisoned)?;
         let mut stmt = conn.prepare("select count(*) from worklog").map_err(|e| {
             WorklogError::Sql(format!("Unable to retrive count(*) from worklog: {e}"))
         })?;
@@ -135,7 +135,7 @@ impl WorkLogRepository for SqliteWorklogRepository {
         let conn = self
             .connection
             .lock()
-            .map_err(|_e| WorklogError::MutexPoisoned)?;
+            .map_err(|_e| WorklogError::LockPoisoned)?;
         conn.execute("delete from worklog", [])?;
         Ok(())
     }
@@ -144,7 +144,7 @@ impl WorkLogRepository for SqliteWorklogRepository {
         let conn = self
             .connection
             .lock()
-            .map_err(|_e| WorklogError::MutexPoisoned)?;
+            .map_err(|_e| WorklogError::LockPoisoned)?;
         let mut stmt = conn.prepare("SELECT issue_key, id, author, created, updated, started, time_spent, time_spent_seconds, issue_id, comment FROM worklog WHERE id = ?1")?;
         let id: i32 = worklog_id.parse().expect("Invalid number");
         let worklog = stmt.query_row(params![id], |row| {
@@ -219,7 +219,7 @@ impl WorkLogRepository for SqliteWorklogRepository {
         let conn = self
             .connection
             .lock()
-            .map_err(|_e| WorklogError::MutexPoisoned)?;
+            .map_err(|_e| WorklogError::LockPoisoned)?;
         let mut stmt = conn.prepare(&sql)?;
 
         // Execute the query and map results

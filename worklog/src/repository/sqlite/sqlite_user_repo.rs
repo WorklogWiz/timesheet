@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS user (
 
 /// Creates the `user` table in the database.
 pub(crate) fn create_schema(connection: Arc<Mutex<Connection>>) -> Result<(), WorklogError> {
-    let conn = connection.lock().map_err(|_| WorklogError::MutexPoisoned)?;
+    let conn = connection.lock().map_err(|_| WorklogError::LockPoisoned)?;
     conn.execute(CREATE_USER_TABLE_SQL, [])?;
     Ok(())
 }

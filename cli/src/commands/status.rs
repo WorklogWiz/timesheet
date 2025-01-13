@@ -37,7 +37,7 @@ pub async fn execute(status: Status) -> Result<(), WorklogError> {
     let worklogs = if status.all_users {
         worklog_service.find_worklogs_after(start_after.unwrap(), &jira_keys_to_report, &[])?
     } else {
-        let user = runtime.user_service().find_user()?;
+        let user = runtime.user_service().find_current_user()?;
         worklog_service.find_worklogs_after(start_after.unwrap(), &jira_keys_to_report, &[user])?
     };
 

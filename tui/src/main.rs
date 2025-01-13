@@ -6,9 +6,7 @@ use ratatui::{
     DefaultTerminal,
 };
 use std::error::Error;
-use worklog::{
-    types::LocalWorklog, ApplicationRuntime, ApplicationRuntimeBuilder,
-};
+use worklog::{types::LocalWorklog, ApplicationRuntime, ApplicationRuntimeBuilder};
 
 use chrono::{
     offset::TimeZone, DateTime, Datelike, Duration, Local, NaiveDate, NaiveTime, Weekday,
@@ -72,25 +70,23 @@ fn fetch_weekly_data(
     start_of_week: DateTime<Local>,
 ) -> (Vec<(String, [u32; 7], u32)>, [u32; 7], u32) {
     /*
-    let all_entries: Vec<Vec<Worklog>> =
-        futures::future::join_all(time_codes.into_iter().map(|issue| {
-            let client = &worklog_service;
-            async move {
-                match client
-                    .find_worklogs_after(&issue, Some(start_of_week))
-                    .await
-                {
-                    Ok(result) => result,
-                    Err(e) => {
-                        eprintln!("Failed to get work log for Issue {} [{e}]", &issue);
-                        vec![]
+        let all_entries: Vec<Vec<Worklog>> =
+            futures::future::join_all(time_codes.into_iter().map(|issue| {
+                let client = &runtime.worklog_service();
+                async move {
+                    match client
+                        .find_worklogs_after(start_of_week, &[issue.clone()],&[])
+                    {
+                        Ok(result) => result,
+                        Err(e) => {
+                            eprintln!("Failed to get work log for Issue {} [{e}]", &issue);
+                            vec![]
+                        }
                     }
                 }
-            }
-        }))
-        .await;
-     */
-
+            }))
+            .await;
+    */
     let mut all_local = match runtime
         .worklog_service()
         .find_worklogs_after(start_of_week, &[], &[])

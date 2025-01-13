@@ -2,7 +2,7 @@ use crate::error::WorklogError;
 use jira::models::core::IssueKey;
 use jira::models::project::Component;
 
-pub trait ComponentRepository {
+pub trait ComponentRepository: Send + Sync {
     ///
     /// Adds a list of components to the local database and associates them with the given issue key.
     ///

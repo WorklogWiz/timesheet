@@ -3,7 +3,7 @@ use crate::types::JiraIssueInfo;
 use jira::models::core::IssueKey;
 use jira::models::issue::IssueSummary;
 
-pub trait IssueRepository {
+pub trait IssueRepository: Sync + Send {
     ///
     /// Adds multiple Jira issues to the local database.
     ///

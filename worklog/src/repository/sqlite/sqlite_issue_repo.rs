@@ -1,18 +1,18 @@
 use crate::error::WorklogError;
 use crate::repository::issue_repository::IssueRepository;
+use crate::repository::SharedSqliteConnection;
 use crate::types::JiraIssueInfo;
 use jira::models::core::IssueKey;
 use jira::models::issue::IssueSummary;
 use log::debug;
-use rusqlite::{params, Connection};
-use std::sync::{Arc, Mutex};
+use rusqlite::params;
 
 pub struct SqliteIssueRepository {
-    connection: Arc<Mutex<Connection>>,
+    connection: SharedSqliteConnection,
 }
 
 impl SqliteIssueRepository {
-    pub fn new(connection: Arc<Mutex<Connection>>) -> Self {
+    pub fn new(connection: SharedSqliteConnection) -> Self {
         Self { connection }
     }
 }
@@ -25,7 +25,7 @@ const CREATE_ISSUE_TABLE_SQL: &str = r"
     );
 ";
 
-pub(crate) fn create_issue_table(conn: Arc<Mutex<Connection>>) -> Result<(), rusqlite::Error> {
+pub(crate) fn create_issue_table(conn: SharedSqliteConnection) -> Result<(), rusqlite::Error> {
     let conn = conn.lock().unwrap();
     conn.execute(CREATE_ISSUE_TABLE_SQL, [])?;
     Ok(())
@@ -61,7 +61,10 @@ impl IssueRepository for SqliteIssueRepository {
     /// worklog_storage.add_jira_issues(&issues)?;
     /// ```
     fn add_jira_issues(&self, jira_issues: &Vec<IssueSummary>) -> Result<(), WorklogError> {
-        let conn = self.connection.lock().unwrap();
+        let conn = self
+            .connection
+            .lock()
+            .map_err(|_| WorklogError::LockPoisoned)?;
         let mut stmt = conn.prepare(
             "INSERT INTO issue (id, key, summary)
             VALUES (?1, ?2, ?3)
