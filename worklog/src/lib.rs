@@ -280,7 +280,6 @@ impl ApplicationRuntimeBuilder {
         }
     }
 
-    
     /// Configures the `ApplicationRuntime` to use an in-memory database.
     ///
     /// # Returns
@@ -289,7 +288,7 @@ impl ApplicationRuntimeBuilder {
     ///
     /// # Examples
     ///
-    /// In the example below, we configure the runtime to use an in-memory database, 
+    /// In the example below, we configure the runtime to use an in-memory database,
     /// which is particularly useful for testing scenarios.
     ///
     /// ```rust,ignore
@@ -307,7 +306,6 @@ impl ApplicationRuntimeBuilder {
         self
     }
 
-    
     /// Finalizes the construction of the `ApplicationRuntime` instance.
     ///
     /// This method initializes various components required by `ApplicationRuntime`, such as

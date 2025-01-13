@@ -70,7 +70,7 @@ impl ComponentService {
     ///
     /// This function returns the following errors:
     ///
-    /// * `WorklogError` - if the repository fails to create the components due to a database or 
+    /// * `WorklogError` - if the repository fails to create the components due to a database or
     ///   network issue, or if the input data is invalid.
     ///
     /// Ensure that the `ComponentRepository` implementation used by this service handles errors
