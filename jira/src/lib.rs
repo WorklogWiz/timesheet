@@ -381,7 +381,7 @@ impl Jira {
     /// This function requires proper setup of Jira client and works asynchronously.
     pub async fn get_issue_summaries(
         &self,
-        project_filter: &Vec<&str>,
+        project_filter: &[&str],
         issue_key_filter: &[IssueKey],
         all_users: bool,
     ) -> Result<Vec<IssueSummary>> {

@@ -1,6 +1,6 @@
 mod test_helpers;
 
-use crate::test_helpers::jira_client::create_jira_client;
+use crate::test_helpers::jira_client;
 use crate::test_helpers::test_data::TEST_PROJECT_KEY;
 use jira::models::project::JiraProjectKey;
 use log::debug;
@@ -9,7 +9,7 @@ use test_helpers::test_data;
 
 #[tokio::test] // Requires a valid user token in configuration
 async fn test_create_issue() -> Result<(), Box<dyn std::error::Error>> {
-    let jira_client = create_jira_client().await;
+    let jira_client = jira_client::create();
     let new_issue = jira_client
         .create_issue(
             &JiraProjectKey {

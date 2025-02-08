@@ -1,4 +1,4 @@
-use crate::test_helpers::jira_client::create_jira_client;
+use crate::test_helpers::jira_client;
 use chrono::{DateTime, Duration, Local};
 use futures::stream::FuturesUnordered;
 use futures::StreamExt;
@@ -52,10 +52,10 @@ async fn create_issue_task(
         Ok(issue) => {
             assert!(!issue.key.is_empty());
             debug!("Created issue: {}", issue.key);
-            Ok(IssueKey::from(issue.key))
+            Ok(issue.key)
         }
         Err(e) => {
-            eprintln!("Failed to create issue: {}", e);
+            eprintln!("Failed to create issue: {e}");
             Err(e.into())
         }
     }
@@ -67,23 +67,20 @@ pub async fn create_batch_of_issues(
     qty: i32,
     jira_project_key: JiraProjectKey,
 ) -> Result<Vec<IssueKey>, Box<dyn std::error::Error>> {
-    let jira_client = create_jira_client().await;
+    let jira_client = jira_client::create();
 
-    // Fetch the first component if available
     let first_component = jira_client
         .get_components(jira_project_key.key)
         .await?
         .into_iter()
         .next()
-        .map(|component| vec![ComponentId { id: component.id }])
-        .unwrap_or_else(Vec::new);
-
+        .map_or_else(Vec::new, |component| vec![ComponentId { id: component.id }]);
     // Process creation of issues in parallel
     let mut issue_futures = FuturesUnordered::new();
     for _ in 0..qty {
         issue_futures.push(create_issue_task(
             jira_client.clone(),
-            jira_project_key.clone(),
+            jira_project_key,
             first_component.clone(),
         ));
     }
@@ -109,12 +106,12 @@ pub async fn delete_batch_of_issues_by_key(issue_keys: &Vec<IssueKey>) {
 
     // Add futures for deleting each issue to the FuturesUnordered stream
     for jira_key in issue_keys {
-        let jira_client = create_jira_client().await;
+        let jira_client = jira_client::create();
 
         debug!("Preparing to delete issue {}", jira_key);
 
         delete_futures.push(async move {
-            jira_client.delete_issue(jira_key).await.map(|_| {
+            jira_client.delete_issue(jira_key).await.map(|()| {
                 debug!("Deleted issue");
             })
         });
@@ -123,7 +120,7 @@ pub async fn delete_batch_of_issues_by_key(issue_keys: &Vec<IssueKey>) {
     // Consume the futures as they complete
     while let Some(result) = delete_futures.next().await {
         if let Err(e) = result {
-            eprintln!("Failed to delete an issue: {}", e);
+            eprintln!("Failed to delete an issue: {e}");
         }
     }
     let elapsed = start_time.elapsed();
@@ -140,7 +137,7 @@ pub async fn add_random_work_logs_to_issues(
     let mut work_log_futures = FuturesUnordered::new();
 
     for jira_key in issues {
-        let jira_client = create_jira_client().await;
+        let jira_client = jira_client::create();
 
         debug!("Adding worklogs to issue {}", jira_key);
 
@@ -163,8 +160,8 @@ pub async fn add_random_work_logs_to_issues(
                         worklogs.push(worklog);
                     }
                     Err(e) => {
-                        eprintln!("Failed to add worklog, {}: ", e);
-                        panic!("Failed to add worklog, {}: ", e);
+                        eprintln!("Failed to add worklog, {e}: ");
+                        panic!("Failed to add worklog, {e}: ");
                     }
                 }
             }

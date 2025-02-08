@@ -1,11 +1,9 @@
 use jira::{Credentials, Jira};
 
 #[cfg(test)]
-pub async fn create_jira_client() -> Jira {
+pub fn create() -> Jira {
     let (host, user, token) = get_jira_params();
-    let client =
-        Jira::new(&host, Credentials::Basic(user, token)).expect("Error initializing jira client");
-    client
+    Jira::new(&host, Credentials::Basic(user, token)).expect("Error initializing jira client")
 }
 ///
 /// Manages the secrets needed to access the Jira instance used for integration testing.
@@ -23,19 +21,23 @@ pub const JIRA_USER: &str = "JIRA_USER";
 pub const JIRA_TOKEN: &str = "JIRA_TOKEN";
 
 pub(crate) fn get_jira_host() -> String {
-    std::env::var(JIRA_HOST).expect(&format!("Environment variable {JIRA_HOST} not set. Set it to something like 'https://norn.jira.atlassian.com'"))
+    std::env::var(JIRA_HOST).unwrap_or_else(|_| {
+        format!("Environment variable {JIRA_HOST} not set. Set it to something like 'https://norns.atlassian.net'")
+    })
 }
 
 pub(crate) fn get_jira_user() -> String {
-    std::env::var(JIRA_USER).expect(&format!(
-        "Environment variable {JIRA_USER} not set. Set it to something like 'user@domain.com'"
-    ))
+    std::env::var(JIRA_USER).unwrap_or_else(|_| {
+        format!(
+            "Environment variable {JIRA_USER} not set. Set it to something like 'user@domain.com'"
+        )
+    })
 }
 
 pub(crate) fn get_jira_token() -> String {
-    std::env::var(JIRA_TOKEN).expect(&format!(
-        "Environment variable {JIRA_TOKEN} not set. Set it to something like 'secret'"
-    ))
+    std::env::var(JIRA_TOKEN).unwrap_or_else(|_| {
+        format!("Environment variable {JIRA_TOKEN} not set. Set it to something like 'secret'")
+    })
 }
 
 #[cfg(test)]
@@ -56,8 +58,8 @@ mod tests {
         assert!(!jira_host.is_empty());
         assert!(!jira_user.is_empty());
         assert!(!jira_token.is_empty());
-        println!("Jira host: {}", jira_host);
-        println!("Jira user: {}", jira_user);
-        println!("Jira token: {}", jira_token);
+        println!("Jira host: {jira_host}");
+        println!("Jira user: {jira_user}");
+        println!("Jira token: {jira_token}");
     }
 }

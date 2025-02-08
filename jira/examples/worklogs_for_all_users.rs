@@ -15,10 +15,10 @@ async fn main() {
     let start_time = Instant::now();
     println!("Searching for issues, be patient this can take a while\n (minutes possibly, depending on the number of issues and the Jira instance you are using) ....");
 
-    let issue_summaries = match jira.get_issue_summaries(&vec!["KT,PT"], &[], true).await {
+    let issue_summaries = match jira.get_issue_summaries(&["KT,PT"], &[], true).await {
         Ok(issues) => issues,
         Err(e) => {
-            eprintln!("Error searching issues: {}", e);
+            eprintln!("Error searching issues: {e}");
             return;
         }
     };
@@ -37,7 +37,7 @@ async fn main() {
     let work_logs = match fetch_worklogs_for_issues2(jira, issue_summaries, naive_date_time).await {
         Ok(logs) => logs,
         Err(e) => {
-            eprintln!("Error searching issues for worklogs: {}", e);
+            eprintln!("Error searching issues for worklogs: {e}");
             return;
         }
     };
@@ -87,8 +87,8 @@ fn create_jira_client() -> Jira {
         let client = Jira::new(&host, Credentials::Basic(user, token))
             .expect("Error initializing jira client");
         return client;
-    } else {
-        println!("Please set JIRA_HOST, JIRA_USER and JIRA_TOKEN");
-        std::process::exit(1);
     }
+
+    println!("Please set JIRA_HOST, JIRA_USER and JIRA_TOKEN");
+    std::process::exit(1);
 }

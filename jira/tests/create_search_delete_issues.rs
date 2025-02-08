@@ -1,6 +1,6 @@
 mod test_helpers;
 
-use test_helpers::jira_client::create_jira_client;
+use test_helpers::jira_client;
 use test_helpers::test_data;
 
 use crate::test_helpers::test_data::TEST_PROJECT_KEY;
@@ -41,9 +41,9 @@ async fn search_issues_test() -> Result<(), Box<dyn std::error::Error>> {
 
     let _work_logs = test_data::add_random_work_logs_to_issues(&issues, 1..3).await;
 
-    let jira_client = create_jira_client().await;
+    let jira_client = jira_client::create();
     let search_result = jira_client
-        .get_issue_summaries(&vec![TEST_PROJECT_KEY], &vec![], true)
+        .get_issue_summaries(&[TEST_PROJECT_KEY], &[], true)
         .await?;
     assert!(!issues.is_empty());
 

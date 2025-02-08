@@ -56,7 +56,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Finished fetching all the worklogs in {:.2?}",
         start_fetch_all.elapsed().as_millis()
     );
-    assert!(final_result.len() > 0);
+    assert!(!final_result.is_empty());
     println!("Found {} issues", final_result.len());
 
     println!("Found {} worklogs", final_result.len());
