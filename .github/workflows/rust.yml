@@ -51,22 +51,6 @@ jobs:
           toolchain: stable
           override: true
 
-      - name: Cache cargo registry
-        uses: actions/cache@v3
-        with:
-          path: ~/.cargo/registry
-          key: ${{ runner.os }}-cargo-registry
-          restore-keys: |
-            ${{ runner.os }}-cargo-registry
-
-      - name: Cache cargo build
-        uses: actions/cache@v3
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-build
-          restore-keys: |
-            ${{ runner.os }}-cargo-build
-
       - name: Add target
         run: rustup target add ${{ matrix.target }}
 
@@ -110,7 +94,7 @@ jobs:
         run: cargo clippy --target ${{ matrix.target }} --release -- -D clippy::pedantic
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}-binaries
           path: target/${{ matrix.target }}/publish/
