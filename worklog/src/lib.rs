@@ -1,3 +1,4 @@
+use crate::config::JiraClientConfiguration;
 /// The `ApplicationRuntime` struct serves as the main runtime environment for the application,
 /// providing access to essential services such as issue management, user management, and
 /// worklog management. It facilitates communication with the Jira API and local worklog
@@ -30,7 +31,6 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use types::LocalWorklog;
-use crate::config::JiraClientConfiguration;
 
 pub mod config;
 pub mod date;
@@ -244,7 +244,7 @@ impl Default for ApplicationRuntimeBuilder {
     fn default() -> Self {
         ApplicationRuntimeBuilder {
             use_in_memory_db: true,
-            config : AppConfiguration {
+            config: AppConfiguration {
                 jira: JiraClientConfiguration {
                     url: "https://norns.atlassian.net".to_string(),
                     user: "<USER>".to_string(),
@@ -253,7 +253,7 @@ impl Default for ApplicationRuntimeBuilder {
                 application_data: config::ApplicationData {
                     local_worklog: "local_worklog.db".to_string(),
                 },
-            }
+            },
         }
     }
 }
@@ -437,7 +437,6 @@ mod tests {
     /// fail to initialize, the test will panic.
     #[test]
     pub fn test_create_in_memory_runtime() {
-        
         let runtime = ApplicationRuntimeBuilder::default()
             .use_in_memory_db()
             .build()
