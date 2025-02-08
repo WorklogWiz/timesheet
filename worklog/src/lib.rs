@@ -30,6 +30,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 use types::LocalWorklog;
+use crate::config::JiraClientConfiguration;
 
 pub mod config;
 pub mod date;
@@ -239,6 +240,24 @@ pub struct ApplicationRuntimeBuilder {
     use_in_memory_db: bool, // Internal field to toggle in-memory mode.
 }
 
+impl Default for ApplicationRuntimeBuilder {
+    fn default() -> Self {
+        ApplicationRuntimeBuilder {
+            use_in_memory_db: true,
+            config : AppConfiguration {
+                jira: JiraClientConfiguration {
+                    url: "https://norns.atlassian.net".to_string(),
+                    user: "<USER>".to_string(),
+                    token: "<PASSWORD>".to_string(),
+                },
+                application_data: config::ApplicationData {
+                    local_worklog: "local_worklog.db".to_string(),
+                },
+            }
+        }
+    }
+}
+
 impl ApplicationRuntimeBuilder {
     /// Creates a new instance of `ApplicationRuntimeBuilder` with default settings.
     ///
@@ -418,7 +437,8 @@ mod tests {
     /// fail to initialize, the test will panic.
     #[test]
     pub fn test_create_in_memory_runtime() {
-        let runtime = ApplicationRuntimeBuilder::new()
+        
+        let runtime = ApplicationRuntimeBuilder::default()
             .use_in_memory_db()
             .build()
             .unwrap();
