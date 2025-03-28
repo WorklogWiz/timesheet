@@ -6,7 +6,6 @@ use axum::{
     Router,
 };
 use chrono::{Duration, Local};
-use jira::models::core::IssueKey;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -47,7 +46,6 @@ async fn get_worklogs(
     let runtime = state.runtime.lock().await;
 
     let keys = runtime.issue_service().find_unique_keys()?;
-    let keys: Vec<IssueKey> = keys.into_iter().map(IssueKey::from).collect();
     let worklogs = runtime.worklog_service().find_worklogs_after(
         Local::now()
             .checked_sub_signed(Duration::days(365))

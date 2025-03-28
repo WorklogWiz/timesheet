@@ -74,7 +74,9 @@ impl IssueRepository for SqliteIssueRepository {
             Ok(stmt) => stmt,
             Err(e) => {
                 // Log the error and return a WorklogError with context
-                log::error!("add_jira_issues(): Failed to prepare SQL statement: {insert_sql}, cause:'{e}'");
+                log::error!(
+                    "add_jira_issues(): Failed to prepare SQL statement: {insert_sql}, cause:'{e}'"
+                );
                 return Err(e.into());
             }
         };

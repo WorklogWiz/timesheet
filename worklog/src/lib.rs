@@ -22,6 +22,7 @@ use crate::service::worklog::WorkLogService;
 use config::AppConfiguration;
 use jira::models::issue::IssueSummary;
 use jira::{Credentials, Jira};
+use log::debug;
 use operation::{
     add::{self, Add},
     codes,
@@ -30,7 +31,6 @@ use operation::{
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
-use log::debug;
 use types::LocalWorklog;
 
 pub mod config;
@@ -392,7 +392,10 @@ impl ApplicationRuntimeBuilder {
         let database_manager = if self.use_in_memory_db {
             DatabaseManager::new(&DatabaseConfig::SqliteInMemory)?
         } else {
-            debug!("Opening database at {}", self.config.application_data.local_worklog);
+            debug!(
+                "Opening database at {}",
+                self.config.application_data.local_worklog
+            );
             let path = PathBuf::from(self.config.application_data.local_worklog.clone());
             if let Some(parent) = path.parent() {
                 if !parent.exists() {

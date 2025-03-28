@@ -107,7 +107,7 @@ pub async fn execute(runtime: &ApplicationRuntime, sync_cmd: &Sync) -> Result<()
 
     // Updates the database with the issue summary information
     sync_jira_issue_information(runtime, &issue_summaries)?;
-    
+
     eprintln!("Updated database with issue summary information");
     // Create map of IssueKey -> IssueSummary
     let issue_map: std::collections::HashMap<String, &IssueSummary> = issue_summaries
