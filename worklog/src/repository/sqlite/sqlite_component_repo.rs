@@ -72,6 +72,8 @@ impl ComponentRepository for SqliteComponentRepository {
         issue_key: &IssueKey,
         components: &[Component],
     ) -> Result<(), WorklogError> {
+        debug!("Inserting components ...");
+        
         let conn = self
             .connection
             .lock()
@@ -82,7 +84,7 @@ impl ComponentRepository for SqliteComponentRepository {
             ON CONFLICT(id) DO UPDATE SET name = excluded.name",
         )?;
 
-        debug!("Adding components for issue {issue_key}");
+        debug!("Adding {} components for issue {issue_key}", components.len());
         for component in components {
             debug!("Adding component id {} for issue {issue_key}", component.id);
             // Consider using the return value to count number of rows that were actually
@@ -96,11 +98,14 @@ impl ComponentRepository for SqliteComponentRepository {
                 );
             }
         }
+        debug!("Adding issue_components, waiting for mutex");
+        
         // Links the components with the issues to maintain the many-to-many relationship
-        let conn = self
+/*        let conn = self
             .connection
             .lock()
             .expect("component connection mutex poisoned");
+*/        debug!("Preparing insert_issue_component_stmt ...");
         let mut insert_issue_component_stmt = conn
             .prepare("INSERT OR IGNORE INTO issue_component (key, component_id) VALUES (?1, ?2)")?;
         for component in components {

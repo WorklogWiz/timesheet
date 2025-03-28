@@ -107,6 +107,8 @@ pub async fn execute(runtime: &ApplicationRuntime, sync_cmd: &Sync) -> Result<()
 
     // Updates the database with the issue summary information
     sync_jira_issue_information(runtime, &issue_summaries)?;
+    
+    eprintln!("Updated database with issue summary information");
     // Create map of IssueKey -> IssueSummary
     let issue_map: std::collections::HashMap<String, &IssueSummary> = issue_summaries
         .iter()
@@ -194,10 +196,12 @@ fn sync_jira_issue_information(
     debug!("Searching for Jira issues (information)...");
 
     runtime.issue_service().add_jira_issues(issue_summaries)?;
+    debug!("sync_jira_issue_information: add_jira_issues() done");
     for issue in issue_summaries {
         runtime
             .component_service()
             .create_component(&issue.key, &issue.fields.components)?;
     }
+    debug!("sync_jira_issue_information: done");
     Ok(())
 }

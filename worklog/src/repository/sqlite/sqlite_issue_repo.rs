@@ -65,11 +65,21 @@ impl IssueRepository for SqliteIssueRepository {
             .connection
             .lock()
             .map_err(|_| WorklogError::LockPoisoned)?;
-        let mut stmt = conn.prepare(
-            "INSERT INTO issue (id, key, summary)
+        debug!("add_jira_issues() :- preparing statement");
+
+        let insert_sql = "INSERT INTO issue (id, key, summary)
             VALUES (?1, ?2, ?3)
-            ON CONFLICT(id) DO UPDATE SET summary = excluded.summary, key = excluded.key",
-        )?;
+            ON CONFLICT(id) DO UPDATE SET summary = excluded.summary, key = excluded.key";
+        let mut stmt = match conn.prepare(insert_sql) {
+            Ok(stmt) => stmt,
+            Err(e) => {
+                // Log the error and return a WorklogError with context
+                log::error!("add_jira_issues(): Failed to prepare SQL statement: {insert_sql}, cause:'{e}'");
+                return Err(e.into());
+            }
+        };
+        debug!("add_jira_issues() :- statement prepared");
+
         for issue in jira_issues {
             if let Err(e) = stmt.execute(params![
                 issue.id,
@@ -159,7 +169,8 @@ impl IssueRepository for SqliteIssueRepository {
     /// Returns an error something goes wrong
     fn find_unique_keys(&self) -> Result<Vec<IssueKey>, WorklogError> {
         let conn = self.connection.lock().unwrap();
-        let mut stmt = conn.prepare("SELECT DISTINCT(key) FROM worklog ORDER BY key asc")?;
+        let mut stmt =
+            conn.prepare("SELECT DISTINCT(issue_key) FROM worklog ORDER BY issue_key asc")?;
         let issue_keys: Vec<IssueKey> = stmt
             .query_map([], |row| {
                 let key: String = row.get::<_, String>(0)?;
