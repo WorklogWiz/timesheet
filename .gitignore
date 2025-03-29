@@ -1,0 +1,13 @@
+target/
+*.profraw
+.VERSION
+.scannerwork/
+clippy-report.json
+coverage.lcov
+.idea
+.DS_Store
+/config.backup
+/.run/
+/balder-jira.sh
+/norns-jira.sh
+/gastroplanner-jira.sh
