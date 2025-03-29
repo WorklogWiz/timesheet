@@ -3,7 +3,10 @@ use std::process::exit;
 use chrono::{Datelike, Days, Local};
 use jira::models::core::IssueKey;
 use log::debug;
-use worklog::{date, error::WorklogError, storage::dbms::Dbms, types::LocalWorklog};
+use worklog::date;
+use worklog::error::WorklogError;
+use worklog::types::LocalWorklog;
+use worklog::ApplicationRuntime;
 
 use crate::{cli::Status, get_runtime, table_report_weekly::table_report_weekly};
 
@@ -34,7 +37,7 @@ pub async fn execute(status: Status) -> Result<(), WorklogError> {
     let worklogs = if status.all_users {
         worklog_service.find_worklogs_after(start_after.unwrap(), &jira_keys_to_report, &[])?
     } else {
-        let user = worklog_service.find_user()?;
+        let user = runtime.user_service().find_current_user()?;
         worklog_service.find_worklogs_after(start_after.unwrap(), &jira_keys_to_report, &[user])?
     };
 
@@ -65,9 +68,12 @@ pub async fn execute(status: Status) -> Result<(), WorklogError> {
 }
 
 #[allow(dead_code)]
-fn print_info_about_time_codes(worklog_service: &Dbms, mut jira_keys_to_report: Vec<IssueKey>) {
+fn print_info_about_time_codes(
+    runtime: &ApplicationRuntime,
+    mut jira_keys_to_report: Vec<IssueKey>,
+) {
     if jira_keys_to_report.is_empty() {
-        jira_keys_to_report = worklog_service.find_unique_keys().unwrap();
+        jira_keys_to_report = runtime.issue_service().find_unique_keys().unwrap();
     }
 
     debug!(
@@ -75,7 +81,8 @@ fn print_info_about_time_codes(worklog_service: &Dbms, mut jira_keys_to_report: 
         &jira_keys_to_report
     );
 
-    let result = worklog_service
+    let result = runtime
+        .issue_service()
         .get_issues_filtered_by_keys(&jira_keys_to_report)
         .expect("Unable to retrieve Jira Issue information");
     debug!("Retrieved {} entries from jira_issue table", result.len());

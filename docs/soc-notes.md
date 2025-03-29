@@ -24,6 +24,7 @@ package repository <<module>> {
           find_user(id: i32)
           find_all_users()
           update_user(user: &User)
+          delete_user(id: i32)
         }
     }
     frame "user_repo" {
@@ -55,10 +56,12 @@ package service <<module>> {
                 create_new_user(name, email, ..)
             }
         }
-        
+        UserService -> UserRepository
     }
 }
+
 ```
+## AI Assistant's proposal
 
 ```plantuml
 participant main
@@ -135,6 +138,9 @@ deactivate wl
 - folder
 - component 
 
+## Organising code to provide maximum encapsulation
+ - Each module must only expose their own domain structures. I.e.
+   - `worklog` layer must not expose any structures related to `Jira` or the underlying `repo` module 
 ```plantuml
 component cli <<crate>> {
     frame main {
