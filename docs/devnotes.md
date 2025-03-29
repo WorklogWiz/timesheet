@@ -2,15 +2,19 @@
 
 ## Migration
 
-- How long do we support migration to the dbms journal from the csv journal?
-- When detecting whether migration is needed, we should only tell the user when that is needed.
-  - We detect an old journal file (Migration needed)
-  - If we detect an old journal and the new at the same time, then something wrong has happened. Let the use decide what to do?
-  - If neither of these conditions hold, we skip the migration silently. This should be done in the `ApplicationRuntime`?
+- How long do we support migration to the dbms journal from the csv journal? *SOC: we no longer support
+  migration of the old CSV based journal*
+- ~~When detecting whether migration is needed, we should only tell the user when that is needed.~~
+  - ~~We detect an old journal file (Migration needed)~~
+  - ~~If we detect an old journal and the new at the same time, then something wrong has happened. Let the use decide what to do?~~
+  - ~~If neither of these conditions hold, we skip the migration silently. This should be done in the `ApplicationRuntime`?~~
 
 ## Configuration management
 
 - Today there are a lot of exposed methods for configuration handling. Should this all be moved to the `ApplicationRuntime` inside the `worklog` library, so all executables can reuse the same handling?
+
+SOC 2025-01-09: Configuration management is the responsibility of executable application, like for instance `timesheet` (CLI), 
+`tui` (TUI), and `server`.
 
 ## Error handling
 

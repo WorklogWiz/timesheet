@@ -45,6 +45,10 @@ pub enum WorklogError {
     BadInput(String),
     #[error("Unable to parse the url: {0}")]
     InvalidUrl(ParseError),
+    #[error("Mutex locking error")]
+    LockPoisoned,
+    #[error("Unable to create database SQL schema: {0}")]
+    DatabaseError(String),
 }
 
 impl From<rusqlite::Error> for WorklogError {

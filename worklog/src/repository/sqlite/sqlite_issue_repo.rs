@@ -1,12 +1,37 @@
 use crate::error::WorklogError;
-use crate::storage::dbms::Dbms;
+use crate::repository::issue_repository::IssueRepository;
+use crate::repository::SharedSqliteConnection;
 use crate::types::JiraIssueInfo;
 use jira::models::core::IssueKey;
 use jira::models::issue::IssueSummary;
 use log::debug;
 use rusqlite::params;
 
-impl Dbms {
+pub struct SqliteIssueRepository {
+    connection: SharedSqliteConnection,
+}
+
+impl SqliteIssueRepository {
+    pub fn new(connection: SharedSqliteConnection) -> Self {
+        Self { connection }
+    }
+}
+
+const CREATE_ISSUE_TABLE_SQL: &str = r"
+    CREATE TABLE IF NOT EXISTS issue (
+        id integer primary key,
+        key varchar(32) not null unique,
+        summary varchar(1024) not null
+    );
+";
+
+pub(crate) fn create_issue_table(conn: &SharedSqliteConnection) -> Result<(), rusqlite::Error> {
+    let conn = conn.lock().unwrap();
+    conn.execute(CREATE_ISSUE_TABLE_SQL, [])?;
+    Ok(())
+}
+
+impl IssueRepository for SqliteIssueRepository {
     ///
     /// Adds multiple Jira issues to the local database.
     ///
@@ -35,12 +60,28 @@ impl Dbms {
     ///
     /// worklog_storage.add_jira_issues(&issues)?;
     /// ```
-    pub fn add_jira_issues(&self, jira_issues: &Vec<IssueSummary>) -> Result<(), WorklogError> {
-        let mut stmt = self.connection.prepare(
-            "INSERT INTO issue (id, key, summary)
+    fn add_jira_issues(&self, jira_issues: &[IssueSummary]) -> Result<(), WorklogError> {
+        let conn = self
+            .connection
+            .lock()
+            .map_err(|_| WorklogError::LockPoisoned)?;
+        debug!("add_jira_issues() :- preparing statement");
+
+        let insert_sql = "INSERT INTO issue (id, key, summary)
             VALUES (?1, ?2, ?3)
-            ON CONFLICT(id) DO UPDATE SET summary = excluded.summary, key = excluded.key",
-        )?;
+            ON CONFLICT(id) DO UPDATE SET summary = excluded.summary, key = excluded.key";
+        let mut stmt = match conn.prepare(insert_sql) {
+            Ok(stmt) => stmt,
+            Err(e) => {
+                // Log the error and return a WorklogError with context
+                log::error!(
+                    "add_jira_issues(): Failed to prepare SQL statement: {insert_sql}, cause:'{e}'"
+                );
+                return Err(e.into());
+            }
+        };
+        debug!("add_jira_issues() :- statement prepared");
+
         for issue in jira_issues {
             if let Err(e) = stmt.execute(params![
                 issue.id,
@@ -89,9 +130,9 @@ impl Dbms {
     /// }
     /// ```
     ///
-    pub fn get_issues_filtered_by_keys(
+    fn get_issues_filtered_by_keys(
         &self,
-        keys: &Vec<IssueKey>,
+        keys: &[IssueKey],
     ) -> Result<Vec<JiraIssueInfo>, WorklogError> {
         if keys.is_empty() {
             // Return an empty vector if no keys are provided
@@ -110,8 +151,8 @@ impl Dbms {
 
         // Prepare the parameters for the query
         let params: Vec<String> = keys.iter().map(ToString::to_string).collect();
-
-        let mut stmt = self.connection.prepare(&sql)?;
+        let conn = self.connection.lock().unwrap();
+        let mut stmt = conn.prepare(&sql)?;
 
         let issues = stmt
             .query_map(rusqlite::params_from_iter(params), |row| {
@@ -128,10 +169,10 @@ impl Dbms {
     ///
     /// # Errors
     /// Returns an error something goes wrong
-    pub fn find_unique_keys(&self) -> Result<Vec<IssueKey>, WorklogError> {
-        let mut stmt = self
-            .connection
-            .prepare("SELECT DISTINCT(key) FROM worklog ORDER BY key asc")?;
+    fn find_unique_keys(&self) -> Result<Vec<IssueKey>, WorklogError> {
+        let conn = self.connection.lock().unwrap();
+        let mut stmt =
+            conn.prepare("SELECT DISTINCT(issue_key) FROM worklog ORDER BY issue_key asc")?;
         let issue_keys: Vec<IssueKey> = stmt
             .query_map([], |row| {
                 let key: String = row.get::<_, String>(0)?;
@@ -140,43 +181,5 @@ impl Dbms {
             .filter_map(Result::ok)
             .collect();
         Ok(issue_keys)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::storage::dbms::tests::setup;
-    use jira::models::core::Fields;
-    #[test]
-    fn add_issues() -> Result<(), WorklogError> {
-        let lws = setup()?;
-        // Example JiraIssue data
-        let issues = vec![
-            IssueSummary {
-                id: 1.to_string(),
-                key: IssueKey::new("ISSUE-1"),
-                fields: Fields {
-                    summary: "This is the first issue.".to_string(),
-                    components: vec![],
-                },
-            },
-            IssueSummary {
-                id: 2.to_string(),
-                key: IssueKey::new("ISSUE-2"),
-                fields: Fields {
-                    summary: "This is the second issue.".to_string(),
-                    components: vec![],
-                },
-            },
-        ];
-        lws.add_jira_issues(&issues)?;
-        let issues = lws.get_issues_filtered_by_keys(&vec![
-            IssueKey::from("ISSUE-1"),
-            IssueKey::from("Issue-2"),
-        ])?;
-        assert_eq!(issues.len(), 2);
-
-        Ok(())
     }
 }

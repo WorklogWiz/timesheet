@@ -51,7 +51,7 @@ pub struct Sync {
 pub async fn execute(runtime: &ApplicationRuntime, sync_cmd: &Sync) -> Result<(), WorklogError> {
     let current_user = runtime.jira_client().get_current_user().await?;
     runtime
-        .worklog_service
+        .user_service()
         .insert_or_update_current_user(&current_user)?;
 
     // Parse the start date or fall back to the default
@@ -107,6 +107,8 @@ pub async fn execute(runtime: &ApplicationRuntime, sync_cmd: &Sync) -> Result<()
 
     // Updates the database with the issue summary information
     sync_jira_issue_information(runtime, &issue_summaries)?;
+
+    eprintln!("Updated database with issue summary information");
     // Create map of IssueKey -> IssueSummary
     let issue_map: std::collections::HashMap<String, &IssueSummary> = issue_summaries
         .iter()
@@ -163,7 +165,7 @@ async fn prepare_issue_keys_for_sync(
     // have a look in the database and create a unique list from
     // entries in the past
     if issue_keys_to_sync.is_empty() && sync_cmd.projects.is_empty() {
-        issue_keys_to_sync = runtime.worklog_service().find_unique_keys()?;
+        issue_keys_to_sync = runtime.issue_service().find_unique_keys()?;
     }
 
     let projects_as_str: Vec<&str> = sync_cmd.projects.iter().map(String::as_str).collect();
@@ -193,11 +195,13 @@ fn sync_jira_issue_information(
 ) -> Result<(), WorklogError> {
     debug!("Searching for Jira issues (information)...");
 
-    runtime.worklog_service().add_jira_issues(issue_summaries)?;
+    runtime.issue_service().add_jira_issues(issue_summaries)?;
+    debug!("sync_jira_issue_information: add_jira_issues() done");
     for issue in issue_summaries {
         runtime
-            .worklog_service()
+            .component_service()
             .create_component(&issue.key, &issue.fields.components)?;
     }
+    debug!("sync_jira_issue_information: done");
     Ok(())
 }

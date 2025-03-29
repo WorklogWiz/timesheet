@@ -434,10 +434,7 @@ mod tests {
         let t = calculate_started_time(Some(str_to_date_time(&current_hh_mm_str).unwrap()), 3600);
         assert!(t.is_err(), "{t:?}");
 
-        let a_date_time = Local
-            .with_ymd_and_hms(2024, 12, 17, 12, 25, 0)
-            .single()
-            .expect("Could not create local DateTime");
+        let a_date_time = Local::now();
         // now less 1 hour
         let one_hour_ago = a_date_time.checked_sub_signed(Duration::hours(1)).unwrap();
         let one_hour_ago_str = one_hour_ago.format("%H:%M").to_string();

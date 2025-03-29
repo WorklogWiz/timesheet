@@ -1,38 +1,72 @@
 use crate::error::WorklogError;
-use crate::storage::dbms::Dbms;
+use crate::repository::worklog_repository::WorkLogRepository;
+use crate::repository::SharedSqliteConnection;
 use crate::types::LocalWorklog;
 use chrono::{DateTime, Local};
 use jira::models::core::IssueKey;
 use jira::models::user::User;
 use jira::models::worklog::Worklog;
 use log::debug;
-use rusqlite::{named_params, params};
-impl Dbms {
-    ///
-    /// # Errors
-    /// Returns an error something goes wrong
-    pub fn remove_worklog_entry(&self, wl: &Worklog) -> Result<(), WorklogError> {
+use rusqlite::{named_params, params, Connection};
+use std::sync::Arc;
+use std::sync::Mutex;
+
+pub struct SqliteWorklogRepository {
+    connection: Arc<Mutex<Connection>>,
+}
+
+/// SQL statement to create the `worklog` table.
+const CREATE_WORKLOG_TABLE_SQL: &str = r"
+    CREATE TABLE IF NOT EXISTS worklog (
+        id integer primary key not null,
+        issue_key varchar(32),
+        issue_id integer,
+        author varchar(1024),
+        created datetime,
+        updated datetime,
+        started datetime,
+        time_spent varchar(32),
+        time_spent_seconds integer,
+        comment varchar(1024),
+        FOREIGN KEY (issue_id) REFERENCES issue(id) ON DELETE CASCADE
+    );
+";
+
+/// Creates the `worklog` table in the database.
+pub fn create_worklog_table(connection: &SharedSqliteConnection) -> Result<(), WorklogError> {
+    let conn = connection.lock().unwrap();
+    conn.execute(CREATE_WORKLOG_TABLE_SQL, [])?;
+    Ok(())
+}
+
+impl SqliteWorklogRepository {
+    pub(crate) fn new(connection: Arc<Mutex<Connection>>) -> Self {
+        Self { connection }
+    }
+}
+
+impl WorkLogRepository for SqliteWorklogRepository {
+    fn remove_worklog_entry(&self, wl: &Worklog) -> Result<(), WorklogError> {
         self.remove_entry_by_worklog_id(wl.id.as_str())?;
         Ok(())
     }
 
-    ///
-    /// # Errors
-    /// Returns an error something goes wrong
-    pub fn remove_entry_by_worklog_id(&self, wl_id: &str) -> Result<(), WorklogError> {
-        self.connection
-            .execute("DELETE FROM worklog WHERE id = ?1", params![wl_id])?;
+    fn remove_entry_by_worklog_id(&self, wl_id: &str) -> Result<(), WorklogError> {
+        let conn = self
+            .connection
+            .lock()
+            .map_err(|_| WorklogError::LockPoisoned)?;
+        conn.execute("DELETE FROM worklog WHERE id = ?1", params![wl_id])?;
         Ok(())
     }
 
-    /// Adds a new work log entry into the local DBMS
-    ///
-    /// # Errors
-    /// Returns an error something goes wrong
-    pub fn add_entry(&self, local_worklog: &LocalWorklog) -> Result<(), WorklogError> {
+    fn add_entry(&self, local_worklog: &LocalWorklog) -> Result<(), WorklogError> {
         debug!("Adding {:?} to DBMS", &local_worklog);
-
-        let result = self.connection.execute(
+        let conn = self
+            .connection
+            .lock()
+            .map_err(|_e| WorklogError::LockPoisoned)?;
+        let result = conn.execute(
             "INSERT INTO worklog (
             issue_key, id, author, created, updated, started, time_Spent, time_Spent_Seconds, issue_Id, comment
         ) VALUES (
@@ -49,19 +83,20 @@ impl Dbms {
             ":timeSpent" : local_worklog.timeSpent,
             ":timeSpentSeconds": local_worklog.timeSpentSeconds,
             ":comment" : local_worklog.comment
-            },).map_err(|e| WorklogError::Sql(format!("Unable to insert into worklog: {e}")))?;
+            }, ).map_err(|e| WorklogError::Sql(format!("Unable to insert into worklog: {e}")))?;
 
         debug!("With result {}", result);
 
         Ok(())
     }
 
-    ///
-    /// # Errors
-    /// Returns an error something goes wrong
-    pub fn add_worklog_entries(&self, worklogs: &[LocalWorklog]) -> Result<(), WorklogError> {
+    fn add_worklog_entries(&self, worklogs: &[LocalWorklog]) -> Result<(), WorklogError> {
+        let conn = self
+            .connection
+            .lock()
+            .map_err(|_e| WorklogError::LockPoisoned)?;
         // Prepare the SQL insert statement
-        let mut stmt = self.connection.prepare(r"
+        let mut stmt = conn.prepare(r"
             INSERT INTO worklog
                 (id, issue_key, issue_id, author, created, updated, started, time_spent, time_spent_seconds, comment)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -85,36 +120,33 @@ impl Dbms {
         Ok(())
     }
 
-    ///
-    /// # Errors
-    /// Returns an error something goes wrong
-    pub fn get_count(&self) -> Result<i64, WorklogError> {
-        let mut stmt = self
+    fn get_count(&self) -> Result<i64, WorklogError> {
+        let conn = self
             .connection
-            .prepare("select count(*) from worklog")
-            .map_err(|e| {
-                WorklogError::Sql(format!("Unable to retrive count(*) from worklog: {e}"))
-            })?;
+            .lock()
+            .map_err(|_e| WorklogError::LockPoisoned)?;
+        let mut stmt = conn.prepare("select count(*) from worklog").map_err(|e| {
+            WorklogError::Sql(format!("Unable to retrive count(*) from worklog: {e}"))
+        })?;
         let count = stmt.query_row([], |row| row.get(0))?;
         Ok(count)
     }
 
-    ///
-    /// # Errors
-    /// Returns an error something goes wrong
-    pub fn purge_entire_local_worklog(&self) -> Result<(), WorklogError> {
-        self.connection.execute("delete from worklog", [])?;
+    fn purge_entire_local_worklog(&self) -> Result<(), WorklogError> {
+        let conn = self
+            .connection
+            .lock()
+            .map_err(|_e| WorklogError::LockPoisoned)?;
+        conn.execute("delete from worklog", [])?;
         Ok(())
     }
-    ///
-    /// # Errors
-    /// Returns an error something goes wrong
-    ///
-    /// # Panics
-    /// If the worklog id could not be parsed into an integer
-    ///
-    pub fn find_worklog_by_id(&self, worklog_id: &str) -> Result<LocalWorklog, WorklogError> {
-        let mut stmt = self.connection.prepare("SELECT issue_key, id, author, created, updated, started, time_spent, time_spent_seconds, issue_id, comment FROM worklog WHERE id = ?1")?;
+
+    fn find_worklog_by_id(&self, worklog_id: &str) -> Result<LocalWorklog, WorklogError> {
+        let conn = self
+            .connection
+            .lock()
+            .map_err(|_e| WorklogError::LockPoisoned)?;
+        let mut stmt = conn.prepare("SELECT issue_key, id, author, created, updated, started, time_spent, time_spent_seconds, issue_id, comment FROM worklog WHERE id = ?1")?;
         let id: i32 = worklog_id.parse().expect("Invalid number");
         let worklog = stmt.query_row(params![id], |row| {
             Ok(LocalWorklog {
@@ -133,41 +165,7 @@ impl Dbms {
         Ok(worklog)
     }
 
-    /// Finds worklog entries that were started after the given `start_datetime` and optionally,
-    /// filters them by a list of `keys_filter` (issue keys) and `users_filter` (authors).
-    ///
-    /// # Arguments
-    /// * `start_datetime` - A `DateTime` representing the lower bound for the `started` field.
-    /// * `keys_filter` - A slice of `IssueKey` objects to filter the worklogs by their associated issue keys.
-    ///   If empty, no filtering on issue keys is done.
-    /// * `users_filter` - A slice of `User` objects to filter the worklogs by their associated authors.
-    ///   If empty, no filtering on authors is done.
-    ///
-    /// # Returns
-    /// A `Result` containing a `Vec` of `LocalWorklog` objects that match the criteria, or a `WorklogError`
-    /// if something goes wrong during query execution.
-    ///
-    /// # Errors
-    /// * Returns a `WorklogError` if the database query fails for any reason.
-    ///
-    /// # Examples
-    /// ```rust,ignore
-    /// use chrono::prelude::*;
-    /// use crate::storage::dbms::{DbConnector, IssueKey, User};
-    ///
-    /// let db = DbConnector::new("test.db")?;
-    /// let start_time = Local::now() - chrono::Duration::days(7);
-    /// let issue_keys = vec![IssueKey::from("TEST-123")];
-    /// let users = vec![User::new("John Doe".to_string())];
-    ///
-    /// let result = db.find_worklogs_after(start_time, &issue_keys, &users);
-    ///
-    /// match result {
-    ///     Ok(worklogs) => println!("Retrieved {} worklogs.", worklogs.len()),
-    ///     Err(e) => eprintln!("Error: {}", e),
-    /// }
-    /// ```
-    pub fn find_worklogs_after(
+    fn find_worklogs_after(
         &self,
         start_datetime: DateTime<Local>,
         keys_filter: &[IssueKey],
@@ -219,7 +217,11 @@ impl Dbms {
         debug!("find_worklogs_after():- {sql}");
 
         // Prepare the query
-        let mut stmt = self.connection.prepare(&sql)?;
+        let conn = self
+            .connection
+            .lock()
+            .map_err(|_e| WorklogError::LockPoisoned)?;
+        let mut stmt = conn.prepare(&sql)?;
 
         // Execute the query and map results
         let worklogs = stmt
@@ -246,10 +248,12 @@ impl Dbms {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::dbms::tests::setup;
+    use crate::repository::issue_repository::IssueRepository;
     use chrono::Days;
     use jira::models::core::Fields;
     use jira::models::issue::IssueSummary;
+
+    use crate::repository::sqlite::tests::test_database_manager;
 
     const ISSUE_ID: &str = "123";
     #[test]
@@ -266,9 +270,11 @@ mod tests {
             issueId: ISSUE_ID.parse().unwrap(),
             comment: Some("Worked on the issue".to_string()),
         };
-        let lws = setup()?;
 
-        lws.add_jira_issues(&vec![IssueSummary {
+        let db_manager = test_database_manager()?;
+        let issue_repo_for_test = db_manager.create_issue_repository();
+
+        issue_repo_for_test.add_jira_issues(&vec![IssueSummary {
             id: 123.to_string(),
             key: IssueKey::from("ABC-123"),
             fields: Fields {
@@ -277,10 +283,12 @@ mod tests {
             },
         }])?;
 
-        lws.add_entry(&worklog)?;
+        let worklog_repo_for_test = db_manager.create_worklog_repository();
+
+        worklog_repo_for_test.add_entry(&worklog)?;
 
         // Assert
-        let result = lws.find_worklog_by_id(ISSUE_ID)?;
+        let result = worklog_repo_for_test.find_worklog_by_id(ISSUE_ID)?;
         assert_eq!(result.id, ISSUE_ID, "expected id 123, got {}", result.id);
 
         Ok(())
@@ -300,8 +308,9 @@ mod tests {
             issueId: ISSUE_ID.parse().unwrap(),
             comment: Some("Worked on the issue".to_string()),
         };
-        let lws = setup()?;
-        lws.add_jira_issues(&vec![IssueSummary {
+        let db_manager = test_database_manager()?;
+        let issue_repo = db_manager.create_issue_repository();
+        issue_repo.add_jira_issues(&vec![IssueSummary {
             id: ISSUE_ID.to_string(),
             key: IssueKey::from("ABC-789"),
             fields: Fields {
@@ -310,10 +319,11 @@ mod tests {
             },
         }])?;
 
-        lws.add_worklog_entries(&[worklog])?;
+        let worklog_repo = db_manager.create_worklog_repository();
+        worklog_repo.add_worklog_entries(&[worklog])?;
 
         // Assert
-        let result = lws.find_worklog_by_id("1")?;
+        let result = worklog_repo.find_worklog_by_id("1")?;
         assert_eq!(result.id, "1");
 
         Ok(())
@@ -321,7 +331,7 @@ mod tests {
 
     #[test]
     fn find_worklogs_after() -> Result<(), WorklogError> {
-        let lws = setup()?;
+        let db_manager = test_database_manager()?;
 
         let worklog = LocalWorklog {
             issue_key: IssueKey::from("ABC-456"),
@@ -335,7 +345,8 @@ mod tests {
             issueId: ISSUE_ID.parse().unwrap(),
             comment: Some("Worked on the issue".to_string()),
         };
-        lws.add_jira_issues(&vec![IssueSummary {
+        let test_issue_repo = db_manager.create_issue_repository();
+        test_issue_repo.add_jira_issues(&vec![IssueSummary {
             id: 123.to_string(),
             key: IssueKey::from("ABC-456"),
             fields: Fields {
@@ -344,9 +355,10 @@ mod tests {
             },
         }])?;
 
-        lws.add_entry(&worklog)?;
+        let test_worklog_repo = db_manager.create_worklog_repository();
+        test_worklog_repo.add_entry(&worklog)?;
 
-        let result = lws.find_worklogs_after(
+        let result = test_worklog_repo.find_worklogs_after(
             Local::now().checked_sub_days(Days::new(60)).unwrap(),
             &[],
             &[],
@@ -354,7 +366,7 @@ mod tests {
         assert!(!result.is_empty(), "No data found in worklog dbms",);
         assert!(!result.is_empty(), "Expected a not empty collection");
 
-        let result = lws.find_worklogs_after(
+        let result = test_worklog_repo.find_worklogs_after(
             Local::now().checked_sub_days(Days::new(60)).unwrap(),
             &[],
             &[User {
