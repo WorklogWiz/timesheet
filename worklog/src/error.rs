@@ -51,6 +51,14 @@ pub enum WorklogError {
     DatabaseError(String),
     #[error("Active timer exists")]   
     ActiveTimerExists,
+    #[error("No active timer")]  
+    NoActiveTimer,
+    #[error("Database lock error")] 
+    DatabaseLockError,
+    #[error("Timer not found")]
+    TimerNotFound(i64),
+    #[error("Invalid timer data: {0}")]
+    InvalidTimerData(String),
 }
 
 impl From<rusqlite::Error> for WorklogError {
