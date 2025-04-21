@@ -1,6 +1,5 @@
 use crate::error::WorklogError;
 use crate::repository::worklog_repository::WorkLogRepository;
-use crate::repository::SharedSqliteConnection;
 use crate::types::LocalWorklog;
 use chrono::{DateTime, Local};
 use jira::models::core::IssueKey;
@@ -10,6 +9,7 @@ use log::debug;
 use rusqlite::{named_params, params, Connection};
 use std::sync::Arc;
 use std::sync::Mutex;
+use crate::repository::sqlite::SharedSqliteConnection;
 
 pub struct SqliteWorklogRepository {
     connection: Arc<Mutex<Connection>>,

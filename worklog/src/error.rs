@@ -49,6 +49,8 @@ pub enum WorklogError {
     LockPoisoned,
     #[error("Unable to create database SQL schema: {0}")]
     DatabaseError(String),
+    #[error("Active timer exists")]   
+    ActiveTimerExists,
 }
 
 impl From<rusqlite::Error> for WorklogError {

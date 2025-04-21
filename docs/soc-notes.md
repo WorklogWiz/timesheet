@@ -1,11 +1,31 @@
 # Steinars notes
 
-
+<!-- TOC -->
+* [Steinars notes](#steinars-notes)
+  * [Todo](#todo)
+  * [Repostiory pattern](#repostiory-pattern)
+  * [AI Assistant's proposal](#ai-assistants-proposal)
+  * [Setting the environment variables](#setting-the-environment-variables)
+  * [How configuration parameters are loaded and merged with KeyChain](#how-configuration-parameters-are-loaded-and-merged-with-keychain)
+  * [Generic Data model for timesheet](#generic-data-model-for-timesheet)
+    * [Mapping Rust concepts to UML](#mapping-rust-concepts-to-uml)
+  * [Organising code to provide maximum encapsulation](#organising-code-to-provide-maximum-encapsulation)
+  * [DDD architecture](#ddd-architecture)
+<!-- TOC -->
 ## Todo
 - [ ] Derive keychain service name from the application name space name
 - [ ] Define a separate Jira account for the integration tests `norn@balder.no` or something like that.
       I am not sure if we can use a fake name or need the name to be an actual email account somewhere.
 
+## Start and stop timers
+A timer can be started and stopped using the `timesheet` command.
+Only a single timer can be active at a time.
+```shell
+# Starts a new timer assuming that <issue-key> exists in the Jira instance 
+timesheet start -i <issue-key>  [-s start time]
+# Stops the current timer, raises a warning if no timer is active
+timesheet stop
+```
 ## Repostiory pattern
 
 ```plantuml

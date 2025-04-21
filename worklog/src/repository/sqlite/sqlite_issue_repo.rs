@@ -1,6 +1,6 @@
 use crate::error::WorklogError;
 use crate::repository::issue_repository::IssueRepository;
-use crate::repository::SharedSqliteConnection;
+use crate::repository::sqlite::SharedSqliteConnection;
 use crate::types::JiraIssueInfo;
 use jira::models::core::IssueKey;
 use jira::models::issue::IssueSummary;

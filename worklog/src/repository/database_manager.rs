@@ -34,11 +34,13 @@ use crate::repository::sqlite::sqlite_issue_repo::SqliteIssueRepository;
 use crate::repository::sqlite::sqlite_user_repo::SqliteUserRepository;
 use crate::repository::sqlite::sqlite_worklog_repo::SqliteWorklogRepository;
 use crate::repository::user_repository::UserRepository;
-use crate::repository::{sqlite, SharedSqliteConnection};
+use crate::repository::{sqlite};
 use rusqlite::{Connection, Result};
 use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use crate::repository::sqlite::SharedSqliteConnection;
+use crate::repository::sqlite::sqlite_timer_repo::SqliteTimerRepository;
 
 /// A configuration enum that defines the parameters required for initializing
 /// database connections.
@@ -174,6 +176,13 @@ impl DatabaseManager {
                 e
             ))
         })?;
+        
+        connection.execute_batch("PRAGMA foreign_keys = ON").map_err(|e| {
+            WorklogError::DatabaseError(format!(
+                "Failed to enable foreign key support: {}",
+                e
+            ))
+        })?;
 
         Ok(DbConnection::Sqlite(Arc::new(Mutex::new(connection))))
     }
@@ -227,6 +236,12 @@ impl DatabaseManager {
             DbConnection::Sqlite(conn) => Arc::new(SqliteWorklogRepository::new(conn.clone())),
         }
     }
+    
+    pub(crate) fn create_timer_repository(&self) -> Arc<SqliteTimerRepository> {
+        match &self.connection {
+            DbConnection::Sqlite(conn) => Arc::new(SqliteTimerRepository::new(conn.clone())),
+        }
+    }
 
     /// Creates and returns an `Arc`-wrapped `SqliteComponentRepository` instance.
     ///
@@ -273,5 +288,10 @@ impl DatabaseManager {
         match &self.connection {
             DbConnection::Sqlite(conn) => Arc::new(SqliteComponentRepository::new(conn.clone())),
         }
+    }
+
+    #[cfg(test)]
+    pub fn get_connection(&self) -> &DbConnection {
+        &self.connection
     }
 }

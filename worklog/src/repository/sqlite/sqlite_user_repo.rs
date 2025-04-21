@@ -1,6 +1,6 @@
 use crate::error::WorklogError;
 use crate::repository::user_repository::UserRepository;
-use crate::repository::SharedSqliteConnection;
+use crate::repository::sqlite::SharedSqliteConnection;
 use jira::models::user::User;
 use rusqlite::{params, Connection};
 use std::sync::{Arc, Mutex};

@@ -2,6 +2,7 @@ use chrono::{DateTime, Local};
 use jira::models::core::IssueKey;
 use jira::models::worklog::Worklog;
 use serde::{Deserialize, Serialize};
+use chrono::{ Utc};
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Clone)]
 #[allow(non_snake_case)]
@@ -55,4 +56,66 @@ impl LocalWorklog {
 pub struct JiraIssueInfo {
     pub issue_key: IssueKey,
     pub summary: String,
+}
+
+/// Represents a timer record in the database
+///
+/// Each timer is associated with an issue and tracks a time period
+/// with start and optional end timestamps. Timers without an end time
+/// are considered active.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Timer {
+    /// Unique identifier for the timer, auto-assigned by the database
+    pub id: Option<i64>,
+
+    /// Foreign key to the associated issue
+    pub issue_id: String,
+
+    /// When this timer record was created
+    pub created_at: DateTime<Utc>,
+
+    /// When the timer was started
+    pub started_at: DateTime<Utc>,
+
+    /// When the timer was stopped (null for active timers)
+    pub stopped_at: Option<DateTime<Utc>>,
+
+    /// Whether this timer has been synchronized with a remote system
+    pub synced: bool,
+
+    /// Optional comment about the work being tracked
+    pub comment: Option<String>,
+}
+
+impl Timer {
+    /// Creates a new timer for the specified issue that starts now
+    pub fn start_new(issue_id: String) -> Self {
+        let now = Utc::now();
+        Self {
+            id: None,
+            issue_id,
+            created_at: now,
+            started_at: now,
+            stopped_at: None,
+            synced: false,
+            comment: None,
+        }
+    }
+
+    /// Checks if this timer is currently active (not stopped)
+    pub fn is_active(&self) -> bool {
+        self.stopped_at.is_none()
+    }
+
+    /// Gets the duration of this timer if it has been stopped
+    pub fn duration(&self) -> Option<chrono::Duration> {
+        self.stopped_at.map(|end| end - self.started_at)
+    }
+
+    /// Stops this timer at the current time
+    pub fn stop(&mut self) {
+        if self.is_active() {
+            self.stopped_at = Some(Utc::now());
+        }
+    }
 }
