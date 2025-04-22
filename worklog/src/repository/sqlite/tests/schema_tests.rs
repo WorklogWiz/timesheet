@@ -18,7 +18,7 @@ fn test_foreign_keys_enabled() {
     assert!(foreign_keys_enabled, "Foreign keys should be enabled");
 }
 
-/// Helper function to check if foreign keys are enabled in a SQLite connection
+/// Helper function to check if foreign keys are enabled in an SQLite connection
 fn is_foreign_keys_enabled(conn: &SharedSqliteConnection) -> Result<bool, WorklogError> {
     let conn = conn.lock().map_err(|_| WorklogError::LockPoisoned)?;
     let mut stmt = conn.prepare("PRAGMA foreign_keys")

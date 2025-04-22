@@ -65,7 +65,7 @@ pub(crate) enum Command {
 #[derive(Args)]
 pub(crate) struct Add {
     /// Duration of work in hours (h) or days (d)
-    /// If more than a single entry separate with spaces and three letter abbreviation of
+    /// If more than a single entry separate with spaces and three letter abbreviations of
     /// weekday name:
     ///     --durations Mon:1,5h Tue:1d Wed:3,5h Fri:1d
     #[arg(short, long, num_args(1..))]

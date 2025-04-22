@@ -3,9 +3,9 @@ SELECT component.name                              AS component_name,
        SUM(worklog.time_spent_seconds) % 3600 / 60 AS minutes
 FROM issue
     JOIN
-    worklog ON issue.issue_key = worklog.issue_key
+    worklog ON issue.ISSUE_KEY = worklog.ISSUE_KEY
     left outer join
-    issue_component ON issue.issue_key = issue_component.issue_key
+    issue_component ON issue.ISSUE_KEY = issue_component.ISSUE_KEY
     left outer JOIN
     component ON issue_component.component_id = component.id
 group by component.name
@@ -19,7 +19,7 @@ select sum(worklog.time_spent_seconds) as seconds,
 
 select *
 from worklog
-where issue_key in ('KT-1892', 'KT-2759')
+where ISSUE_KEY in ('KT-1892', 'KT-2759')
   and date(worklog.started) = date('now');
 
 SELECT  c.name,
@@ -28,15 +28,15 @@ SELECT  c.name,
         sum(time_spent_seconds / 60) % 60 as minutes
 
 FROM main.issue
-    join worklog ON issue.issue_key = worklog.issue_key
-    JOIN issue_component on issue.issue_key = issue_component.issue_key
+    join worklog ON issue.ISSUE_KEY = worklog.ISSUE_KEY
+    JOIN issue_component on issue.ISSUE_KEY = issue_component.ISSUE_KEY
     join main.component c on c.id = issue_component.component_id
 where date(worklog.started) = DATE('now')
 --and c.name = 'Booking-general'
 group by c.name
 ORDER BY c.name
 ;
-select issue.issue_key from issue left outer join main.issue_component ic on issue.issue_key = ic.issue_key
+select issue.ISSUE_KEY from issue left outer join main.issue_component ic on issue.ISSUE_KEY = ic.ISSUE_KEY
 where ic.id is null;
 ;
 
@@ -48,7 +48,7 @@ from (select sum(worklog.time_spent_seconds),
       where date(started) = date('now')) shm;
 
 select * from component;
-select * from issue_component where issue_key='KT-1774';
+select * from issue_component where ISSUE_KEY='KT-1774';
 
 select worklog.author, sum(worklog.time_spent_seconds)
 from worklog

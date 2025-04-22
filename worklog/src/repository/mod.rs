@@ -1,6 +1,3 @@
-use rusqlite::Connection;
-use std::sync::{Arc, Mutex};
-
 // Application repository modules, each representing specific database entity operations.
 pub(crate) mod component_repository;
 pub(crate) mod issue_repository;

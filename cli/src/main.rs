@@ -142,7 +142,7 @@ impl From<cli::Add> for operation::add::Add {
     fn from(val: cli::Add) -> Self {
         operation::add::Add {
             durations: val.durations,
-            issue: val.issue,
+            issue_key: val.issue,
             started: val.started,
             comment: val.comment,
         }

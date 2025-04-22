@@ -4,6 +4,7 @@ use crate::date;
 use jira::JiraError;
 use thiserror::Error;
 use url::ParseError;
+use jira::builder::JiraBuilderError;
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Error, Debug)]
@@ -59,6 +60,12 @@ pub enum WorklogError {
     TimerNotFound(i64),
     #[error("Invalid timer data: {0}")]
     InvalidTimerData(String),
+    #[error("Issue not found: {0}")]
+    IssueNotFound(String),
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+    #[error("Jira build error: {0}")]
+    JiraBuildError(JiraBuilderError),
 }
 
 impl From<rusqlite::Error> for WorklogError {

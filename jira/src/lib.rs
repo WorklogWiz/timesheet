@@ -23,6 +23,7 @@ use reqwest::{
     Client, Method, RequestBuilder, StatusCode,
 };
 
+use crate::builder::{JiraBuilder, JiraBuilderError};
 use crate::models::core::IssueKey;
 use crate::models::issue::{
     ComponentId, IssueSummary, IssueType, IssuesResponse, NewIssue, NewIssueFields,
@@ -34,6 +35,8 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use url::{ParseError, Url};
 
 pub mod models;
+
+pub mod builder;
 
 type Result<T> = std::result::Result<T, JiraError>;
 
@@ -60,6 +63,13 @@ pub enum JiraError {
     ParseError(ParseError),
     UnexpectedStatus,
     UriTooLong(String),
+    BuilderError(JiraBuilderError),
+}
+
+impl From<JiraBuilderError> for JiraError {
+    fn from(error: JiraBuilderError) -> JiraError {
+        JiraError::BuilderError(error.into())
+    }
 }
 
 #[allow(clippy::enum_glob_use)]
@@ -92,6 +102,7 @@ impl fmt::Display for JiraError {
             NotFound(url) => writeln!(f, "Not found: '{url}'"),
             UnexpectedStatus => todo!(),
             UriTooLong(uri) => write!(f, "URI too long: {uri} "),
+            BuilderError(e) => write!(f, "JiraBuilderError: {e}"),
         }
     }
 }
@@ -163,7 +174,7 @@ impl Credentials {
 ///     Ok(())
 /// }
 /// ```
-#[derive(Clone)]
+#[derive(Clone,Debug)]
 pub struct Jira {
     host: Url,
     api: String,
@@ -203,23 +214,17 @@ impl Jira {
     where
         H: Into<String>,
     {
-        let host = Url::parse(&host.into())?;
-
-        Ok(Jira {
-            host,
-            api: "api".to_string(),
-            client: Client::new(),
-            credentials,
-        })
+        Ok(JiraBuilder::new()
+            .host(&host.into())
+            .credentials(credentials)
+            .build()?)
     }
 
     async fn request<D>(&self, method: Method, endpoint: &str, body: Option<Vec<u8>>) -> Result<D>
     where
         D: DeserializeOwned,
     {
-        let url = self
-            .host
-            .join(&format!("rest/{}/latest{endpoint}", self.api))?;
+        let url = self.host.join(&format!("{}{endpoint}", self.api))?;
 
         let mut request = self
             .client
@@ -989,13 +994,14 @@ impl Jira {
 mod tests {
     use super::*;
     use mockito::Server;
+    use crate::builder::DEFAULT_API_VERSION;
 
     #[tokio::test]
     async fn fetch_myself_success() -> Result<()> {
         let mut server = Server::new_async().await;
         let url = server.url();
         let _m = server
-            .mock("GET", "/rest/api/latest/myself")
+            .mock("GET", format!("/rest/api/{}/myself", DEFAULT_API_VERSION).as_str())
             .with_status(200)
             .with_body(
                 r#"{
@@ -1024,7 +1030,7 @@ mod tests {
         let mut server = Server::new_async().await;
         let url = server.url();
         let _m = server
-            .mock("GET", "/rest/api/latest/myself")
+            .mock("GET", format!("/rest/api/{}/myself", DEFAULT_API_VERSION).as_str())
             .with_status(403)
             .with_body(
                 r#"{

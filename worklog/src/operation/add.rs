@@ -13,7 +13,7 @@ use crate::{date, error::WorklogError, types::LocalWorklog, ApplicationRuntime};
 
 pub struct Add {
     pub durations: Vec<String>,
-    pub issue: String,
+    pub issue_key: String,
     pub started: Option<String>,
     pub comment: Option<String>,
 }
@@ -35,10 +35,9 @@ pub(crate) async fn execute(
         ));
     }
 
-    // Ensure the issue id is always uppercase
-    instructions.issue = instructions.issue.to_uppercase();
+    // Ensure the issue key is always uppercase
+    instructions.issue_key = instructions.issue_key.to_uppercase();
 
-    // If there is only a single duration which does starts with a numeric
     debug!(
         "Length: {} and durations[0]: {}",
         instructions.durations.len(),
@@ -54,7 +53,7 @@ pub(crate) async fn execute(
         let result = add_single_entry(
             client,
             &time_tracking_options,
-            instructions.issue.clone(),
+            instructions.issue_key.clone(),
             &instructions.durations[0],
             instructions.started.clone(),
             instructions.comment.clone(),
@@ -70,7 +69,7 @@ pub(crate) async fn execute(
         added_worklog_items = add_multiple_entries(
             client,
             time_tracking_options,
-            instructions.issue.clone(),
+            instructions.issue_key.clone(),
             instructions.durations.clone(),
             instructions.comment.clone(),
         )

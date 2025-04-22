@@ -1,14 +1,10 @@
 use crate::error::WorklogError;
 use crate::repository::sqlite::SharedSqliteConnection;
 use crate::repository::timer_repository::TimerRepository;
-use crate::repository::worklog_repository::WorkLogRepository;
-use crate::types::{LocalWorklog, Timer};
+use crate::types::Timer;
 use chrono::{DateTime, Local, Utc};
-use jira::models::core::IssueKey;
-use jira::models::user::User;
-use jira::models::worklog::Worklog;
 use log::debug;
-use rusqlite::{named_params, params, Connection, Result as SqliteResult};
+use rusqlite::{params, Connection, Result as SqliteResult};
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -20,17 +16,17 @@ pub struct SqliteTimerRepository {
 const CREATE_TIMER_TABLE_SQL: &str = r"
     CREATE TABLE IF NOT EXISTS timer (
         id integer primary key not null,
-        issue_id integer,
+        issue_key varchar(32),
         created datetime,
         started datetime,
         end datetime,
         synced boolean,
         comment varchar(1024),
-        FOREIGN KEY (issue_id) REFERENCES issue(id) ON DELETE CASCADE
+        FOREIGN KEY (issue_key) REFERENCES issue(key) ON DELETE CASCADE
     );
     
+    -- Partial index to find the active timer and enforce a single active timer at a time
     CREATE UNIQUE INDEX IF NOT EXISTS idx_single_active_timer ON timer ((end IS NULL)) WHERE end IS NULL;
-    
 ";
 
 /// Creates the `timer` table in the database.
@@ -47,18 +43,18 @@ impl SqliteTimerRepository {
 }
 
 impl TimerRepository for SqliteTimerRepository {
-    fn start_timer(&self, timer: &Timer) -> Result<(i64), WorklogError> {
-        debug!("Starting timer for issue {}", timer.issue_id);
+    fn start_timer(&self, timer: &Timer) -> Result<i64, WorklogError> {
+        debug!("Starting timer for issue {}", timer.issue_key);
         let conn = self
             .connection
             .lock()
             .map_err(|_| WorklogError::LockPoisoned)?;
         let result: SqliteResult<i64> = conn.query_row(
-            r"INSERT INTO timer (issue_id, created, started, end, synced, comment)
+            r"INSERT INTO timer (issue_key, created, started, end, synced, comment)
               VALUES (?, ?, ?, ?, ?, ?)
               RETURNING id",
             params![
-                timer.issue_id,
+                timer.issue_key,
                 timer.created_at,
                 timer.started_at,
                 timer.stopped_at,
@@ -89,14 +85,14 @@ impl TimerRepository for SqliteTimerRepository {
             .map_err(|_| WorklogError::DatabaseLockError)?;
 
         let result = conn.query_row(
-            r"SELECT id, issue_id, created, started, end, synced, comment 
+            r"SELECT id, issue_key, created, started, end, synced, comment 
               FROM timer 
               WHERE end IS NULL",
             [],
             |row| {
                 Ok(Timer {
                     id: Some(row.get(0)?),
-                    issue_id: row.get(1)?,
+                    issue_key: row.get(1)?,
                     created_at: row.get(2)?,
                     started_at: row.get(3)?,
                     stopped_at: row.get(4)?,
@@ -114,7 +110,7 @@ impl TimerRepository for SqliteTimerRepository {
     }
 
     /// Stops the currently active timer
-    fn stop_active_timer(&self) -> Result<Timer, WorklogError> {
+    fn stop_active_timer(&self, stop_time: Option<DateTime<Local>>) -> Result<Timer, WorklogError> {
         // Find the active timer
         let mut active_timer = match self.find_active_timer()? {
             Some(timer) => timer,
@@ -126,35 +122,38 @@ impl TimerRepository for SqliteTimerRepository {
             .lock()
             .map_err(|_| WorklogError::DatabaseLockError)?;
 
-        // Set the stop time to now
-        active_timer.stopped_at = Some(Utc::now());
-
+        // Set the stop time to supplied value or now
+        active_timer.stopped_at = stop_time.or_else(|| Some(Utc::now().with_timezone(&Local)));
+        
+        debug!("Stopping timer {:?}", &active_timer);
         // Update the timer in the database
         conn.execute(
             "UPDATE timer SET end = ? WHERE id = ?",
             params![active_timer.stopped_at, active_timer.id],
         )?;
 
+        debug!("Stopped timer for issue {}", active_timer.issue_key);
+
         Ok(active_timer)
     }
     /// Finds all timers for a specific issue
-    fn find_by_issue_id(&self, issue_id: &str) -> Result<Vec<Timer>, WorklogError> {
+    fn find_by_issue_key(&self, issue_ke: &str) -> Result<Vec<Timer>, WorklogError> {
         let conn = self
             .connection
             .lock()
             .map_err(|_| WorklogError::DatabaseLockError)?;
 
         let mut stmt = conn.prepare(
-            r"SELECT id, issue_id, created, started, end, synced, comment 
+            r"SELECT id, issue_key, created, started, end, synced, comment 
               FROM timer 
-              WHERE issue_id = ? 
+              WHERE issue_ke = ? 
               ORDER BY started DESC",
         )?;
 
-        let timer_iter = stmt.query_map(params![issue_id], |row| {
+        let timer_iter = stmt.query_map(params![issue_ke], |row| {
             Ok(Timer {
                 id: Some(row.get(0)?),
-                issue_id: row.get(1)?,
+                issue_key: row.get(1)?,
                 created_at: row.get(2)?,
                 started_at: row.get(3)?,
                 stopped_at: row.get(4)?,
@@ -179,7 +178,7 @@ impl TimerRepository for SqliteTimerRepository {
             .map_err(|_| WorklogError::DatabaseLockError)?;
 
         let mut stmt = conn.prepare(
-            r"SELECT id, issue_id, created, started, end, synced, comment 
+            r"SELECT id, issue_key, created, started, end, synced, comment 
               FROM timer 
               WHERE started >= ? 
               ORDER BY started DESC",
@@ -188,7 +187,7 @@ impl TimerRepository for SqliteTimerRepository {
         let timer_iter = stmt.query_map(params![date], |row| {
             Ok(Timer {
                 id: Some(row.get(0)?),
-                issue_id: row.get(1)?,
+                issue_key: row.get(1)?,
                 created_at: row.get(2)?,
                 started_at: row.get(3)?,
                 stopped_at: row.get(4)?,
@@ -236,10 +235,10 @@ impl TimerRepository for SqliteTimerRepository {
 
         let rows_affected = conn.execute(
             r"UPDATE timer 
-              SET issue_id = ?, created = ?, started = ?, end = ?, synced = ?, comment = ? 
+              SET issue_key = ?, created = ?, started = ?, end = ?, synced = ?, comment = ? 
               WHERE id = ?",
             params![
-                timer.issue_id,
+                timer.issue_key,
                 timer.created_at,
                 timer.started_at,
                 timer.stopped_at,
@@ -261,19 +260,18 @@ impl TimerRepository for SqliteTimerRepository {
 mod tests {
     use super::*;
     use crate::repository::issue_repository::IssueRepository;
-    use jira::models::core::Fields;
+    use crate::repository::sqlite::tests::test_database_manager;
+    use jira::models::core::{Fields, IssueKey};
     use jira::models::issue::IssueSummary;
 
-    use crate::repository::sqlite::tests::test_database_manager;
-
-    const ISSUE_ID: &str = "123";
+    const ISSUE_KEY: &str = "ABC-123";
     #[test]
     fn start_timer_test() -> Result<(), WorklogError> {
         let db_manager = test_database_manager()?;
         let issue_repo_for_test = db_manager.create_issue_repository();
 
         issue_repo_for_test.add_jira_issues(&vec![IssueSummary {
-            id: ISSUE_ID.to_string(),
+            id: "123".to_string(),
             key: IssueKey::from("ABC-123"),
             fields: Fields {
                 summary: "Test".to_string(),
@@ -283,7 +281,7 @@ mod tests {
 
         let worklog_repo_for_test = db_manager.create_timer_repository();
 
-        let timer = Timer::start_new(ISSUE_ID.to_string());
+        let timer = Timer::start_new(ISSUE_KEY.to_string());
         let result = worklog_repo_for_test.start_timer(&timer)?;
 
         // Assert
