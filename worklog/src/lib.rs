@@ -1,3 +1,45 @@
+//! The `worklog` crate provides a comprehensive system for managing and tracking work logs
+//! in integration with Jira. It offers functionalities for creating, reading, updating,
+//! and deleting work logs both locally and on Jira servers.
+//!
+//! # Features
+//!
+//! - Local work log storage with `SQLite` database
+//! - Jira integration for synchronizing work logs
+//! - User management and authentication
+//! - Issue tracking and component management
+//! - Timer functionality for tracking work duration
+//!
+//! # Main Components
+//!
+//! - [`ApplicationRuntime`]: The main runtime environment coordinating all services
+//! - [`WorkLogService`]: Handles work log management operations
+//! - [`UserService`]: Manages user-related operations
+//! - [`IssueService`]: Handles Jira issue operations
+//! - [`ComponentService`]: Manages Jira components
+//! - [`TimerService`]: Provides time tracking functionality
+//!
+//! # Example
+//!
+//! ```no_run
+//! use worklog::ApplicationRuntimeBuilder;
+//! use worklog::Operation;
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!
+//!     let runtime = ApplicationRuntimeBuilder::new()
+//!         .build()?;
+//!     
+//!     // Execute various operations
+//!     let result = runtime.execute(Operation::Codes).await?;
+//!     
+//!     Ok(())
+//! }
+//! ```
+//!
+//! The new example demonstrates how to use the `ApplicationRuntimeBuilder` with its fluent interface to customize the runtime with specific configuration options before building it. This builder pattern gives users more flexibility compared to the simple `ApplicationRuntime::new()` approach in the original example.
+
 use crate::config::JiraClientConfiguration;
 /// The `ApplicationRuntime` struct serves as the main runtime environment for the application,
 /// providing access to essential services such as issue management, user management, and
@@ -17,7 +59,7 @@ use crate::error::WorklogError;
 use crate::repository::database_manager::{DatabaseConfig, DatabaseManager};
 use crate::service::component::ComponentService;
 use crate::service::issue::IssueService;
-use crate::service::timer::TimerService;
+pub use crate::service::timer::TimerService;
 use crate::service::user::UserService;
 use crate::service::worklog::WorkLogService;
 use config::AppConfiguration;
@@ -205,7 +247,11 @@ impl ApplicationRuntime {
 /// optionally configuring it using its methods, and then calling [`ApplicationRuntimeBuilder::build`]
 /// to produce an `ApplicationRuntime` instance.
 ///
-/// ```rust,ignore
+/// ```rust
+/// // Creates a runtime with a brand new database in memory with
+/// // a jira instance according whatever is in the config file
+/// use worklog::ApplicationRuntimeBuilder;
+///
 /// let runtime = ApplicationRuntimeBuilder::new()
 ///     .use_in_memory_db()
 ///     .build()
@@ -222,16 +268,21 @@ impl ApplicationRuntime {
 /// # Examples
 ///
 /// ## Creating a Runtime with Defaults
-/// ```rust,ignore
+/// ```rust
+/// use worklog::ApplicationRuntimeBuilder;
+///
 /// let runtime = ApplicationRuntimeBuilder::new()
 ///     .build()
 ///     .expect("Failed to create runtime");
 /// ```
 ///
-/// ## Creating a Runtime with In-Memory Database
-/// ```rust,ignore
+/// ## Creating a Runtime with In-Memory Database and Jira Test Instance
+/// ```rust
+/// use worklog::ApplicationRuntimeBuilder;
+///
 /// let runtime = ApplicationRuntimeBuilder::new()
 ///     .use_in_memory_db()
+///     .use_jira_test_instance()
 ///     .build()
 ///     .expect("Failed to create runtime");
 /// ```
@@ -283,8 +334,8 @@ impl ApplicationRuntimeBuilder {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
-    /// use your_crate::ApplicationRuntimeBuilder;
+    /// ```rust
+    /// use worklog::ApplicationRuntimeBuilder;
     ///
     /// let builder = ApplicationRuntimeBuilder::new();
     /// let runtime = builder.build().expect("Failed to build ApplicationRuntime");
@@ -322,7 +373,9 @@ impl ApplicationRuntimeBuilder {
     /// In the example below, we configure the runtime to use an in-memory database,
     /// which is particularly useful for testing scenarios.
     ///
-    /// ```rust,ignore
+    /// ```rust
+    /// use worklog::ApplicationRuntimeBuilder;
+    ///
     /// let runtime = ApplicationRuntimeBuilder::new()
     ///     .use_in_memory_db()
     ///     .build()
@@ -337,6 +390,32 @@ impl ApplicationRuntimeBuilder {
         self
     }
 
+    /// Configures the `ApplicationRuntime` to use a test Jira instance instead of
+    /// the one specified in the configuration file.
+    ///
+    /// When this option is enabled, the runtime will use environment variables to configure
+    /// the Jira client instead of the configuration file settings. This is particularly
+    /// useful for testing scenarios where you want to use a mock or test Jira instance.
+    ///
+    /// # Returns
+    ///
+    /// Returns the updated `ApplicationRuntimeBuilder` instance.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use worklog::ApplicationRuntimeBuilder;
+    ///
+    /// let runtime = ApplicationRuntimeBuilder::new()
+    ///     .use_jira_test_instance() // Use test Jira instance
+    ///     .build()
+    ///     .expect("Failed to create runtime with test Jira instance");
+    /// ```
+    ///
+    /// The test instance will be configured using environment variables instead of
+    /// the configuration file settings.
+    ///
+    /// See documentation for `JiraBuilder` for details about the environment variables.
     #[must_use]
     pub fn use_jira_test_instance(mut self) -> Self {
         self.use_jira_test_instance = true;
@@ -356,8 +435,8 @@ impl ApplicationRuntimeBuilder {
     ///
     /// # Example
     ///
-    /// ```rust,ignore
-    /// use your_crate::ApplicationRuntimeBuilder;
+    /// ```rust
+    /// use worklog::ApplicationRuntimeBuilder;
     ///
     /// let runtime = ApplicationRuntimeBuilder::new()
     ///     .use_in_memory_db() // Configure for in-memory database, useful for testing
@@ -370,10 +449,9 @@ impl ApplicationRuntimeBuilder {
     ///
     /// # Errors
     ///
-    /// - [`WorklogError::ConfigurationError`]: This error occurs if the configuration fails to load during initialization or contains invalid values.
+    /// - [`WorklogError::ConfigFileNotFound`]: This error occurs if the configuration fails to load during initialization or contains invalid values.
     /// - [`WorklogError::DatabaseError`]: This error occurs if the database connection manager fails to initialize either due to invalid configuration or runtime errors.
-    /// - [`WorklogError::ClientInitializationError`]: This error occurs if the Jira client fails to initialize, such as when provided with incorrect credentials or an invalid URL.
-    /// - [`WorklogError::IoError`]: This error occurs when there are issues with file system operations, such as failing to create required directories for on-disk databases.
+    /// - [`WorklogError::JiraBuildError`]: This error occurs if the Jira client fails to initialize, such as when provided with incorrect credentials or an invalid URL.
     pub fn build(&self) -> Result<ApplicationRuntime, WorklogError> {
         let database_manager = &self.initialise_database_connection_manager()?;
 
@@ -388,15 +466,7 @@ impl ApplicationRuntimeBuilder {
                 ),
             )?
         };
-        // TODO: Remove this comment when everything is working
-        /*        let jira_client = Jira::new(
-                    &self.config.jira.url,
-                    Credentials::Basic(
-                        self.config.jira.user.clone(),
-                        self.config.jira.token.clone(),
-                    ),
-                )? ;
-        */
+
         let user_repo = database_manager.create_user_repository();
         let worklog_repo = database_manager.create_worklog_repository();
         let issue_repo = database_manager.create_issue_repository();
