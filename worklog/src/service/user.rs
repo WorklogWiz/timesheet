@@ -27,7 +27,7 @@ impl UserService {
     /// # Arguments
     ///
     /// * `user` - A reference to the `User` object containing the user's details
-    ///            to be inserted or updated in the repository.
+    ///   to be inserted or updated in the repository.
     ///
     /// # Errors
     ///

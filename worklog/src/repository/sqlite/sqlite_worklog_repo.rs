@@ -1,4 +1,5 @@
 use crate::error::WorklogError;
+use crate::repository::sqlite::SharedSqliteConnection;
 use crate::repository::worklog_repository::WorkLogRepository;
 use crate::types::LocalWorklog;
 use chrono::{DateTime, Local};
@@ -9,7 +10,6 @@ use log::debug;
 use rusqlite::{named_params, params, Connection};
 use std::sync::Arc;
 use std::sync::Mutex;
-use crate::repository::sqlite::SharedSqliteConnection;
 
 pub struct SqliteWorklogRepository {
     connection: Arc<Mutex<Connection>>,
@@ -188,6 +188,7 @@ impl WorkLogRepository for SqliteWorklogRepository {
                 .map(|_| "?")
                 .collect::<Vec<_>>()
                 .join(", ");
+            #[allow(clippy::format_push_string)]
             sql.push_str(&format!(" AND issue_key IN ({placeholders})"));
 
             // Add owned `String` values to the parameters and cast to `Box<dyn ToSql>`
@@ -203,6 +204,7 @@ impl WorkLogRepository for SqliteWorklogRepository {
                 .map(|_| "?")
                 .collect::<Vec<_>>()
                 .join(", ");
+            #[allow(clippy::format_push_string)]
             sql.push_str(&format!(" AND author IN ({placeholders})"));
             params.extend(
                 users_filter

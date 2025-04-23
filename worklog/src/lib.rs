@@ -17,9 +17,11 @@ use crate::error::WorklogError;
 use crate::repository::database_manager::{DatabaseConfig, DatabaseManager};
 use crate::service::component::ComponentService;
 use crate::service::issue::IssueService;
+use crate::service::timer::TimerService;
 use crate::service::user::UserService;
 use crate::service::worklog::WorkLogService;
 use config::AppConfiguration;
+use jira::builder::JiraBuilder;
 use jira::models::issue::IssueSummary;
 use jira::{Credentials, Jira};
 use log::debug;
@@ -31,9 +33,7 @@ use operation::{
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
-use jira::builder::JiraBuilder;
 use types::LocalWorklog;
-use crate::service::timer::TimerService;
 
 pub mod config;
 pub mod date;
@@ -68,7 +68,7 @@ pub struct ApplicationRuntime {
     pub user_service: Arc<UserService>,
     pub issue_service: Arc<IssueService>,
     pub component_service: Arc<ComponentService>,
-    pub timer_service: Arc<TimerService>
+    pub timer_service: Arc<TimerService>,
 }
 
 pub enum Operation {
@@ -131,7 +131,7 @@ impl ApplicationRuntime {
     pub fn component_service(&self) -> Arc<ComponentService> {
         self.component_service.clone()
     }
-    
+
     #[must_use]
     pub fn timer_service(&self) -> Arc<TimerService> {
         self.timer_service.clone()
@@ -246,7 +246,7 @@ impl ApplicationRuntime {
 /// [`ApplicationRuntimeBuilder::build`]: #method.build
 pub struct ApplicationRuntimeBuilder {
     config: AppConfiguration,
-    use_in_memory_db: bool, // Internal field to toggle in-memory mode.
+    use_in_memory_db: bool,       // Internal field to toggle in-memory mode.
     use_jira_test_instance: bool, // Internal field to toggle Jira test instance.
 }
 
@@ -307,7 +307,7 @@ impl ApplicationRuntimeBuilder {
         Self {
             config,
             use_in_memory_db: false,
-            use_jira_test_instance: false,  // honor whatever the config file says
+            use_jira_test_instance: false, // honor whatever the config file says
         }
     }
 
@@ -342,7 +342,7 @@ impl ApplicationRuntimeBuilder {
         self.use_jira_test_instance = true;
         self
     }
-    
+
     /// Finalizes the construction of the `ApplicationRuntime` instance.
     ///
     /// This method initializes various components required by `ApplicationRuntime`, such as
@@ -378,7 +378,7 @@ impl ApplicationRuntimeBuilder {
         let database_manager = &self.initialise_database_connection_manager()?;
 
         let jira_client = if self.use_jira_test_instance {
-            JiraBuilder::create_from_env().map_err(|e| WorklogError::JiraBuildError(e))?
+            JiraBuilder::create_from_env().map_err(WorklogError::JiraBuildError)?
         } else {
             Jira::new(
                 &self.config.jira.url,
@@ -389,26 +389,30 @@ impl ApplicationRuntimeBuilder {
             )?
         };
         // TODO: Remove this comment when everything is working
-/*        let jira_client = Jira::new(
-            &self.config.jira.url,
-            Credentials::Basic(
-                self.config.jira.user.clone(),
-                self.config.jira.token.clone(),
-            ),
-        )? ;
-*/
+        /*        let jira_client = Jira::new(
+                    &self.config.jira.url,
+                    Credentials::Basic(
+                        self.config.jira.user.clone(),
+                        self.config.jira.token.clone(),
+                    ),
+                )? ;
+        */
         let user_repo = database_manager.create_user_repository();
         let worklog_repo = database_manager.create_worklog_repository();
         let issue_repo = database_manager.create_issue_repository();
         let component_repo = database_manager.create_component_repository();
         let timer_repo = database_manager.create_timer_repository();
-        
+
         let user_service = Arc::new(UserService::new(user_repo));
         let worklog_service = Arc::new(WorkLogService::new(worklog_repo));
         let issue_service = Arc::new(IssueService::new(issue_repo));
         let component_service = Arc::new(ComponentService::new(component_repo));
-        let timer_service = Arc::new(TimerService::new(timer_repo, Arc::clone(&issue_service), Arc::clone(&worklog_service), jira_client.clone()));
-        
+        let timer_service = Arc::new(TimerService::new(
+            timer_repo,
+            Arc::clone(&issue_service),
+            Arc::clone(&worklog_service),
+            jira_client.clone(),
+        ));
 
         Ok(ApplicationRuntime {
             client: jira_client,

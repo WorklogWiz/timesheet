@@ -7,33 +7,33 @@
 //!     .timeout(30)
 //!     .build()
 //!     .expect("Failed to create Jira client");
-//! 
+//!
 //! // 2. Using environment variables
 //! let jira = Jira::builder()
 //!     .from_env()
 //!     .build()
 //!     .expect("Failed to create Jira client");
-//! 
+//!
 //! // 3. Direct shortcut for environment variables
 //! let jira = JiraBuilder::create_from_env()
 //!     .expect("Failed to create Jira client");
-//! 
+//!
 //! // 4. Original method (backward compatible)
 //! let jira = Jira::new(
 //!     "https://your-jira.atlassian.net",
 //!     Credentials::Basic("username@example.com".to_string(), "your_api_token".to_string()),
 //! ).expect("Failed to create Jira client");
-// 
-// 
+//
+//
 use crate::{Credentials, Jira};
+use log::debug;
 use reqwest::Client;
 use std::env;
 use std::time::Duration;
-use log::debug;
 use thiserror::Error;
 use url::Url;
 
-/// Error type for JiraBuilder operations
+/// Error type for `JiraBuilder` operations
 #[derive(Error, Debug)]
 pub enum JiraBuilderError {
     #[error("Environment variable {0} not set")]
@@ -62,7 +62,7 @@ impl JiraEnvVars {
     pub const API_VERSION: &'static str = "JIRA_API_VERSION";
 }
 
-pub const DEFAULT_API_VERSION: &'static str = "latest";
+pub const DEFAULT_API_VERSION: &str = "latest";
 
 /// Builder for creating Jira client instances with flexible configuration options
 pub struct JiraBuilder {
@@ -70,7 +70,6 @@ pub struct JiraBuilder {
     api_version: Option<String>,
     credentials: Option<Credentials>,
     timeout: Option<Duration>,
-    client_config: Option<Box<dyn Fn(&mut reqwest::ClientBuilder) -> reqwest::ClientBuilder>>,
 }
 
 impl Default for JiraBuilder {
@@ -79,64 +78,66 @@ impl Default for JiraBuilder {
     }
 }
 
-
 impl JiraBuilder {
-    /// Creates a new JiraBuilder with default configuration
+    /// Creates a new `JiraBuilder` with default configuration
+    #[must_use]
     pub fn new() -> Self {
         Self {
             host: None,
             api_version: None,
             credentials: None,
             timeout: None,
-            client_config: None,
         }
     }
 
     /// Sets the Jira host URL
+    #[must_use]
     pub fn host(mut self, host: impl Into<String>) -> Self {
         self.host = Some(host.into());
         self
     }
-    
+
+    #[must_use]
     pub fn credentials(mut self, credentials: Credentials) -> Self {
         self.credentials = Some(credentials);
         self
     }
 
     /// Sets the API version (default is "3")
+    #[must_use]
     pub fn api_version(mut self, version: impl Into<String>) -> Self {
         self.api_version = Some(version.into());
         self
     }
 
     /// Sets basic authentication credentials
+    #[must_use]
     pub fn basic_auth(mut self, username: impl Into<String>, token: impl Into<String>) -> Self {
         self.credentials = Some(Credentials::Basic(username.into(), token.into()));
         self
     }
 
     /// Sets OAuth/bearer token authentication
+    #[must_use]
     pub fn bearer_auth(mut self, token: impl Into<String>) -> Self {
         self.credentials = Some(Credentials::Bearer(token.into()));
         self
     }
 
     /// Sets a request timeout
+    #[must_use]
+    pub fn timeout_seconds(self, seconds: u64) -> Self {
+        self.timeout(seconds)
+    }
+
+    #[must_use]
     pub fn timeout(mut self, seconds: u64) -> Self {
         self.timeout = Some(Duration::from_secs(seconds));
         self
     }
 
-    /// Advanced configuration of the underlying reqwest client
-    pub fn configure_client<F>(mut self, config_fn: F) -> Self
-    where
-        F: Fn(&mut reqwest::ClientBuilder) -> reqwest::ClientBuilder + 'static,
-    {
-        self.client_config = Some(Box::new(config_fn));
-        self
-    }
-
     /// Attempts to load configuration from environment variables
+    #[must_use]
     pub fn from_env(self) -> Self {
         let host = env::var(JiraEnvVars::HOST).ok();
         let user = env::var(JiraEnvVars::USER).ok();
@@ -161,19 +162,33 @@ impl JiraBuilder {
     }
 
     /// Builds a Jira client instance with the configured parameters
+    ///
+    /// # Errors
+    /// Returns `JiraBuilderError` if:
+    /// - Required configuration parameters (host, credentials) are not set
+    /// - The provided host URL cannot be parsed
+    /// - The HTTP client initialization fails
+    /// - The timeout value is invalid
     pub fn build(self) -> Result<Jira, JiraBuilderError> {
         // Validate and extract required parameters
-        let host = self.host.ok_or_else(|| JiraBuilderError::EnvVarNotSet(JiraEnvVars::HOST.to_string()))?;
+        let host = self
+            .host
+            .ok_or_else(|| JiraBuilderError::EnvVarNotSet(JiraEnvVars::HOST.to_string()))?;
 
         let credentials = self.credentials.ok_or_else(|| {
-            JiraBuilderError::EnvVarNotSet(format!("{} and {}", JiraEnvVars::USER, JiraEnvVars::TOKEN))
+            JiraBuilderError::EnvVarNotSet(format!(
+                "{} and {}",
+                JiraEnvVars::USER,
+                JiraEnvVars::TOKEN
+            ))
         })?;
 
-        let api_version = self.api_version.unwrap_or_else(|| DEFAULT_API_VERSION.to_string());
+        let api_version = self
+            .api_version
+            .unwrap_or_else(|| DEFAULT_API_VERSION.to_string());
 
         // Create URL
-        let host_url = Url::parse(&host)
-            .map_err(JiraBuilderError::UrlParseError)?;
+        let host_url = Url::parse(&host).map_err(JiraBuilderError::UrlParseError)?;
 
         // Create the HTTP client with a proper configuration
         let mut client_builder = Client::builder();
@@ -182,11 +197,8 @@ impl JiraBuilder {
             client_builder = client_builder.timeout(timeout);
         }
 
-        if let Some(config_fn) = self.client_config {
-            client_builder = config_fn(&mut client_builder);
-        }
-
-        let client = client_builder.build()
+        let client = client_builder
+            .build()
             .map_err(|e| JiraBuilderError::ClientInitError(e.to_string()))?;
 
         // Create the Jira client
@@ -197,20 +209,37 @@ impl JiraBuilder {
             client,
         };
         debug!("Created Jira client: {:#?}", jira);
-        
+
         Ok(jira)
     }
 
-    /// Convenience method to create a Jira client from environment variables
+    /// Creates a new Jira client instance using configuration from environment variables.
+    ///
+    /// This is a convenience method that combines calling `new()`, `from_env()`, and `build()`
+    /// in a single method. It will attempt to read the following environment variables:
+    /// - `JIRA_HOST`: The Jira host URL (required)
+    /// - `JIRA_USER`: Username for basic authentication
+    /// - `JIRA_TOKEN`: API token for basic authentication
+    /// - `JIRA_API_VERSION`: API version to use (optional, defaults to "latest")
+    ///
+    /// # Returns
+    /// - `Ok(Jira)` - A configured Jira client instance
+    /// - `Err(JiraBuilderError)` - If required environment variables are missing or invalid
+    ///
+    /// # Errors
+    /// Returns `JiraBuilderError` if:
+    /// - Required environment variables (`JIRA_HOST`, `JIRA_USER`, `JIRA_TOKEN`) are not set
+    /// - The host URL is invalid or cannot be parsed
+    /// - Client initialization fails
+    ///
+    /// # Example
+    /// ```no_run
+    /// use jira::JiraBuilder;
+    ///
+    /// let jira = JiraBuilder::create_from_env()
+    ///     .expect("Failed to create Jira client");
+    /// ```
     pub fn create_from_env() -> Result<Jira, JiraBuilderError> {
         Self::new().from_env().build()
-    }
-}
-
-// Example extension methods for Jira to make the transition easier
-impl Jira {
-    /// Create a Jira client builder
-    pub fn builder() -> JiraBuilder {
-        JiraBuilder::new()
     }
 }

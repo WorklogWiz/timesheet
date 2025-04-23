@@ -1,6 +1,7 @@
-use jira::{ Jira};
+use jira::builder::JiraBuilder;
+use jira::Jira;
 
 #[cfg(test)]
 pub fn create() -> Jira {
-    Jira::builder().from_env().build().expect("Error initializing jira client")
+    JiraBuilder::create_from_env().expect("Error initializing jira client")
 }

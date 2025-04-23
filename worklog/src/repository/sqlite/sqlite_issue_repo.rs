@@ -62,13 +62,18 @@ impl IssueRepository for SqliteIssueRepository {
     /// ```
     fn add_jira_issues(&self, jira_issues: &[IssueSummary]) -> Result<(), WorklogError> {
         if jira_issues.is_empty() {
-            return Err(WorklogError::InvalidInput("add_jira_issues() :- No issues to add".to_string()));       
+            return Err(WorklogError::InvalidInput(
+                "add_jira_issues() :- No issues to add".to_string(),
+            ));
         }
         let conn = self
             .connection
             .lock()
             .map_err(|_| WorklogError::LockPoisoned)?;
-        debug!("add_jira_issues() :- preparing statement for inserting {:?}", &jira_issues );
+        debug!(
+            "add_jira_issues() :- preparing statement for inserting {:?}",
+            &jira_issues
+        );
 
         let insert_sql = "INSERT INTO issue (id, key, summary)
             VALUES (?1, ?2, ?3)
@@ -86,7 +91,6 @@ impl IssueRepository for SqliteIssueRepository {
         debug!("add_jira_issues() :- statement prepared");
 
         for issue in jira_issues {
-            
             debug!("add_jira_issues() :- inserting issue: {:?}", issue);
             if !issue.id.to_string().chars().all(char::is_numeric) {
                 return Err(WorklogError::InvalidInput(format!(

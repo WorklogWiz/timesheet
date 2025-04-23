@@ -1,8 +1,8 @@
+use chrono::Utc;
 use chrono::{DateTime, Local};
 use jira::models::core::IssueKey;
 use jira::models::worklog::Worklog;
 use serde::{Deserialize, Serialize};
-use chrono::{ Utc};
 
 #[derive(Debug, Serialize, Deserialize, Eq, PartialEq, PartialOrd, Ord, Clone)]
 #[allow(non_snake_case)]
@@ -89,13 +89,14 @@ pub struct Timer {
 
 impl Timer {
     /// Creates a new timer for the specified issue that starts now
+    #[must_use]
     pub fn start_new(issue_id: String) -> Self {
         let now = Utc::now();
         Self {
             id: None,
             issue_key: issue_id,
-            created_at: now.with_timezone( &Local),
-            started_at: now.with_timezone( &Local),
+            created_at: now.with_timezone(&Local),
+            started_at: now.with_timezone(&Local),
             stopped_at: None,
             synced: false,
             comment: None,
@@ -103,11 +104,13 @@ impl Timer {
     }
 
     /// Checks if this timer is currently active (not stopped)
+    #[must_use]
     pub fn is_active(&self) -> bool {
         self.stopped_at.is_none()
     }
 
     /// Gets the duration of this timer if it has been stopped
+    #[must_use]
     pub fn duration(&self) -> Option<chrono::Duration> {
         self.stopped_at.map(|end| end - self.started_at)
     }
@@ -115,7 +118,7 @@ impl Timer {
     /// Stops this timer at the current time
     pub fn stop(&mut self) {
         if self.is_active() {
-            self.stopped_at = Some(Utc::now().with_timezone( &Local));
+            self.stopped_at = Some(Utc::now().with_timezone(&Local));
         }
     }
 }

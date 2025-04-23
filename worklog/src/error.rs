@@ -1,10 +1,10 @@
 use std::{io, path::PathBuf};
 
 use crate::date;
+use jira::builder::JiraBuilderError;
 use jira::JiraError;
 use thiserror::Error;
 use url::ParseError;
-use jira::builder::JiraBuilderError;
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Error, Debug)]
@@ -50,11 +50,11 @@ pub enum WorklogError {
     LockPoisoned,
     #[error("Unable to create database SQL schema: {0}")]
     DatabaseError(String),
-    #[error("Active timer exists")]   
+    #[error("Active timer exists")]
     ActiveTimerExists,
-    #[error("No active timer")]  
+    #[error("No active timer")]
     NoActiveTimer,
-    #[error("Database lock error")] 
+    #[error("Database lock error")]
     DatabaseLockError,
     #[error("Timer not found")]
     TimerNotFound(i64),

@@ -8,5 +8,3 @@ pub(crate) mod worklog_repository;
 pub(crate) mod database_manager;
 pub(crate) mod sqlite;
 pub(crate) mod timer_repository;
-
-

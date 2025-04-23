@@ -112,9 +112,8 @@ impl TimerRepository for SqliteTimerRepository {
     /// Stops the currently active timer
     fn stop_active_timer(&self, stop_time: Option<DateTime<Local>>) -> Result<Timer, WorklogError> {
         // Find the active timer
-        let mut active_timer = match self.find_active_timer()? {
-            Some(timer) => timer,
-            None => return Err(WorklogError::NoActiveTimer),
+        let Some(mut active_timer) = self.find_active_timer()? else {
+            return Err(WorklogError::NoActiveTimer);
         };
 
         let conn = self
@@ -124,7 +123,7 @@ impl TimerRepository for SqliteTimerRepository {
 
         // Set the stop time to supplied value or now
         active_timer.stopped_at = stop_time.or_else(|| Some(Utc::now().with_timezone(&Local)));
-        
+
         debug!("Stopping timer {:?}", &active_timer);
         // Update the timer in the database
         conn.execute(

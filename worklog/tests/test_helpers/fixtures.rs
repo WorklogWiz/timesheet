@@ -13,25 +13,31 @@ pub const TEST_ISSUE_SUMMARY: &str = "Test issue for integration tests";
 pub fn create_test_timer(issue_key: &str, active: bool) -> Timer {
     let now = Utc::now().with_timezone(&Local);
     let started_time = now - Duration::hours(1);
-    
+
     Timer {
         id: None,
         issue_key: issue_key.to_string(),
         created_at: started_time,
         started_at: started_time,
-        stopped_at: if active { None } else { Some(now.with_timezone(&Local)) },
+        stopped_at: if active {
+            None
+        } else {
+            Some(now.with_timezone(&Local))
+        },
         synced: false,
         comment: Some("Test timer comment".to_string()),
     }
 }
-
 
 /// Creates a sample IssueSummary for testing
 pub fn create_test_issue_info() -> IssueSummary {
     IssueSummary {
         id: "123".into(),
         key: IssueKey::from(TEST_ISSUE_KEY.to_string()),
-        fields: Fields { summary: TEST_ISSUE_SUMMARY.to_string(), components: vec![] },
+        fields: Fields {
+            summary: TEST_ISSUE_SUMMARY.to_string(),
+            components: vec![],
+        },
     }
 }
 
@@ -42,12 +48,18 @@ pub fn create_test_issues() -> Vec<IssueSummary> {
         IssueSummary {
             id: "124".into(),
             key: IssueKey::from("TEST-124"),
-            fields: Fields { summary: "Another test issue".to_string(), components: vec![] },
+            fields: Fields {
+                summary: "Another test issue".to_string(),
+                components: vec![],
+            },
         },
         IssueSummary {
             id: "125".into(),
             key: IssueKey::from("TEST-125"),
-            fields: Fields { summary: "Yet another test issue".to_string(), components: vec![] },
+            fields: Fields {
+                summary: "Yet another test issue".to_string(),
+                components: vec![],
+            },
         },
     ]
 }

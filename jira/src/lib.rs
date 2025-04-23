@@ -68,7 +68,7 @@ pub enum JiraError {
 
 impl From<JiraBuilderError> for JiraError {
     fn from(error: JiraBuilderError) -> JiraError {
-        JiraError::BuilderError(error.into())
+        JiraError::BuilderError(error)
     }
 }
 
@@ -174,7 +174,7 @@ impl Credentials {
 ///     Ok(())
 /// }
 /// ```
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct Jira {
     host: Url,
     api: String,
@@ -215,7 +215,7 @@ impl Jira {
         H: Into<String>,
     {
         Ok(JiraBuilder::new()
-            .host(&host.into())
+            .host(host.into())
             .credentials(credentials)
             .build()?)
     }
@@ -977,12 +977,7 @@ impl Jira {
             .buffer_unordered(10);
 
         let issue_worklogs: Vec<_> = futures
-            .filter_map(|result| async {
-                match result {
-                    Ok(worklogs) => Some(worklogs),
-                    Err(_) => None,
-                }
-            })
+            .filter_map(|result| async { result.ok() })
             .concat()
             .await;
 
@@ -993,15 +988,18 @@ impl Jira {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockito::Server;
     use crate::builder::DEFAULT_API_VERSION;
+    use mockito::Server;
 
     #[tokio::test]
     async fn fetch_myself_success() -> Result<()> {
         let mut server = Server::new_async().await;
         let url = server.url();
         let _m = server
-            .mock("GET", format!("/rest/api/{}/myself", DEFAULT_API_VERSION).as_str())
+            .mock(
+                "GET",
+                format!("/rest/api/{}/myself", DEFAULT_API_VERSION).as_str(),
+            )
             .with_status(200)
             .with_body(
                 r#"{
@@ -1030,7 +1028,10 @@ mod tests {
         let mut server = Server::new_async().await;
         let url = server.url();
         let _m = server
-            .mock("GET", format!("/rest/api/{}/myself", DEFAULT_API_VERSION).as_str())
+            .mock(
+                "GET",
+                format!("/rest/api/{}/myself", DEFAULT_API_VERSION).as_str(),
+            )
             .with_status(403)
             .with_body(
                 r#"{

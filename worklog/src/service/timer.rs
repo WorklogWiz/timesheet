@@ -6,9 +6,9 @@ use crate::types::{LocalWorklog, Timer};
 use chrono::{DateTime, Duration, Local, Utc};
 use jira::models::core::IssueKey;
 use jira::Jira;
+use log::debug;
 use num_traits::ToPrimitive;
 use std::sync::Arc;
-use log::debug;
 
 /// Service for managing timer operations and synchronization with Jira
 pub struct TimerService {
@@ -19,7 +19,7 @@ pub struct TimerService {
 }
 
 impl TimerService {
-    /// Creates a new TimerService instance
+    /// Creates a new `TimerService` instance
     pub fn new(
         timer_repository: Arc<dyn TimerRepository>,
         issue_service: Arc<IssueService>,
@@ -37,6 +37,14 @@ impl TimerService {
     /// Starts a new timer for the specified issue
     ///
     /// Validates that the issue exists before starting the timer
+    ///
+    /// # Errors
+    /// Returns a `WorklogError` if:
+    /// - The issue does not exist in the database
+    /// - There is already an active timer running
+    /// - There's an error accessing the timer repository
+    /// - Database operations fail
+    /// - Issue key format is invalid
     pub fn start_timer(
         &self,
         issue_key: &str,
@@ -72,7 +80,7 @@ impl TimerService {
         // Start the timer and get its ID
         let timer_id = self.timer_repository.start_timer(&timer)?;
         debug!("Started timer with ID: {}", timer_id);
-        
+
         // Return the timer with its ID
         Ok(Timer {
             id: Some(timer_id),
@@ -80,23 +88,70 @@ impl TimerService {
         })
     }
 
-    /// Stops the currently active timer
-    pub fn stop_active_timer(&self, stop_time: Option<DateTime<Local>>) -> Result<Timer, WorklogError> {
+    /// Stops the currently active timer if one exists
+    ///
+    /// # Arguments
+    /// * `stop_time` - Optional custom stop time. If None, current time is used
+    ///
+    /// # Returns
+    /// Returns the stopped timer on success
+    ///
+    /// # Errors
+    /// Returns a `WorklogError` if:
+    /// - No active timer exists
+    /// - There's an error accessing the timer repository
+    /// - Database operations fail
+    pub fn stop_active_timer(
+        &self,
+        stop_time: Option<DateTime<Local>>,
+    ) -> Result<Timer, WorklogError> {
         self.timer_repository.stop_active_timer(stop_time)
     }
 
     /// Gets the currently active timer, if any
+    ///
+    /// Returns the currently active timer if one exists, or None if no timer is active.
+    ///
+    /// # Returns
+    /// - `Ok(Some(Timer))` if an active timer exists
+    /// - `Ok(None)` if no timer is currently active
+    ///
+    /// # Errors
+    /// Returns a `WorklogError` if:
+    /// - There's an error accessing the timer repository
+    /// - Database operations fail
     pub fn get_active_timer(&self) -> Result<Option<Timer>, WorklogError> {
         self.timer_repository.find_active_timer()
     }
 
     /// Synchronizes completed and unsynced timers with Jira as worklogs
+    ///
+    /// Finds all completed timers that haven't been synced to Jira yet and creates
+    /// corresponding worklogs in Jira. Also updates local worklog database and marks
+    /// timers as synced upon successful synchronization.
+    ///
+    /// # Returns
+    /// Returns a vector of successfully synced timers
+    ///
+    /// # Errors
+    /// Returns a `WorklogError` if:
+    /// - There's an error accessing the timer repository
+    /// - There's an error connecting to Jira
+    /// - Creating worklogs in Jira fails
+    /// - Adding entries to local worklog database fails
+    /// - Updating timer sync status fails
+    /// - Database operations fail
+    ///
+    /// # Panics
+    /// This method will panic if:
+    /// - The duration in seconds cannot be converted to i32
+    /// - The timer data is corrupted or invalid
     pub async fn sync_timers_to_jira(&self) -> Result<Vec<Timer>, WorklogError> {
         debug!("Syncing timers to Jira");
         // Find timers that have been stopped but not synced
         let timers = self.find_unsynced_completed_timers()?;
         debug!("Found {} unsynced timers", timers.len());
-        
+
         let mut synced_timers = Vec::new();
 
         for mut timer in timers {
@@ -114,18 +169,24 @@ impl TimerService {
                 let comment = timer.comment.as_deref().unwrap_or("");
 
                 // Submit worklog to Jira via the jira service
-                let work_log = self.jira_client.insert_worklog(
-                    &timer.issue_key,
-                    timer.started_at.with_timezone(&Local),
-                    duration_seconds.to_i32().unwrap(),
-                    comment,
-                ).await?;
-                
+                let work_log = self
+                    .jira_client
+                    .insert_worklog(
+                        &timer.issue_key,
+                        timer.started_at.with_timezone(&Local),
+                        duration_seconds.to_i32().unwrap(),
+                        comment,
+                    )
+                    .await?;
+
                 debug!("Worklog created in Jira: {:?}", work_log);
-                
+
                 // Write to local worklog database table too
-                self.worklog_service.add_entry(&LocalWorklog::from_worklog(&work_log, &IssueKey::from(timer.issue_key.as_str())))?;
-                
+                self.worklog_service.add_entry(&LocalWorklog::from_worklog(
+                    &work_log,
+                    &IssueKey::from(timer.issue_key.as_str()),
+                ))?;
+
                 // Mark timer as synced
                 timer.synced = true;
                 self.timer_repository.update(&timer)?;
@@ -154,17 +215,29 @@ impl TimerService {
         Ok(unsynced_completed)
     }
 
-    /// Gets the total time spent on an issue
+    /// Gets the total time spent on an issue by summing up all timer durations
+    ///
+    /// # Arguments
+    /// * `issue_id` - The ID or key of the Jira issue to calculate total time for
+    ///
+    /// # Returns
+    /// Returns a `Result` containing the total `Duration` spent on the issue
+    ///
+    /// # Errors
+    /// Returns a `WorklogError` if:
+    /// - There's an error accessing the timer repository
+    /// - Database operations fail
+    /// - Issue ID format is invalid
     pub fn get_total_time_for_issue(&self, issue_id: &str) -> Result<Duration, WorklogError> {
         let timers = self.timer_repository.find_by_issue_key(issue_id)?;
 
         let mut total = Duration::seconds(0);
         for timer in timers {
             if let Some(stopped_at) = timer.stopped_at {
-                total = total + (stopped_at - timer.started_at);
+                total += stopped_at - timer.started_at;
             } else {
                 // For active timers, calculate duration up to now
-                total = total + (Utc::now().with_timezone(&Local) - timer.started_at);
+                total += Utc::now().with_timezone(&Local) - timer.started_at;
             }
         }
 
@@ -172,6 +245,13 @@ impl TimerService {
     }
 
     /// Discards the currently active timer
+    ///
+    /// # Errors
+    /// Returns a `WorklogError` if:
+    /// - There is no active timer
+    /// - The active timer has no ID
+    /// - There's an error accessing the timer repository
+    /// - Database operations fail
     pub fn discard_active_timer(&self) -> Result<(), WorklogError> {
         let active_timer = self.get_active_timer()?;
         if let Some(timer) = active_timer {
@@ -189,6 +269,12 @@ impl TimerService {
     }
 
     /// Updates a timer's comment
+    ///
+    /// # Errors
+    /// Returns a `WorklogError` if:
+    /// - The timer with given ID is not found
+    /// - There's an error accessing the timer repository
+    /// - Database operations fail
     pub fn update_timer_comment(
         &self,
         timer_id: i64,
@@ -217,10 +303,15 @@ impl TimerService {
         timers
             .into_iter()
             .find(|t| t.id == Some(timer_id))
-            .ok_or_else(|| WorklogError::TimerNotFound(timer_id))
+            .ok_or(WorklogError::TimerNotFound(timer_id))
     }
 
     /// Gets all recent timers for a specific issue
+    ///
+    /// # Errors
+    /// Returns a `WorklogError` if:
+    /// - There's an error accessing the timer repository
+    /// - Database operations fail
     pub fn get_recent_timers_for_issue(
         &self,
         issue_id: &str,

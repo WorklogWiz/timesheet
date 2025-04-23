@@ -73,7 +73,10 @@ async fn test_sync_timers_to_jira() {
     let issue_summary = IssueSummary {
         id: test_issue.id,
         key: issue_key_clone,
-        fields: Fields { summary: "TEST Summary".to_string(), components: vec![] },
+        fields: Fields {
+            summary: "TEST Summary".to_string(),
+            components: vec![],
+        },
     };
 
     // .. and inserts them into the database
@@ -101,7 +104,14 @@ async fn test_sync_timers_to_jira() {
     assert!(timer.duration().is_some());
     debug!("Timer duration: {}", timer.duration().unwrap());
 
-    let _result = timer_service.sync_timers_to_jira().await.expect("Failed to sync timers to Jira");
-    
-    runtime.client.delete_issue(&test_issue.key).await.expect("Failed to delete test issue");
+    let _result = timer_service
+        .sync_timers_to_jira()
+        .await
+        .expect("Failed to sync timers to Jira");
+
+    runtime
+        .client
+        .delete_issue(&test_issue.key)
+        .await
+        .expect("Failed to delete test issue");
 }

@@ -1,12 +1,12 @@
-use std::sync::{Arc, Mutex};
-use rusqlite::Connection;
 use crate::error::WorklogError;
+use rusqlite::Connection;
+use std::sync::{Arc, Mutex};
 
 pub(crate) mod sqlite_component_repo;
 pub(crate) mod sqlite_issue_repo;
+pub(crate) mod sqlite_timer_repo;
 pub(crate) mod sqlite_user_repo;
 pub(crate) mod sqlite_worklog_repo;
-pub(crate) mod sqlite_timer_repo;
 
 /// A thread-safe, shared connection to an ``SQLite`` database,
 pub(crate) type SharedSqliteConnection = Arc<Mutex<Connection>>;
