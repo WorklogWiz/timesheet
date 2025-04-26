@@ -1,6 +1,8 @@
 use std::sync::Arc;
 use worklog::{error::WorklogError, ApplicationRuntime, ApplicationRuntimeBuilder};
 
+pub const TEST_PROJECT_KEY: &str = "TWIZ";
+
 /// Creates a test runtime with a temporary database
 pub fn create_test_runtime() -> Result<Arc<ApplicationRuntime>, WorklogError> {
     // Initialize the runtime with this database in memory

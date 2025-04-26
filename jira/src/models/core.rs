@@ -1,12 +1,12 @@
-use std::{
-    cmp::Ordering,
-    fmt::{self, Formatter},
-};
-
 use crate::models::project::Component;
 use serde::{
     de::{self, Visitor},
     Deserialize, Deserializer, Serialize,
+};
+use std::hash::{Hash, Hasher};
+use std::{
+    cmp::Ordering,
+    fmt::{self, Formatter},
 };
 
 /// Represents the author (user) of a worklog item
@@ -74,6 +74,11 @@ impl IssueKey {
     }
 }
 
+impl Hash for IssueKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.value.hash(state);
+    }
+}
 impl From<String> for IssueKey {
     fn from(s: String) -> Self {
         IssueKey::new(&s)

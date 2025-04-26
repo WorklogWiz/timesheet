@@ -2,6 +2,7 @@ use std::{io, path::PathBuf};
 
 use crate::date;
 use jira::builder::JiraBuilderError;
+use jira::models::core::IssueKey;
 use jira::JiraError;
 use thiserror::Error;
 use url::ParseError;
@@ -66,6 +67,12 @@ pub enum WorklogError {
     InvalidInput(String),
     #[error("Jira build error: {0}")]
     JiraBuildError(JiraBuilderError),
+    #[error("Timer duration too small: {0}s. Must be at least 1 minute.")]
+    TimerDurationTooSmall(i32),
+    #[error("Issue not found in local DBMS: {0}")]
+    IssueNotFoundInLocalDBMS(String),
+    #[error("Missing worklog parent, issue: {0} does not exist.")]
+    MissingWorklogParentIssue(IssueKey),
 }
 
 impl From<rusqlite::Error> for WorklogError {

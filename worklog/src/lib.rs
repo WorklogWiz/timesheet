@@ -105,7 +105,7 @@ pub mod service;
 /// This struct plays a central role in orchestrating the different services and allowing
 /// them to operate in harmony within the application runtime environment.
 pub struct ApplicationRuntime {
-    pub client: Jira,
+    pub jira_client: Jira,
     pub worklog_service: Arc<WorkLogService>,
     pub user_service: Arc<UserService>,
     pub issue_service: Arc<IssueService>,
@@ -151,7 +151,7 @@ impl ApplicationRuntime {
 
     #[must_use]
     pub fn jira_client(&self) -> &Jira {
-        &self.client
+        &self.jira_client
     }
 
     #[must_use]
@@ -474,9 +474,13 @@ impl ApplicationRuntimeBuilder {
         let timer_repo = database_manager.create_timer_repository();
 
         let user_service = Arc::new(UserService::new(user_repo));
-        let worklog_service = Arc::new(WorkLogService::new(worklog_repo));
         let issue_service = Arc::new(IssueService::new(issue_repo));
-        let component_service = Arc::new(ComponentService::new(component_repo));
+        let worklog_service = Arc::new(WorkLogService::new(
+            worklog_repo,
+            issue_service.clone(),
+            jira_client.clone(),
+        ));
+        let component_service = Arc::new(ComponentService::new(component_repo.clone()));
         let timer_service = Arc::new(TimerService::new(
             timer_repo,
             Arc::clone(&issue_service),
@@ -485,7 +489,7 @@ impl ApplicationRuntimeBuilder {
         ));
 
         Ok(ApplicationRuntime {
-            client: jira_client,
+            jira_client,
             worklog_service,
             user_service,
             issue_service,

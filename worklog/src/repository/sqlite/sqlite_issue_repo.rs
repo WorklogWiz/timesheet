@@ -183,7 +183,7 @@ impl IssueRepository for SqliteIssueRepository {
 
     ///
     /// # Errors
-    /// Returns an error something goes wrong
+    /// Returns an error when something goes wrong
     fn find_unique_keys(&self) -> Result<Vec<IssueKey>, WorklogError> {
         let conn = self.connection.lock().unwrap();
         let mut stmt =

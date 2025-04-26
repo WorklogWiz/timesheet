@@ -2,17 +2,23 @@
 //! managing worklog entries in a repository. It offers operations such as adding, removing,
 //! updating, and retrieving worklogs. The service interacts with a repository that implements
 //! the `WorkLogRepository` trait to perform these operations.
+
 use crate::error::WorklogError;
 use crate::repository::worklog_repository::WorkLogRepository;
+use crate::service::issue::IssueService;
 use crate::types::LocalWorklog;
 use chrono::{DateTime, Local};
 use jira::models::core::IssueKey;
 use jira::models::user::User;
 use jira::models::worklog::Worklog;
+use jira::Jira;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 pub struct WorkLogService {
     repo: Arc<dyn WorkLogRepository>,
+    issue_service: Arc<IssueService>,
+    jira_client: Jira,
 }
 
 impl WorkLogService {
@@ -25,8 +31,16 @@ impl WorkLogService {
     /// # Returns
     ///
     /// A new `WorkLogService` instance.
-    pub fn new(repo: Arc<dyn WorkLogRepository>) -> Self {
-        Self { repo }
+    pub fn new(
+        repo: Arc<dyn WorkLogRepository>,
+        issue_service: Arc<IssueService>,
+        jira_client: Jira,
+    ) -> Self {
+        Self {
+            repo,
+            issue_service,
+            jira_client,
+        }
     }
 
     /// Removes a worklog entry based on the provided `Worklog` object.
@@ -82,8 +96,8 @@ impl WorkLogService {
     ///
     /// This function will return a `WorklogError` if:
     /// - The repository operation fails due to a database issue or unexpected error.
-    pub fn add_entry(&self, local_worklog: &LocalWorklog) -> Result<(), WorklogError> {
-        self.repo.add_entry(local_worklog)
+    pub async fn add_entry(&self, local_worklog: &LocalWorklog) -> Result<(), WorklogError> {
+        self.add_worklog_entries(&[local_worklog.clone()]).await
     }
 
     /// Adds multiple worklog entries to the repository.
@@ -95,10 +109,39 @@ impl WorkLogService {
     /// # Returns
     ///
     /// A `Result` indicating success (`Ok`) or a `WorklogError` (`Err`) if the operation fails.
-    pub(crate) fn add_worklog_entries(
+    pub(crate) async fn add_worklog_entries(
         &self,
         worklogs: &[LocalWorklog],
     ) -> Result<(), WorklogError> {
+        // Check the DBMS to ensure all worklogs are referencing a valid issue
+        let existing_issues = self.issue_service.get_issues_filtered_by_keys(
+            worklogs
+                .iter()
+                .map(|wl| wl.issue_key.clone())
+                .collect::<Vec<IssueKey>>()
+                .as_slice(),
+        )?;
+        // Create a set of existing issue keys for efficient lookup
+        let existing_keys: HashSet<IssueKey> = existing_issues
+            .iter()
+            .map(|issue| issue.issue_key.clone())
+            .collect();
+        // Find the issue keys, which are not in the local database
+        let new_keys: Vec<IssueKey> = worklogs
+            .iter()
+            .map(|worklog| worklog.issue_key.clone()) // Extract an issue key from each worklog
+            .filter(|key| !existing_keys.contains(key)) // Keep only keys not in existing_keys
+            .collect();
+        if !new_keys.is_empty() {
+            // Fetch data from jira for the missing issues
+            let issue_summaries_to_sync = self
+                .jira_client
+                .get_issue_summaries(&[], new_keys.as_slice(), true)
+                .await?;
+
+            self.issue_service
+                .add_jira_issues(issue_summaries_to_sync.as_slice())?;
+        }
         self.repo.add_worklog_entries(worklogs)
     }
 

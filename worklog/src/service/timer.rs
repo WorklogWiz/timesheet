@@ -20,7 +20,7 @@
 //! let timer = runtime.timer_service().start_timer(
 //!     "PROJECT-123",
 //!     Some("Working on feature".to_string())
-//! )?;
+//! ).await?;
 //!
 //! // Do some work...
 //!
@@ -52,7 +52,8 @@ use crate::service::worklog::WorkLogService;
 use crate::types::{LocalWorklog, Timer};
 use chrono::{DateTime, Duration, Local, Utc};
 use jira::models::core::IssueKey;
-use jira::Jira;
+use jira::JiraError::WorklogDurationTooShort;
+use jira::{Jira, JiraError};
 use log::debug;
 use num_traits::ToPrimitive;
 use std::sync::Arc;
@@ -77,7 +78,7 @@ use std::sync::Arc;
 ///
 /// # async fn example(timer_service: TimerService) -> Result<(), Box<dyn std::error::Error>> {
 /// // Start a timer for an issue
-/// let timer = timer_service.start_timer("PROJECT-123", Some("Implementing feature".into()))?;
+/// let timer = timer_service.start_timer("PROJECT-123", Some("Implementing feature".into())).await?;
 ///
 /// // Work on the issue...
 ///
@@ -124,19 +125,32 @@ impl TimerService {
     /// - There's an error accessing the timer repository
     /// - Database operations fail
     /// - Issue key format is invalid
-    pub fn start_timer(
+    pub async fn start_timer(
         &self,
         issue_key: &str,
         comment: Option<String>,
     ) -> Result<Timer, WorklogError> {
-        // Validate that the issue exists in our database
         let issue_key = IssueKey::new(issue_key);
-        let issues = self
-            .issue_service
-            .get_issues_filtered_by_keys(&[issue_key.clone()])?;
 
-        if issues.is_empty() {
-            return Err(WorklogError::IssueNotFound(issue_key.value().to_string()));
+        debug!("Starting timer for issue: {}", issue_key);
+
+        // Check if the issue exists in Jira, if not, return an error
+        match self.jira_client.get_issue_summary(&issue_key).await {
+            Ok(issue_summary) => {
+                // Issue exists in Jira, check if it exists in local database
+                debug!("Issue for key {issue_key} found, now checking local database");
+                if self
+                    .issue_service
+                    .get_issues_filtered_by_keys(&[issue_key.clone()])?
+                    .is_empty()
+                {
+                    self.issue_service.add_jira_issues(&[issue_summary])?;
+                }
+            }
+            Err(JiraError::NotFound(k)) => return Err(WorklogError::IssueNotFound(k)),
+            Err(e) => {
+                return Err(WorklogError::JiraError(e.to_string()));
+            }
         }
 
         // Check if there's already an active timer
@@ -158,7 +172,10 @@ impl TimerService {
 
         // Start the timer and get its ID
         let timer_id = self.timer_repository.start_timer(&timer)?;
-        debug!("Started timer with ID: {}", timer_id);
+        debug!(
+            "Started timer with ID: {} for issue {}",
+            timer_id, issue_key
+        );
 
         // Return the timer with its ID
         Ok(Timer {
@@ -182,10 +199,29 @@ impl TimerService {
     /// - No active timer exists
     /// - There's an error accessing the timer repository
     /// - Database operations fail
+    ///
+    /// # Panics
+    /// This method will panic if the timer duration in seconds cannot be converted to i32
     pub fn stop_active_timer(
         &self,
         stop_time: Option<DateTime<Local>>,
     ) -> Result<Timer, WorklogError> {
+        // Retrieves the current timer
+        let timer = self
+            .get_active_timer()?
+            .ok_or(WorklogError::NoActiveTimer)?;
+
+        // Calculates the duration of the timer using either a supplied
+        // stop time or the current time
+        let stop_time = stop_time.unwrap_or_else(Local::now);
+        let duration = stop_time - timer.started_at;
+
+        if duration < Duration::seconds(60) {
+            return Err(WorklogError::TimerDurationTooSmall(
+                duration.num_seconds().to_i32().unwrap(),
+            ));
+        }
+
         self.timer_repository.stop_active_timer(stop_time)
     }
 
@@ -250,7 +286,7 @@ impl TimerService {
                 let comment = timer.comment.as_deref().unwrap_or("");
 
                 // Submit worklog to Jira via the jira service
-                let work_log = self
+                let work_log = match self
                     .jira_client
                     .insert_worklog(
                         &timer.issue_key,
@@ -258,15 +294,41 @@ impl TimerService {
                         duration_seconds.to_i32().unwrap(),
                         comment,
                     )
-                    .await?;
+                    .await
+                {
+                    Ok(wl) => wl,
+                    Err(e) => {
+                        if let WorklogDurationTooShort(duration) = e {
+                            // Log it and continue
+                            eprintln!(
+                                    "Worklog duration too short, skipping: timer_id: {} issue:{} duration:{} seconds",
+                                    &timer.id.unwrap(),
+                                    &timer.issue_key,
+                                    duration
+                                );
+                            continue;
+                        }
+                        eprintln!(
+                                    "Error creating worklog: timer_id: {} issue:{} start:{} duration:{} comment:{} {e} ",
+                                    &timer.id.unwrap(),
+                                    &timer.issue_key,
+                                    &timer.started_at.with_timezone(&Local),
+                                    duration_seconds.to_i32().unwrap(),
+                                    comment
+                                );
+                        return Err(WorklogError::JiraError(e.to_string()));
+                    }
+                };
 
                 debug!("Worklog created in Jira: {:?}", work_log);
 
                 // Write to local worklog database table too
-                self.worklog_service.add_entry(&LocalWorklog::from_worklog(
-                    &work_log,
-                    &IssueKey::from(timer.issue_key.as_str()),
-                ))?;
+                self.worklog_service
+                    .add_entry(&LocalWorklog::from_worklog(
+                        &work_log,
+                        &IssueKey::from(timer.issue_key.as_str()),
+                    ))
+                    .await?;
 
                 // Mark timer as synced
                 timer.synced = true;

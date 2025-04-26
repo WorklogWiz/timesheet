@@ -23,7 +23,7 @@ use reqwest::{
     Client, Method, RequestBuilder, StatusCode,
 };
 
-use crate::builder::{JiraBuilder, JiraBuilderError};
+pub use crate::builder::{JiraBuilder, JiraBuilderError};
 use crate::models::core::IssueKey;
 use crate::models::issue::{
     ComponentId, IssueSummary, IssueType, IssuesResponse, NewIssue, NewIssueFields,
@@ -64,6 +64,7 @@ pub enum JiraError {
     UnexpectedStatus,
     UriTooLong(String),
     BuilderError(JiraBuilderError),
+    WorklogDurationTooShort(i32),
 }
 
 impl From<JiraBuilderError> for JiraError {
@@ -103,6 +104,9 @@ impl fmt::Display for JiraError {
             UnexpectedStatus => todo!(),
             UriTooLong(uri) => write!(f, "URI too long: {uri} "),
             BuilderError(e) => write!(f, "JiraBuilderError: {e}"),
+            WorklogDurationTooShort(d) => {
+                write!(f, "Worklog duration too short: {d} seconds")
+            }
         }
     }
 }
@@ -220,7 +224,13 @@ impl Jira {
             .build()?)
     }
 
-    async fn request<D>(&self, method: Method, endpoint: &str, body: Option<Vec<u8>>) -> Result<D>
+    async fn request<D>(
+        &self,
+        method: Method,
+        endpoint: &str,
+        query_params: Option<Vec<(String, String)>>,
+        body: Option<Vec<u8>>,
+    ) -> Result<D>
     where
         D: DeserializeOwned,
     {
@@ -231,6 +241,11 @@ impl Jira {
             .request(method, url.clone())
             .header(CONTENT_TYPE, "application/json")
             .header(ACCEPT, "application/json");
+
+        // Apply query parameters if provided
+        if let Some(params) = query_params {
+            request = request.query(&params);
+        }
 
         request = self.credentials.apply(request);
 
@@ -284,14 +299,15 @@ impl Jira {
     where
         D: DeserializeOwned,
     {
-        self.request::<D>(Method::GET, endpoint, None).await
+        self.request::<D>(Method::GET, endpoint, None, None).await
     }
 
     async fn delete<D>(&self, endpoint: &str) -> Result<D>
     where
         D: DeserializeOwned,
     {
-        self.request::<D>(Method::DELETE, endpoint, None).await
+        self.request::<D>(Method::DELETE, endpoint, None, None)
+            .await
     }
 
     async fn post<D, S>(&self, endpoint: &str, body: S) -> Result<D>
@@ -300,7 +316,7 @@ impl Jira {
         S: Serialize,
     {
         let data = serde_json::to_string::<S>(&body)?;
-        self.request::<D>(Method::POST, endpoint, Some(data.into_bytes()))
+        self.request::<D>(Method::POST, endpoint, None, Some(data.into_bytes()))
             .await
     }
 
@@ -383,7 +399,7 @@ impl Jira {
     /// * Parsing the response fails.
     ///
     /// # Examples
-    /// This function requires proper setup of Jira client and works asynchronously.
+    /// This function requires proper setup of a Jira client and works asynchronously.
     pub async fn get_issue_summaries(
         &self,
         project_filter: &[&str],
@@ -401,7 +417,7 @@ impl Jira {
             jql = format!("project in ({})", project_filter.join(","));
         }
         if !issue_key_filter.is_empty() {
-            // creates comma-separated list of issue the keys
+            // creates a comma-separated list of issue the keys
             let keys_spec = issue_key_filter
                 .iter()
                 .map(std::string::ToString::to_string)
@@ -424,11 +440,62 @@ impl Jira {
         }
         debug!("search_issues() :- Composed this JQL: {jql}");
 
-        self.fetch_with_jql(
-            &jql,
-            vec!["id", "key", "summary", "components"], // TODO: Add "component" to list of fields to retrieve
-        )
-        .await
+        self.fetch_with_jql(&jql, vec!["id", "key", "summary", "components"])
+            .await
+    }
+
+    /// Retrieves a single issue from Jira with minimal fields needed for an `IssueSummary`.
+    ///
+    /// This function makes a targeted API call to fetch only the essential fields
+    /// needed to construct an `IssueSummary` instance, optimizing network traffic and
+    /// response processing.
+    ///
+    /// # Arguments
+    ///
+    /// * `issue_key` - The key of the issue to retrieve (e.g., "PROJECT-123")
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(IssueSummary)` - The issue summary with minimal fields if found
+    /// * `Err(JiraError)` - An error if the issue doesn't exist or if the API call fails
+    ///
+    /// # Errors
+    ///
+    /// This function may return:
+    /// * `JiraError::Unauthorized` if authentication fails
+    /// * `JiraError::NotFound` if the issue with the given key does not exist
+    /// * `JiraError::RequestError` for network-related issues
+    /// * `JiraError::SerializationError` if response parsing fails
+    ///
+    /// # Examples
+    ///
+    /// ```rust,no_run
+    /// use jira::models::core::IssueKey;
+    ///
+    /// # async fn example(jira_client: &jira::Jira) -> Result<(), Box<dyn std::error::Error>> {
+    /// let issue_key = IssueKey::new("PROJECT-123");
+    /// let issue = jira_client.get_issue_summary(&issue_key).await?;
+    /// println!("Found issue: {} - {}", issue.key, issue.fields.summary);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn get_issue_summary(&self, issue_key: &IssueKey) -> Result<IssueSummary> {
+        // Construct the endpoint with the `fields` parameter for minimal data retrieval
+        let endpoint = format!(
+            "/issue/{}?fields=id,key,summary,components",
+            issue_key.as_str()
+        );
+
+        // Use the existing request method with GET method and no http body
+        let result = self
+            .request::<IssueSummary>(Method::GET, &endpoint, None, None)
+            .await;
+
+        // Handle a specific "not found" error to provide a better error message for this case
+        match result {
+            Err(JiraError::NotFound(_)) => Err(JiraError::NotFound(issue_key.to_string())),
+            other_result => other_result,
+        }
     }
 
     ///
@@ -600,7 +667,7 @@ impl Jira {
         // Loops through the result pages until last page received
         loop {
             let mut worklog_page = self.get::<WorklogsPage>(&resource_name).await?;
-            let is_last_page = worklog_page.worklogs.len() < worklog_page.max_results as usize;
+            let is_last_page = worklog_page.worklogs.len() < worklog_page.max_results;
             if !is_last_page {
                 resource_name = Self::compose_work_logs_url(
                     issue_key.as_str(),
@@ -693,7 +760,7 @@ impl Jira {
     }
 
     fn project_search_resource(start_at: i32, project_keys: Vec<String>) -> String {
-        // Seems 50 is the max value of maxResults
+        // It seems 50 is the max value of maxResults
         let mut resource = format!("/project/search?maxResults=50&startAt={start_at}");
         if !project_keys.is_empty() {
             for key in project_keys {
@@ -732,7 +799,7 @@ impl Jira {
     ///
     /// # Returns
     /// - `Ok(Worklog)` if the operation succeeds, containing the created worklog entry.
-    /// - An error of type `Result<Worklog, E>` if the operation fails (e.g., network error or invalid input).
+    /// - An error of type `Result<Worklog, E>` if the operation fails (e.g. network error or invalid input).
     ///
     /// # Notes
     /// - The `started` time format includes timezone information and is based on the user's local time.
@@ -920,7 +987,7 @@ impl Jira {
     ///
     /// This function queries the Jira server for global time tracking settings.
     /// The result includes information about the time tracking configuration
-    /// such as the estimates field used, time tracking provider, and other
+    /// such as the `estimates` field used, time tracking provider, and other
     /// related details.
     ///
     /// # Returns

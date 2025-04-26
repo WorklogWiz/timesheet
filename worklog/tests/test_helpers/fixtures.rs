@@ -3,7 +3,7 @@
 use chrono::{Duration, Local, Utc};
 use jira::models::core::{Fields, IssueKey};
 use jira::models::issue::IssueSummary;
-use worklog::types::Timer;
+use worklog::types::{LocalWorklog, Timer};
 
 /// Constants for test data
 pub const TEST_ISSUE_KEY: &str = "TEST-123";
@@ -26,6 +26,21 @@ pub fn create_test_timer(issue_key: &str, active: bool) -> Timer {
         },
         synced: false,
         comment: Some("Test timer comment".to_string()),
+    }
+}
+
+pub fn create_worklog_entry(issue_key: IssueKey) -> LocalWorklog {
+    LocalWorklog {
+        id: "123456789".to_string(),
+        issue_key,
+        created: Local::now(),
+        updated: Local::now(),
+        started: Local::now() - Duration::hours(1),
+        timeSpent: "3600".to_string(),
+        timeSpentSeconds: 3600,
+        issueId: 0,
+        author: "".to_string(),
+        comment: None,
     }
 }
 

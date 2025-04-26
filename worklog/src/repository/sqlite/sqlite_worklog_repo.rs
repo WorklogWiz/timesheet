@@ -7,7 +7,7 @@ use jira::models::core::IssueKey;
 use jira::models::user::User;
 use jira::models::worklog::Worklog;
 use log::debug;
-use rusqlite::{named_params, params, Connection};
+use rusqlite::{params, Connection};
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -62,32 +62,8 @@ impl WorkLogRepository for SqliteWorklogRepository {
 
     fn add_entry(&self, local_worklog: &LocalWorklog) -> Result<(), WorklogError> {
         debug!("Adding {:?} to DBMS", &local_worklog);
-        let conn = self
-            .connection
-            .lock()
-            .map_err(|_e| WorklogError::LockPoisoned)?;
-        let result = conn.execute(
-            "INSERT INTO worklog (
-            issue_key, id, author, created, updated, started, time_Spent, time_Spent_Seconds, issue_Id, comment
-        ) VALUES (
-            :issue_key, :id, :author, :created, :updated, :started, :timeSpent, :timeSpentSeconds, :issueId, :comment
-        )",
-            named_params! {
-            ":id" : local_worklog.id,
-            ":issue_key": local_worklog.issue_key.to_string(), // No conversion needed
-            ":issueId": local_worklog.issueId,
-            ":author" : local_worklog.author,
-            ":created" : local_worklog.created.to_rfc3339(),
-            ":updated" : local_worklog.updated.to_rfc3339(),
-            ":started" : local_worklog.started.to_rfc3339(),
-            ":timeSpent" : local_worklog.timeSpent,
-            ":timeSpentSeconds": local_worklog.timeSpentSeconds,
-            ":comment" : local_worklog.comment
-            }, ).map_err(|e| WorklogError::Sql(format!("Unable to insert into worklog: {e}")))?;
-
-        debug!("With result {}", result);
-
-        Ok(())
+        let worklog = local_worklog.clone();
+        self.add_worklog_entries(&[worklog])
     }
 
     fn add_worklog_entries(&self, worklogs: &[LocalWorklog]) -> Result<(), WorklogError> {
@@ -104,7 +80,7 @@ impl WorkLogRepository for SqliteWorklogRepository {
 
         // Execute the insert statement for each LocalWorklog instance
         for worklog in worklogs {
-            stmt.execute(params![
+            let result = stmt.execute(params![
                 worklog.id,
                 worklog.issue_key.to_string(),
                 worklog.issueId,
@@ -115,7 +91,26 @@ impl WorkLogRepository for SqliteWorklogRepository {
                 worklog.timeSpent,
                 worklog.timeSpentSeconds,
                 worklog.comment,
-            ])?;
+            ]);
+            match result {
+                Ok(_) => {}
+                Err(rusqlite::Error::SqliteFailure(error, t)) => {
+                    if error.code == rusqlite::ErrorCode::ConstraintViolation {
+                        debug!("Constraint violation: {:?}", t);
+                        return Err(WorklogError::MissingWorklogParentIssue(
+                            worklog.issue_key.clone(),
+                        ));
+                    }
+                    debug!("Error inserting worklog: {:?}", error);
+                    return Err(WorklogError::Sql(format!(
+                        "Unable to insert into worklog: {error:?}"
+                    )));
+                }
+                Err(e) => {
+                    eprintln!("Error inserting worklog: {e:?}");
+                    return Err(e.into());
+                }
+            }
         }
         Ok(())
     }

@@ -234,7 +234,7 @@ impl JiraBuilder {
     ///
     /// # Example
     /// ```no_run
-    /// use jira::JiraBuilder;
+    /// use jira::{Jira, JiraBuilder};
     ///
     /// let jira = JiraBuilder::create_from_env()
     ///     .expect("Failed to create Jira client");

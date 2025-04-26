@@ -1,49 +1,237 @@
-// worklog/tests/timer_service_test.rs
-
-use chrono::{Duration, Local, Utc};
-use jira::models::core::Fields;
-use jira::models::issue::IssueSummary;
-use jira::models::project::JiraProjectKey;
-use log::debug;
-
-// Optional: import helper modules
+#[cfg(test)]
 mod test_helpers;
-use crate::test_helpers::fixtures::{create_test_issues, create_test_timer};
+
+use crate::test_helpers::common::TEST_PROJECT_KEY;
+use crate::test_helpers::fixtures::create_test_timer;
+use crate::test_helpers::issue_tracker::IssueTracker;
+use chrono::{DateTime, Duration, Local, Utc};
+use jira::models::core::{Fields, IssueKey};
+use jira::models::issue::{IssueSummary, NewIssueResponse};
+use jira::models::project::JiraProjectKey;
+use jira::JiraError;
+use log::debug;
+use std::collections::HashMap;
+use std::error::Error;
+use std::sync::Arc;
 use test_helpers::common::create_test_runtime;
-use test_helpers::fixtures::TEST_ISSUE_KEY;
-#[test]
-fn test_start_and_stop_timer() {
-    // Initialize logger only once across tests
-    let _ = env_logger::builder().is_test(true).try_init();
+use worklog::error::WorklogError;
+use worklog::types::Timer;
+use worklog::ApplicationRuntime;
 
-    // Set up a test runtime with a temporary database
-    let runtime = create_test_runtime().expect("Failed to create test runtime");
+struct TimerServiceTestContext {
+    runtime: Arc<ApplicationRuntime>,
+    issue_tracker: IssueTracker,
+    errors: HashMap<String, Box<dyn Error + Send + Sync>>,
+}
 
-    let test_issues = create_test_issues();
-    runtime
-        .issue_service
-        .add_jira_issues(&test_issues)
-        .expect("Failed to add test issues");
+const NON_EXISTENT_KEY: &str = "XXXX-1";
 
-    // Act: Start a timer
-    let timer = runtime
-        .timer_service()
-        .start_timer(TEST_ISSUE_KEY, Some("Test work".to_string()))
-        .expect("Failed to start timer");
+impl TimerServiceTestContext {
+    fn new() -> Self {
+        // Initialize logger only once
+        let _ = env_logger::builder().is_test(true).try_init();
 
-    // Assert: Timer was created correctly
-    assert_eq!(timer.issue_key, TEST_ISSUE_KEY);
-    assert!(timer.is_active());
+        Self {
+            runtime: create_test_runtime().expect("Failed to create test runtime"),
+            issue_tracker: IssueTracker::new(),
+            errors: HashMap::new(),
+        }
+    }
 
-    // Act: Stop the timer
-    let stopped_timer = runtime
-        .timer_service()
-        .stop_active_timer(Some(Utc::now().with_timezone(&Local) + Duration::hours(3)))
-        .expect("Failed to stop timer");
+    async fn close(&mut self) {
+        self.issue_tracker.cleanup(self.runtime.jira_client()).await;
+    }
 
-    // Assert: Timer was stopped
-    assert!(!stopped_timer.is_active());
-    assert!(stopped_timer.stopped_at.is_some());
+    async fn get_jira_issue(&self, issue_key: &IssueKey) -> Result<IssueSummary, JiraError> {
+        self.runtime.jira_client.get_issue_summary(issue_key).await
+    }
+
+    async fn with_no_issue_in_jira_or_local_database(&self, issue_key: &str) -> &Self {
+        // Step 1: Verify the issue doesn't exist in our local repository
+        let result = self
+            .runtime
+            .issue_service
+            .get_issues_filtered_by_keys(&[IssueKey::from(issue_key)]);
+        assert!(result.is_ok_and(|issues| issues.is_empty()));
+
+        // Step 2: Verify the issue doesn't exist in Jira either
+        let jira_result = self
+            .runtime
+            .jira_client
+            .get_issue_summary(&IssueKey::from(issue_key))
+            .await;
+        assert!(
+            jira_result
+                .as_ref()
+                .is_err_and(|e| matches!(e, JiraError::NotFound(_))),
+            "Expected Jira API to return NotFound, but got {:?}",
+            jira_result
+        );
+        self
+    }
+
+    async fn start_timer(&self, issue_key: &str) -> Result<Timer, WorklogError> {
+        self.runtime
+            .timer_service
+            .start_timer(issue_key, None)
+            .await
+    }
+
+    async fn with_issue_in_jira_not_in_local_database(
+        &mut self,
+    ) -> Result<NewIssueResponse, JiraError> {
+        let result = self
+            .runtime
+            .jira_client
+            .create_issue(
+                &JiraProjectKey {
+                    key: TEST_PROJECT_KEY,
+                },
+                "Test summary",
+                None,
+                vec![],
+            )
+            .await;
+
+        if let Ok(issue) = result.as_ref() {
+            // Save the issue key for later deletion
+            self.issue_tracker.track(issue.key.clone());
+        }
+        debug!("Created issue: {:#?}", result);
+        result
+    }
+
+    async fn with_issue_in_jira_and_local_database(&mut self) -> IssueKey {
+        let new_issue = self
+            .with_issue_in_jira_not_in_local_database()
+            .await
+            .expect("Failed to create new test issue in Jira");
+        // Save the issue key for later deletion
+        self.issue_tracker.track(new_issue.key.clone());
+
+        let issue_summary = IssueSummary {
+            id: "12345".to_string(),
+            key: new_issue.key.clone(),
+            fields: Fields {
+                summary: "Generated by unit testing".to_string(),
+                components: vec![],
+            },
+        };
+        let result = self.runtime.issue_service.add_jira_issues(&[issue_summary]);
+        assert!(
+            result.is_ok(),
+            "Unable to add issue to local database: {:?}",
+            result
+        );
+        new_issue.key
+    }
+
+    fn stop_timer(&self, end_time: Option<DateTime<Local>>) -> Result<Timer, WorklogError> {
+        self.runtime.timer_service.stop_active_timer(end_time)
+    }
+    // Add a new error to the collection
+    fn record_error<E>(&mut self, category: impl Into<String>, error: E)
+    where
+        E: std::error::Error + Send + Sync + 'static,
+    {
+        let category = category.into();
+        self.errors
+            .entry(category)
+            .or_insert_with(|| Box::new(error));
+    }
+
+    // Check if errors exist for a specific category
+    fn has_errors_for(&self, category: &str) -> bool {
+        self.errors.contains_key(category)
+    }
+
+    // Get all categories that have errors
+    fn error_categories(&self) -> Vec<&String> {
+        self.errors.keys().collect()
+    }
+}
+
+impl Drop for TimerServiceTestContext {
+    fn drop(&mut self) {
+        if !self.issue_tracker.is_clean() {
+            eprintln!("ERROR: TimerServiceTestContext was not closed properly");
+        } else {
+            println!("Dropping TimerServiceTestContext ...");
+        }
+    }
+}
+
+#[tokio::test]
+async fn test_add_worklog_for_non_existing_issue() {
+    let mut ctx = TimerServiceTestContext::new();
+
+    let result = ctx
+        .with_no_issue_in_jira_or_local_database(NON_EXISTENT_KEY)
+        .await
+        .start_timer(NON_EXISTENT_KEY)
+        .await;
+
+    assert!(
+        result
+            .as_ref()
+            .is_err_and(|e| matches!(e, WorklogError::IssueNotFound(_))),
+        "Expected WorklogError::IssueNotFound, but got {:?}",
+        result
+    );
+
+    ctx.close().await;
+}
+
+#[tokio::test]
+async fn test_add_worklog_for_existing_issue_in_jira_but_not_in_local_database() {
+    let mut ctx = TimerServiceTestContext::new();
+
+    let new_issue = ctx
+        .with_issue_in_jira_not_in_local_database()
+        .await
+        .expect("Failed to create issue");
+
+    let result = ctx.start_timer(new_issue.key.as_str()).await;
+
+    ctx.close().await;
+    match &result {
+        Ok(_) => assert!(true),
+        Err(WorklogError::IssueNotFoundInLocalDBMS(k)) => {
+            panic!("Issue not found in local DBMS: {}", k)
+        }
+        Err(err) => panic!("Failed to start timer: {:?}", err),
+    }
+}
+
+#[tokio::test]
+async fn test_add_worklog_for_existing_issue_in_jira_and_local_database() {
+    let mut ctx = TimerServiceTestContext::new();
+    let result = ctx.with_issue_in_jira_and_local_database().await;
+
+    let result = ctx.start_timer(result.as_str()).await;
+    ctx.close().await;
+    match &result {
+        Ok(_) => assert!(true),
+        Err(err) => panic!("Failed to start timer: {:?}", err),
+    }
+}
+
+#[tokio::test]
+async fn test_start_and_stop_timer_immediately() {
+    let mut ctx = TimerServiceTestContext::new();
+    let issue_key = ctx.with_issue_in_jira_and_local_database().await;
+
+    let result = ctx.start_timer(issue_key.as_str()).await;
+    assert!(result.is_ok());
+
+    let result = ctx.stop_timer(None);
+
+    ctx.close().await;
+    match &result {
+        Ok(_) => assert!(false, "Stopping timer immediately should fail"),
+        Err(WorklogError::TimerDurationTooSmall(d_)) => {} // What we expected
+        _ => panic!("Failed to stop timer: {:?}", result),
+    }
 }
 
 #[tokio::test]
@@ -58,7 +246,9 @@ async fn test_sync_timers_to_jira() {
     let test_issue = runtime
         .jira_client()
         .create_issue(
-            &JiraProjectKey { key: "TWIZ" },
+            &JiraProjectKey {
+                key: TEST_PROJECT_KEY,
+            },
             "TEST summary",
             None,
             vec![],
@@ -91,6 +281,7 @@ async fn test_sync_timers_to_jira() {
 
     let result = timer_service
         .start_timer(&test_timer.issue_key, Some("Rubbish".to_string()))
+        .await
         .expect("Failed to start test timer ");
 
     assert_eq!(result.issue_key, test_timer.issue_key);
@@ -110,7 +301,7 @@ async fn test_sync_timers_to_jira() {
         .expect("Failed to sync timers to Jira");
 
     runtime
-        .client
+        .jira_client
         .delete_issue(&test_issue.key)
         .await
         .expect("Failed to delete test issue");
