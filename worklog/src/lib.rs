@@ -284,7 +284,7 @@ impl ApplicationRuntime {
 ///     .use_in_memory_db()
 ///     .use_jira_test_instance()
 ///     .build()
-///     .expect("Failed to create runtime");
+///     .expect("Failed to create runtime with test Jira instance");
 /// ```
 ///
 /// # Errors
@@ -337,8 +337,7 @@ impl ApplicationRuntimeBuilder {
     /// ```rust
     /// use worklog::ApplicationRuntimeBuilder;
     ///
-    /// let builder = ApplicationRuntimeBuilder::new();
-    /// let runtime = builder.build().expect("Failed to build ApplicationRuntime");
+    /// let builder = ApplicationRuntimeBuilder::new().build().expect("Failed to create app runtime");
     /// ```
     ///
     /// # Errors
@@ -353,13 +352,7 @@ impl ApplicationRuntimeBuilder {
     #[must_use]
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
-        // Load the configuration from disk as the default.
-        let config = config::load().expect("Failed to load configuration");
-        Self {
-            config,
-            use_in_memory_db: false,
-            use_jira_test_instance: false, // honor whatever the config file says
-        }
+        Self::default()
     }
 
     /// Configures the `ApplicationRuntime` to use an in-memory database.
@@ -452,20 +445,10 @@ impl ApplicationRuntimeBuilder {
     /// - [`WorklogError::ConfigFileNotFound`]: This error occurs if the configuration fails to load during initialization or contains invalid values.
     /// - [`WorklogError::DatabaseError`]: This error occurs if the database connection manager fails to initialize either due to invalid configuration or runtime errors.
     /// - [`WorklogError::JiraBuildError`]: This error occurs if the Jira client fails to initialize, such as when provided with incorrect credentials or an invalid URL.
-    pub fn build(&self) -> Result<ApplicationRuntime, WorklogError> {
-        let database_manager = &self.initialise_database_connection_manager()?;
+    pub fn build(&mut self) -> Result<ApplicationRuntime, WorklogError> {
+        let jira_client = self.create_jira_client()?;
 
-        let jira_client = if self.use_jira_test_instance {
-            JiraBuilder::create_from_env().map_err(WorklogError::JiraBuildError)?
-        } else {
-            Jira::new(
-                &self.config.jira.url,
-                Credentials::Basic(
-                    self.config.jira.user.clone(),
-                    self.config.jira.token.clone(),
-                ),
-            )?
-        };
+        let database_manager = &self.create_database_manager()?;
 
         let user_repo = database_manager.create_user_repository();
         let worklog_repo = database_manager.create_worklog_repository();
@@ -498,21 +481,67 @@ impl ApplicationRuntimeBuilder {
         })
     }
 
-    fn initialise_database_connection_manager(&self) -> Result<DatabaseManager, WorklogError> {
+    /// Creates and configures a Jira client based on the builder's settings.
+    ///
+    /// Note! If `!use_jira_test_instance`, the disk configuration file will be loaded into
+    /// the `config` field.
+    ///
+    /// This method handles two different scenarios for creating a Jira client:
+    /// 1. Using environment variables (when `use_jira_test_instance` is true)
+    /// 2. Using configuration file settings (when `use_jira_test_instance` is false)
+    ///
+    /// # Returns
+    ///
+    /// Returns a Result containing either:
+    /// - `Ok(Jira)`: A configured Jira client instance
+    /// - `Err(WorklogError)`: An error if client creation fails
+    ///
+    /// # Errors
+    ///
+    /// This method can return several types of errors:
+    /// - `WorklogError::JiraBuildError`: When environment variables are missing or invalid
+    /// - `WorklogError::ConfigFileNotFound`: When the configuration file cannot be loaded
+    /// - `WorklogError::JiraError`: When the Jira client fails to initialize with provided credentials
+    ///
+    fn create_jira_client(&mut self) -> Result<Jira, WorklogError> {
+        if self.use_jira_test_instance {
+            // Use environment variables for test instance
+            JiraBuilder::create_from_env().map_err(WorklogError::JiraBuildError)
+        } else {
+            // Load configuration from disk file to obtain Jira credentials
+            self.config = config::load_with_keychain_lookup()?;
+            self.create_jira_from_config()
+        }
+    }
+
+    /// Helper method to create a Jira client from the current configuration
+    fn create_jira_from_config(&self) -> Result<Jira, WorklogError> {
+        let credentials = Credentials::Basic(
+            self.config.jira.user.clone(),
+            self.config.jira.token.clone(),
+        );
+
+        Jira::new(&self.config.jira.url, credentials)
+            .map_err(|e| WorklogError::JiraError(e.to_string()))
+    }
+
+    fn create_database_manager(&self) -> Result<DatabaseManager, WorklogError> {
+        // If we are running in memory, we have no need for the optionally loaded config.
         let database_manager = if self.use_in_memory_db {
+            debug!("Using in-memory database");
             DatabaseManager::new(&DatabaseConfig::SqliteInMemory)?
         } else {
             debug!(
-                "Opening database at {}",
+                "Opening database located in {}",
                 self.config.application_data.local_worklog
             );
+
             let path = PathBuf::from(self.config.application_data.local_worklog.clone());
             if let Some(parent) = path.parent() {
                 if !parent.exists() {
                     fs::create_dir_all(parent)?;
                 }
             }
-
             DatabaseManager::new(&DatabaseConfig::SqliteOnDisk { path })?
         };
         Ok(database_manager)
@@ -553,6 +582,7 @@ mod tests {
     #[test]
     pub fn test_create_in_memory_runtime() {
         let runtime = ApplicationRuntimeBuilder::default()
+            .use_jira_test_instance()
             .use_in_memory_db()
             .build()
             .unwrap();

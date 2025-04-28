@@ -10,8 +10,8 @@ use url::ParseError;
 #[allow(clippy::module_name_repetitions)]
 #[derive(Error, Debug)]
 pub enum WorklogError {
-    #[error("Unable to load the application configuration file {path:?}")]
-    ApplicationConfig { path: PathBuf, source: io::Error },
+    #[error("Unable to load the application configuration file {path}, cause: {source:?}")]
+    ApplicationConfig { path: String, source: io::Error },
     #[error("Unable to parse contents of {path}")]
     TomlParse {
         path: PathBuf,
