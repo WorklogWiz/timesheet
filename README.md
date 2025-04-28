@@ -96,6 +96,8 @@ rustup target add x86_64-pc-windows-gnu
 cargo build --target x86_64-pc-windows-gnu
 ```
 
+## Installing the command line utility in your local environment
+
 **Note** This was the first entry I found on Google in June 2023. The Windows executable
 is rather large, so perhaps there is better way to do this.
 
