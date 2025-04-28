@@ -62,7 +62,7 @@ jobs:
         shell: bash
 
       - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.7
+        uses: mozilla-actions/sccache-action@v0.0.8
 
       - name: Format check
         run: cargo fmt -- --check
