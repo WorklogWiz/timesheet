@@ -304,8 +304,8 @@ pub struct ApplicationRuntimeBuilder {
 impl Default for ApplicationRuntimeBuilder {
     fn default() -> Self {
         ApplicationRuntimeBuilder {
-            use_in_memory_db: true,
-            use_jira_test_instance: true,
+            use_in_memory_db: false,
+            use_jira_test_instance: false,
             config: AppConfiguration {
                 jira: JiraClientConfiguration {
                     url: "https://norns.atlassian.net".to_string(),
