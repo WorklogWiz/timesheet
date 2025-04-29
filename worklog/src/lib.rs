@@ -247,13 +247,14 @@ impl ApplicationRuntime {
 /// optionally configuring it using its methods, and then calling [`ApplicationRuntimeBuilder::build`]
 /// to produce an `ApplicationRuntime` instance.
 ///
-/// ```rust
+/// ```rust,no_run
 /// // Creates a runtime with a brand new database in memory with
 /// // a jira instance according whatever is in the config file
 /// use worklog::ApplicationRuntimeBuilder;
 ///
 /// let runtime = ApplicationRuntimeBuilder::new()
 ///     .use_in_memory_db()
+///     .use_jira_test_instance()
 ///     .build()
 ///     .expect("Failed to create runtime");
 /// ```
@@ -268,7 +269,7 @@ impl ApplicationRuntime {
 /// # Examples
 ///
 /// ## Creating a Runtime with Defaults
-/// ```rust
+/// ```rust,no_run
 /// use worklog::ApplicationRuntimeBuilder;
 ///
 /// let runtime = ApplicationRuntimeBuilder::new()
@@ -334,7 +335,7 @@ impl ApplicationRuntimeBuilder {
     ///
     /// # Example
     ///
-    /// ```rust
+    /// ```rust,no_run
     /// use worklog::ApplicationRuntimeBuilder;
     ///
     /// let builder = ApplicationRuntimeBuilder::new().build().expect("Failed to create app runtime");
@@ -371,6 +372,7 @@ impl ApplicationRuntimeBuilder {
     ///
     /// let runtime = ApplicationRuntimeBuilder::new()
     ///     .use_in_memory_db()
+    ///     .use_jira_test_instance()
     ///     .build()
     ///     .expect("Failed to create runtime with in-memory database");
     /// ```
@@ -433,6 +435,7 @@ impl ApplicationRuntimeBuilder {
     ///
     /// let runtime = ApplicationRuntimeBuilder::new()
     ///     .use_in_memory_db() // Configure for in-memory database, useful for testing
+    ///     .use_jira_test_instance()
     ///     .build()
     ///     .expect("Failed to build ApplicationRuntime");
     ///

@@ -137,7 +137,7 @@ impl TimerService {
         // Check if the issue exists in Jira, if not, return an error
         match self.jira_client.get_issue_summary(&issue_key).await {
             Ok(issue_summary) => {
-                // Issue exists in Jira, check if it exists in local database
+                // Issue exists in Jira, check if it exists in the local database
                 debug!("Issue for key {issue_key} found, now checking local database");
                 if self
                     .issue_service
