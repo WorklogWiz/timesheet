@@ -3,12 +3,12 @@ use chrono::offset::TimeZone;
 use chrono::{DateTime, Datelike, Duration, Local, NaiveDate, Weekday};
 use chrono::{Days, Month, NaiveDateTime, NaiveTime, ParseResult};
 
-use lazy_static::lazy_static;
 use num_traits::cast::FromPrimitive;
 use regex::Regex;
 use std::error;
 use std::fmt::{Display, Formatter};
 use std::ops::{Add, Sub};
+use std::sync::LazyLock;
 
 /// Parses a date, a time or a datetime, which has been supplied
 /// as:
@@ -18,12 +18,11 @@ use std::ops::{Add, Sub};
 ///
 #[allow(clippy::missing_errors_doc, clippy::missing_panics_doc)]
 pub fn str_to_date_time(s: &str) -> ParseResult<DateTime<Local>> {
-    lazy_static! {
-        static ref DATE_EXPR: Regex = Regex::new(r"^\d{4}-\d{2}-\d{2}$").unwrap();
-        static ref TIME_EXPR: Regex = Regex::new(r"^\d{1,2}:\d{2}$").unwrap();
-        static ref DATE_TIME_EXPR: Regex =
-            Regex::new(r"^\d{4}-\d{2}-\d{2}T\d{1,2}:\d{2}$").unwrap();
-    }
+    static DATE_EXPR: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"^\d{4}-\d{2}-\d{2}$").unwrap());
+    static TIME_EXPR: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^\d{1,2}:\d{2}$").unwrap());
+    static DATE_TIME_EXPR: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"^\d{4}-\d{2}-\d{2}T\d{1,2}:\d{2}$").unwrap());
 
     if DATE_EXPR.is_match(s) {
         let naive_date = NaiveDate::parse_from_str(s, "%Y-%m-%d")?;
@@ -138,11 +137,11 @@ impl TimeSpent {
         work_hours_per_day: f32,
         working_days_per_week: f32,
     ) -> Result<TimeSpent, Error> {
-        lazy_static! {
-            static ref TIME_SPEC: Regex =
-                Regex::new(r"\b(?:(\d+(?:[.,]\d{1,2})?)w)?(?:(\d+(?:[.,]\d{1,2})?)d)?(?:(\d+(?:[.,]\d{1,2})?)h)?(?:(\d+)m)?\b"
-            ).unwrap();
-        }
+        static TIME_SPEC: LazyLock<Regex> = LazyLock::new(|| {
+            Regex::new(r"\b(?:(\d+(?:[.,]\d{1,2})?)w)?(?:(\d+(?:[.,]\d{1,2})?)d)?(?:(\d+(?:[.,]\d{1,2})?)h)?(?:(\d+)m)?\b"
+            ).unwrap()
+        });
+
         // Parsing floating point, requires full stop as the decimal point delimiter
         let s = s.to_lowercase().replace(',', ".");
         let cap = TIME_SPEC.captures(&s);
@@ -215,9 +214,9 @@ pub fn calculate_started_time(
 /// # Errors
 /// Returns error if the input specification could not be parsed
 pub fn parse_hour_and_minutes_to_seconds(time_str: &str) -> anyhow::Result<i32> {
-    lazy_static! {
-        static ref HH_MM_EXPR: Regex = Regex::new(r"^\d{2}:\d{2}$").unwrap();
-    }
+    static HH_MM_EXPR: std::sync::LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"^\d{2}:\d{2}$").unwrap());
+
     if !HH_MM_EXPR.is_match(time_str) {
         bail!("{} cannot be parsed into hours and minutes", time_str);
     }

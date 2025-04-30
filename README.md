@@ -86,6 +86,12 @@ cargo test --workspace --tests
 cargo test --workspace --all-targets
 ```
 
+## Installing the command line utility in your local environment
+To install the command line utility in your local environment, run:
+```shell
+cargo install --path cli
+```
+
 ## Cross compiling to Windows on MacOS
 
 How to cross compile from Mac to Windows:
@@ -95,6 +101,7 @@ brew install mingw-w64
 rustup target add x86_64-pc-windows-gnu
 cargo build --target x86_64-pc-windows-gnu
 ```
+This will install the `timesheet` executable in `$HOME/.cargo/bin`
 
 **Note** This was the first entry I found on Google in June 2023. The Windows executable
 is rather large, so perhaps there is better way to do this.

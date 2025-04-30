@@ -24,12 +24,12 @@ impl fmt::Display for LogLevel {
 }
 
 #[derive(Parser)]
-/// Jira worklog utility - add, delete and list jira worklog entries
+/// Jira worklog utility - add, delete, and list jira worklog entries
 ///
 /// Dates should be specified in the ISO8601 format without a time zone. Local timezone is
 /// always assumed. I.e. `2023-06-01`.
 ///
-/// Duration is specified in units of hours, days or weeks, using the abbreviations 'h','d', and 'w'
+/// Duration is specified in units of hours, days, or weeks, using the abbreviations 'h','d', and 'w'
 /// respectively.
 /// Duration may use either the period or the comma to separate the fractional part of a number.
 ///
@@ -58,19 +58,23 @@ pub(crate) enum Command {
     Config(Config),
     /// Lists all time codes
     Codes,
-    /// Synchronize local data store with remote Jira work logs
+    /// Start a timer
+    Start(Start),
+    /// Stops current timer
+    Stop,
+    /// Synchronize the local data store with remote Jira work logs
     Sync(Synchronisation),
 }
 
 #[derive(Args)]
 pub(crate) struct Add {
     /// Duration of work in hours (h) or days (d)
-    /// If more than a single entry separate with spaces and three letter abbreviation of
+    /// If more than a single entry separate with spaces and three letter abbreviations of
     /// weekday name:
     ///     --durations Mon:1,5h Tue:1d Wed:3,5h Fri:1d
     #[arg(short, long, num_args(1..))]
     pub durations: Vec<String>,
-    /// Jira issue to register work on
+    /// Jira issues to register work on
     #[arg(short, long, required = true)]
     pub issue: String,
     /// work started
@@ -118,7 +122,7 @@ pub(crate) struct Config {
     pub cmd: ConfigCommand,
 }
 
-/// Create, modify or list the configuration file.
+/// Create, modify, or list the configuration file.
 /// The configuration file will be automatically created if you use `--token`, `--user` or `--url`
 #[derive(Subcommand, Clone)]
 pub(crate) enum ConfigCommand {
@@ -149,7 +153,7 @@ pub(crate) struct UpdateConfiguration {
 #[derive(Args)]
 pub(crate) struct Synchronisation {
     #[arg(name = "started", short, long)]
-    /// Default is to sync for the current month, but you may specify an ISO8601 date from which
+    /// The default is to sync for the current month, but you may specify an ISO8601 date from which
     /// data should be synchronised
     pub started: Option<String>,
     #[arg(
@@ -174,7 +178,7 @@ pub(crate) struct Synchronisation {
     pub all_users: bool,
 }
 
-impl From<cli::Synchronisation> for operation::sync::Sync {
+impl From<Synchronisation> for operation::sync::Sync {
     fn from(value: Synchronisation) -> Self {
         operation::sync::Sync {
             started: value.started,
@@ -183,4 +187,12 @@ impl From<cli::Synchronisation> for operation::sync::Sync {
             all_users: value.all_users,
         }
     }
+}
+
+#[derive(Args)]
+pub(crate) struct Start {
+    #[arg(short, long, long_help = "Issue to start timer on")]
+    pub issue: String,
+    #[arg(short, long, long_help = "Comment to add to work log")]
+    pub comment: Option<String>,
 }

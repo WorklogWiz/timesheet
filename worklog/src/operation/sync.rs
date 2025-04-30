@@ -128,7 +128,7 @@ pub async fn execute(runtime: &ApplicationRuntime, sync_cmd: &Sync) -> Result<()
 
         let issue_summary = issue_map.get(&worklog.issueId).unwrap();
         let local_worklog = LocalWorklog::from_worklog(worklog, &issue_summary.key);
-        if let Err(err) = runtime.worklog_service().add_entry(&local_worklog) {
+        if let Err(err) = runtime.worklog_service().add_entry(&local_worklog).await {
             eprintln!(
                 "Insert into database failed for {:?}, cause: {:?}",
                 &local_worklog, err

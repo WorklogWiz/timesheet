@@ -1,6 +1,6 @@
 use crate::error::WorklogError;
 use crate::repository::component_repository::ComponentRepository;
-use crate::repository::SharedSqliteConnection;
+use crate::repository::sqlite::SharedSqliteConnection;
 use jira::models::core::IssueKey;
 use jira::models::project::Component;
 use log::debug;

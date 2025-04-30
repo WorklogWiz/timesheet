@@ -1,10 +1,42 @@
+//! Adds worklog entries to Jira issues.
+//!
+//! This module provides functionality to add worklog entries to Jira issues, supporting both
+//! single and multiple entries with flexible time formats.
+//!
+//! # Examples
+//!
+//! ```no_run
+//! use worklog::operation::add::Add;
+//!
+//! // Add a single worklog entry
+//! let mut add = Add {
+//!     durations: vec!["1h".to_string()],
+//!     issue_key: "PROJ-123".to_string(),
+//!     started: None,
+//!     comment: Some("Development work".to_string()),
+//! };
+//!
+//! // Add multiple worklog entries
+//! let mut add_multiple = Add {
+//!     durations: vec!["mon:4h".to_string(), "tue:3h".to_string()],
+//!     issue_key: "PROJ-123".to_string(),
+//!     started: None,
+//!     comment: Some("Weekly work".to_string()),
+//! };
+//! ```
+//!
+//! # Errors
+//!
+//! This module can return the following errors:
+//!
+//! * `WorklogError::BadInput` - When the input duration format is invalid or missing
+//! * `WorklogError::JiraError` - When there are issues communicating with Jira
+//! * `WorklogError::TimeError` - When there are problems with time calculations or parsing
+//!
 use anyhow::Result;
 use chrono::{Datelike, Local, TimeZone, Weekday};
 use jira::{
-    models::{
-        core::IssueKey,
-        setting::{GlobalSettings, TimeTrackingConfiguration},
-    },
+    models::{core::IssueKey, setting::TimeTrackingConfiguration},
     Jira,
 };
 use log::{debug, info};
@@ -13,19 +45,41 @@ use crate::{date, error::WorklogError, types::LocalWorklog, ApplicationRuntime};
 
 pub struct Add {
     pub durations: Vec<String>,
-    pub issue: String,
+    pub issue_key: String,
     pub started: Option<String>,
     pub comment: Option<String>,
 }
 
-pub(crate) async fn execute(
+/// Executes worklog addition operation based on provided instructions.
+///
+/// # Parameters
+///
+/// * `runtime` - Application runtime containing Jira client and worklog service
+/// * `instructions` - Instructions for adding worklog entries including durations and issue key
+///
+/// # Returns
+///
+/// Returns a Result containing a vector of added `LocalWorklog` entries if successful
+///
+/// # Errors
+///
+/// * `WorklogError::BadInput` - When durations are empty or in invalid format
+/// * `WorklogError::JiraError` - When there are issues communicating with Jira
+/// * `WorklogError::TimeError` - When there are problems with time calculations
+///
+/// # Panics
+///
+/// This function will panic if:
+/// * The durations vector is empty and accessed with index 0
+/// * The first duration string is empty when calling `chars().next()`
+/// * The `Local.with_ymd_and_hms()` call receives invalid date/time parameters
+pub async fn execute(
     runtime: &ApplicationRuntime,
     instructions: &mut Add,
 ) -> Result<Vec<LocalWorklog>, WorklogError> {
     let client = runtime.jira_client();
 
-    let cfg = client.get::<GlobalSettings>("/configuration").await?;
-    let time_tracking_options = cfg.timeTrackingConfiguration;
+    let time_tracking_options = client.get_time_tracking_options().await?;
 
     info!("Global Jira options: {:?}", &time_tracking_options);
 
@@ -35,12 +89,11 @@ pub(crate) async fn execute(
         ));
     }
 
-    // Ensure the issue id is always uppercase
-    instructions.issue = instructions.issue.to_uppercase();
+    // Ensure the issue key is always uppercase
+    instructions.issue_key = instructions.issue_key.to_uppercase();
 
-    // If there is only a single duration which does starts with a numeric
     debug!(
-        "Length: {} and durations[0]: {}",
+        "Length: {} and durations[0]={}",
         instructions.durations.len(),
         instructions.durations[0].chars().next().unwrap()
     );
@@ -50,11 +103,11 @@ pub(crate) async fn execute(
     if instructions.durations.len() == 1 && instructions.durations[0].chars().next().unwrap() <= '9'
     {
         // Single duration without a "day name" prefix
-        // like for instance --duration 7,5h
+        // like, for instance --duration 7,5h
         let result = add_single_entry(
             client,
             &time_tracking_options,
-            instructions.issue.clone(),
+            instructions.issue_key.clone(),
             &instructions.durations[0],
             instructions.started.clone(),
             instructions.comment.clone(),
@@ -70,7 +123,7 @@ pub(crate) async fn execute(
         added_worklog_items = add_multiple_entries(
             client,
             time_tracking_options,
-            instructions.issue.clone(),
+            instructions.issue_key.clone(),
             instructions.durations.clone(),
             instructions.comment.clone(),
         )
@@ -84,7 +137,8 @@ pub(crate) async fn execute(
     // Writes the added worklog items to our local journal
     runtime
         .worklog_service()
-        .add_worklog_entries(&added_worklog_items)?;
+        .add_worklog_entries(&added_worklog_items)
+        .await?;
 
     Ok(added_worklog_items)
 }

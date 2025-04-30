@@ -4,6 +4,7 @@ use log::debug;
 use jira::models::core::IssueKey;
 use std::cmp;
 use std::collections::BTreeMap;
+use std::fmt::Write;
 use worklog::{
     date::{self, seconds_to_hour_and_min},
     types::LocalWorklog,
@@ -121,14 +122,16 @@ fn print_and_accumulate_daily_totals(
         daily_total_current_week.insert(date, spent_seconds);
 
         let hh_mm = date::seconds_to_hour_and_min(spent_seconds);
-        outputs.push_str(&format!(
+        write!(
+            &mut outputs,
             " {:^5}",
             if spent_seconds == 0 {
                 "-"
             } else {
                 hh_mm.as_str()
             }
-        ));
+        )
+        .expect("Failed to write to string buffer");
 
         current_date = date.succ_opt(); // Safely move to the next day
     }

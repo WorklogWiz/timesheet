@@ -1,6 +1,8 @@
 use std::{io, path::PathBuf};
 
 use crate::date;
+use jira::builder::JiraBuilderError;
+use jira::models::core::IssueKey;
 use jira::JiraError;
 use thiserror::Error;
 use url::ParseError;
@@ -8,8 +10,8 @@ use url::ParseError;
 #[allow(clippy::module_name_repetitions)]
 #[derive(Error, Debug)]
 pub enum WorklogError {
-    #[error("Unable to load the application configuration file {path:?}")]
-    ApplicationConfig { path: PathBuf, source: io::Error },
+    #[error("Unable to load the application configuration file {path}, cause: {source:?}")]
+    ApplicationConfig { path: String, source: io::Error },
     #[error("Unable to parse contents of {path}")]
     TomlParse {
         path: PathBuf,
@@ -49,6 +51,28 @@ pub enum WorklogError {
     LockPoisoned,
     #[error("Unable to create database SQL schema: {0}")]
     DatabaseError(String),
+    #[error("Active timer exists")]
+    ActiveTimerExists,
+    #[error("No active timer")]
+    NoActiveTimer,
+    #[error("Database lock error")]
+    DatabaseLockError,
+    #[error("Timer not found")]
+    TimerNotFound(i64),
+    #[error("Invalid timer data: {0}")]
+    InvalidTimerData(String),
+    #[error("Issue not found: {0}")]
+    IssueNotFound(String),
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+    #[error("Jira build error: {0}")]
+    JiraBuildError(JiraBuilderError),
+    #[error("Timer duration too small: {0}s. Must be at least 1 minute.")]
+    TimerDurationTooSmall(i32),
+    #[error("Issue not found in local DBMS: {0}")]
+    IssueNotFoundInLocalDBMS(String),
+    #[error("Missing worklog parent, issue: {0} does not exist.")]
+    MissingWorklogParentIssue(IssueKey),
 }
 
 impl From<rusqlite::Error> for WorklogError {

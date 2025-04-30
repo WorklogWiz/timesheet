@@ -11,7 +11,7 @@ fn list_and_exit() {
         config::configuration_file().to_string_lossy()
     );
 
-    match config::load() {
+    match config::load_with_keychain_lookup() {
         Ok(config) => {
             let toml_as_string = config::application_config_to_string(&config).unwrap();
             println!("{toml_as_string}");
