@@ -4,7 +4,7 @@ mod test_helpers;
 use crate::test_helpers::common::TEST_PROJECT_KEY;
 use crate::test_helpers::fixtures::create_test_timer;
 use crate::test_helpers::issue_tracker::IssueTracker;
-use chrono::{DateTime, Duration, Local, Utc};
+use chrono::{DateTime, Duration, Local};
 use jira::models::core::{Fields, IssueKey};
 use jira::models::issue::{IssueSummary, NewIssueResponse};
 use jira::models::project::JiraProjectKey;
@@ -26,6 +26,8 @@ struct TimerServiceTestContext {
 
 const NON_EXISTENT_KEY: &str = "XXXX-1";
 
+#[cfg(test)]
+#[allow(dead_code)]
 impl TimerServiceTestContext {
     fn new() -> Self {
         // Initialize logger only once
@@ -70,10 +72,10 @@ impl TimerServiceTestContext {
         self
     }
 
-    async fn start_timer(&self, issue_key: &str) -> Result<Timer, WorklogError> {
+    async fn start_a_timer(&self, issue_key: &str) -> Result<Timer, WorklogError> {
         self.runtime
             .timer_service
-            .start_timer(issue_key, None)
+            .start_timer(issue_key, Local::now(), Some("Test comment".to_string()))
             .await
     }
 
@@ -127,8 +129,11 @@ impl TimerServiceTestContext {
     }
 
     fn stop_timer(&self, end_time: Option<DateTime<Local>>) -> Result<Timer, WorklogError> {
-        self.runtime.timer_service.stop_active_timer(end_time)
+        self.runtime
+            .timer_service
+            .stop_active_timer(end_time.unwrap_or_else(Local::now), None)
     }
+
     // Add a new error to the collection
     fn record_error<E>(&mut self, category: impl Into<String>, error: E)
     where
@@ -168,7 +173,7 @@ async fn test_add_worklog_for_non_existing_issue() {
     let result = ctx
         .with_no_issue_in_jira_or_local_database(NON_EXISTENT_KEY)
         .await
-        .start_timer(NON_EXISTENT_KEY)
+        .start_a_timer(NON_EXISTENT_KEY)
         .await;
 
     assert!(
@@ -191,16 +196,23 @@ async fn test_add_worklog_for_existing_issue_in_jira_but_not_in_local_database()
         .await
         .expect("Failed to create issue");
 
-    let result = ctx.start_timer(new_issue.key.as_str()).await;
-
+    let new_timer_result = ctx.start_a_timer(new_issue.key.as_str()).await;
+    let active_timer = ctx.runtime.timer_service.get_active_timer();
     ctx.close().await;
-    match &result {
+
+    match &new_timer_result {
         Ok(_) => assert!(true),
         Err(WorklogError::IssueNotFoundInLocalDBMS(k)) => {
             panic!("Issue not found in local DBMS: {}", k)
         }
         Err(err) => panic!("Failed to start timer: {:?}", err),
     }
+
+    assert!(
+        matches!(active_timer.as_ref(), Ok(Some(_))),
+        "Expected active timer to be Ok(Some(Timer)), but got {:?}",
+        active_timer
+    );
 }
 
 #[tokio::test]
@@ -208,7 +220,7 @@ async fn test_add_worklog_for_existing_issue_in_jira_and_local_database() {
     let mut ctx = TimerServiceTestContext::new();
     let result = ctx.with_issue_in_jira_and_local_database().await;
 
-    let result = ctx.start_timer(result.as_str()).await;
+    let result = ctx.start_a_timer(result.as_str()).await;
     ctx.close().await;
     match &result {
         Ok(_) => assert!(true),
@@ -221,7 +233,7 @@ async fn test_start_and_stop_timer_immediately() {
     let mut ctx = TimerServiceTestContext::new();
     let issue_key = ctx.with_issue_in_jira_and_local_database().await;
 
-    let result = ctx.start_timer(issue_key.as_str()).await;
+    let result = ctx.start_a_timer(issue_key.as_str()).await;
     assert!(result.is_ok());
 
     let result = ctx.stop_timer(None);
@@ -229,7 +241,7 @@ async fn test_start_and_stop_timer_immediately() {
     ctx.close().await;
     match &result {
         Ok(_) => assert!(false, "Stopping timer immediately should fail"),
-        Err(WorklogError::TimerDurationTooSmall(d_)) => {} // What we expected
+        Err(WorklogError::TimerDurationTooSmall(_d)) => {} // What we expected
         _ => panic!("Failed to stop timer: {:?}", result),
     }
 }
@@ -280,14 +292,18 @@ async fn test_sync_timers_to_jira() {
     let test_timer = create_test_timer(test_issue.key.value(), true);
 
     let result = timer_service
-        .start_timer(&test_timer.issue_key, Some("Rubbish".to_string()))
+        .start_timer(
+            &test_timer.issue_key,
+            Local::now(),
+            Some("Rubbish".to_string()),
+        )
         .await
         .expect("Failed to start test timer ");
 
     assert_eq!(result.issue_key, test_timer.issue_key);
-    let stop_time = Utc::now().with_timezone(&Local) + Duration::hours(3);
+    let stop_time = Local::now() + Duration::hours(3);
     let timer = timer_service
-        .stop_active_timer(Some(stop_time))
+        .stop_active_timer(stop_time, Some("Test comment at stop".to_string()))
         .expect("Failed to stop test timer");
 
     assert_eq!(result.issue_key, timer.issue_key);

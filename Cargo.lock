@@ -1188,7 +1188,7 @@ checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
 
 [[package]]
 name = "jira"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "aquamarine",
  "chrono",
@@ -1870,7 +1870,7 @@ checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
 name = "secure_credentials"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "security-framework 3.0.0",
 ]
@@ -2212,7 +2212,7 @@ dependencies = [
 
 [[package]]
 name = "timesheet-cli"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "chrono",
  "clap",
@@ -2225,7 +2225,7 @@ dependencies = [
 
 [[package]]
 name = "timesheet-server"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "axum",
  "chrono",
@@ -2241,7 +2241,7 @@ dependencies = [
 
 [[package]]
 name = "timesheet-tui"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "chrono",
  "crossterm",
@@ -2824,7 +2824,7 @@ dependencies = [
 
 [[package]]
 name = "worklog"
-version = "0.11.0"
+version = "0.12.0"
 dependencies = [
  "anyhow",
  "async-trait",

@@ -1,6 +1,6 @@
 //! Timer service module provides functionality for managing work time tracking.
 //!
-//! This module contains the `TimerService` which handles:
+//! This module contains the `TimerService`, which handles:
 //! - Starting and stopping work timers
 //! - Synchronizing completed timers with Jira as worklogs
 //! - Managing timer states and persistence
@@ -9,6 +9,7 @@
 //!
 //! # Basic Usage Example
 //! ```no_run
+//! use chrono::Local;
 //! use worklog::ApplicationRuntimeBuilder;
 //!
 //! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
@@ -18,14 +19,14 @@
 //!
 //! // Start a timer for an issue
 //! let timer = runtime.timer_service().start_timer(
-//!     "PROJECT-123",
+//!     "PROJECT-123", Local::now(),
 //!     Some("Working on feature".to_string())
 //! ).await?;
 //!
 //! // Do some work...
 //!
 //! // Stop the timer when done
-//! let stopped_timer = runtime.timer_service().stop_active_timer(None)?;
+//! let stopped_timer = runtime.timer_service().stop_active_timer(Local::now(),None)?;
 //!
 //! // Sync completed timers with Jira
 //! runtime.timer_service().sync_timers_to_jira().await?;
@@ -74,16 +75,17 @@ use std::sync::Arc;
 ///
 /// # Example
 /// ```no_run
+/// use chrono::Local;
 /// use worklog::TimerService;
 ///
 /// # async fn example(timer_service: TimerService) -> Result<(), Box<dyn std::error::Error>> {
 /// // Start a timer for an issue
-/// let timer = timer_service.start_timer("PROJECT-123", Some("Implementing feature".into())).await?;
+/// let timer = timer_service.start_timer("PROJECT-123", Local::now(),Some("Implementing feature".into())).await?;
 ///
 /// // Work on the issue...
 ///
 /// // Stop the timer
-/// let completed_timer = timer_service.stop_active_timer(None)?;
+/// let completed_timer = timer_service.stop_active_timer(Local::now(),None)?;
 ///
 /// // Sync completed timer to Jira
 /// timer_service.sync_timers_to_jira().await?;
@@ -119,15 +121,16 @@ impl TimerService {
     /// Validates that the issue exists before starting the timer
     ///
     /// # Errors
-    /// Returns a `WorklogError` if:
+    /// Return a `WorklogError` if:
     /// - The issue does not exist in the database
     /// - There is already an active timer running
     /// - There's an error accessing the timer repository
     /// - Database operations fail
-    /// - Issue key format is invalid
+    /// - an Issue key format is invalid
     pub async fn start_timer(
         &self,
         issue_key: &str,
+        started_at: DateTime<Local>,
         comment: Option<String>,
     ) -> Result<Timer, WorklogError> {
         let issue_key = IssueKey::new(issue_key);
@@ -158,13 +161,12 @@ impl TimerService {
             return Err(WorklogError::ActiveTimerExists);
         }
 
-        // Create a new timer with the current time
-        let now = Utc::now();
+        // Create a new timer with the current time as the creation
         let timer = Timer {
             id: None,
             issue_key: issue_key.to_string(),
-            created_at: now.with_timezone(&Local),
-            started_at: now.with_timezone(&Local),
+            created_at: Local::now(),
+            started_at,
             stopped_at: None,
             synced: false,
             comment,
@@ -173,8 +175,8 @@ impl TimerService {
         // Start the timer and get its ID
         let timer_id = self.timer_repository.start_timer(&timer)?;
         debug!(
-            "Started timer with ID: {} for issue {}",
-            timer_id, issue_key
+            "Started timer with ID: {} for issue {}, starting time: {} ",
+            timer_id, issue_key, started_at
         );
 
         // Return the timer with its ID
@@ -204,7 +206,8 @@ impl TimerService {
     /// This method will panic if the timer duration in seconds cannot be converted to i32
     pub fn stop_active_timer(
         &self,
-        stop_time: Option<DateTime<Local>>,
+        stop_time: DateTime<Local>,
+        comment: Option<String>,
     ) -> Result<Timer, WorklogError> {
         // Retrieves the current timer
         let timer = self
@@ -213,7 +216,6 @@ impl TimerService {
 
         // Calculates the duration of the timer using either a supplied
         // stop time or the current time
-        let stop_time = stop_time.unwrap_or_else(Local::now);
         let duration = stop_time - timer.started_at;
 
         if duration < Duration::seconds(60) {
@@ -222,7 +224,7 @@ impl TimerService {
             ));
         }
 
-        self.timer_repository.stop_active_timer(stop_time)
+        self.timer_repository.stop_active_timer(stop_time, comment)
     }
 
     /// Gets the currently active timer, if any
@@ -348,7 +350,7 @@ impl TimerService {
 
         let all_timers = self
             .timer_repository
-            .find_after_date(Utc::now() - chrono::Duration::days(30))?;
+            .find_after_date(Utc::now() - Duration::days(30))?;
 
         let unsynced_completed = all_timers
             .into_iter()
@@ -395,15 +397,15 @@ impl TimerService {
     /// - The active timer has no ID
     /// - There's an error accessing the timer repository
     /// - Database operations fail
-    pub fn discard_active_timer(&self) -> Result<(), WorklogError> {
+    pub fn discard_active_timer(&self) -> Result<Timer, WorklogError> {
         let active_timer = self.get_active_timer()?;
         if let Some(timer) = active_timer {
             if let Some(id) = timer.id {
                 self.timer_repository.delete(id)?;
-                Ok(())
+                Ok(timer)
             } else {
                 Err(WorklogError::InvalidTimerData(
-                    "Timer has no ID".to_string(),
+                    "Internal error: Timer has no ID".to_string(),
                 ))
             }
         } else {
@@ -441,7 +443,7 @@ impl TimerService {
         // Placeholder implementation
         let timers = self
             .timer_repository
-            .find_after_date(Utc::now() - chrono::Duration::days(365))?;
+            .find_after_date(Utc::now() - Duration::days(365))?;
 
         timers
             .into_iter()
@@ -460,7 +462,7 @@ impl TimerService {
         issue_id: &str,
         days: i64,
     ) -> Result<Vec<Timer>, WorklogError> {
-        let since = Utc::now() - chrono::Duration::days(days);
+        let since = Utc::now() - Duration::days(days);
         let all_timers = self.timer_repository.find_after_date(since)?;
 
         Ok(all_timers

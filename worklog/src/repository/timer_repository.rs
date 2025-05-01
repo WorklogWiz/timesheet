@@ -37,7 +37,11 @@ pub trait TimerRepository: Send + Sync {
     ///
     /// # Returns
     /// * The updated timer entry after being stopped
-    fn stop_active_timer(&self, stop_time: DateTime<Local>) -> Result<Timer, WorklogError>;
+    fn stop_active_timer(
+        &self,
+        stop_time: DateTime<Local>,
+        comment: Option<String>,
+    ) -> Result<Timer, WorklogError>;
 
     /// Finds all timers for a specific issue
     fn find_by_issue_key(&self, issue_key: &str) -> Result<Vec<Timer>, WorklogError>;
