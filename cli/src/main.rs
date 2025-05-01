@@ -75,6 +75,8 @@ mod cli;
 mod commands;
 mod table_report_weekly;
 
+use commands::stop_timer;
+
 #[tokio::main]
 #[allow(clippy::too_many_lines)] // TODO: fix this
 async fn main() -> Result<(), WorklogError> {
@@ -154,7 +156,7 @@ async fn main() -> Result<(), WorklogError> {
                 None => Local::now(),
                 Some(supplied_dt_string) => date::str_to_date_time(&supplied_dt_string)
                     .unwrap_or_else(|err| {
-                        eprintln!("Unable to parse date/time: {}", err);
+                        eprintln!("Unable to parse date/time: {err}");
                         exit(1);
                     }),
             };
@@ -180,35 +182,17 @@ async fn main() -> Result<(), WorklogError> {
                 }
             }
         }
-        Command::Stop => {
-            match &get_runtime().timer_service.stop_active_timer(None) {
-                Ok(timer) => {
-                    let duration_seconds = timer.duration().unwrap().num_seconds();
-                    let hours = duration_seconds / 3600;
-                    let minutes = (duration_seconds % 3600) / 60;
-                    println!(
-                        "Stopped timer for issue {} with id {:?}, duration: {:02}:{:02} ",
-                        timer.issue_key,
-                        timer.id.as_ref().unwrap(),
-                        hours,
-                        minutes
-                    );
-                }
-                Err(e) => {
-                    println!("Unable to stop timer. Cause: {e}");
-                }
+        Command::Stop(stop_opts) => {
+            if stop_opts.discard {
+                return stop_timer::discard_active_timer(&get_runtime());
             }
-            match &get_runtime().timer_service.sync_timers_to_jira().await {
-                Ok(timers) => {
-                    println!("Synced {} timers to Jira", timers.len());
-                }
-                Err(e) => {
-                    println!("Unable to sync timers to Jira. Cause: {e}");
-                }
-            }
-        }
-    }
 
+            let stop_time = stop_timer::parse_stop_time(stop_opts.stopped_at.as_deref());
+            let _ = stop_timer::stop_timer(&get_runtime(), stop_time, stop_opts.comment.clone());
+
+            stop_timer::sync_timers_to_jira(&get_runtime()).await?;
+        } // Stop
+    }
     Ok(())
 }
 

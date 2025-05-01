@@ -5,7 +5,7 @@ use jira::models::core::IssueKey;
 use log::debug;
 use worklog::date;
 use worklog::error::WorklogError;
-use worklog::types::{LocalWorklog, Timer};
+use worklog::types::LocalWorklog;
 use worklog::ApplicationRuntime;
 
 use crate::{cli::Status, get_runtime, table_report_weekly::table_report_weekly};
@@ -77,6 +77,11 @@ pub async fn execute(status: Status) -> Result<(), WorklogError> {
                 hours,
                 minutes
             );
+            if let Some(comment) = timer.comment {
+                println!("Timer comment: {comment}");
+            } else {
+                println!("No comment associated with this timer");
+            }
         }
         Ok(None) => {
             println!("No active timer");

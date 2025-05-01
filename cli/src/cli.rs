@@ -1,7 +1,6 @@
 use std::fmt::{self, Formatter};
 
-use crate::cli;
-use clap::{Args, Parser, Subcommand, ValueEnum};
+use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
 use worklog::operation;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
@@ -61,7 +60,7 @@ pub(crate) enum Command {
     /// Start a timer
     Start(Start),
     /// Stops current timer
-    Stop,
+    Stop(Stop),
     /// Synchronize the local data store with remote Jira work logs
     Sync(Synchronisation),
 }
@@ -92,8 +91,8 @@ pub(crate) struct Del {
     pub worklog_id: String,
 }
 
-impl From<cli::Del> for operation::del::Del {
-    fn from(val: cli::Del) -> Self {
+impl From<Del> for operation::del::Del {
+    fn from(val: Del) -> Self {
         operation::del::Del {
             issue_id: val.issue_id,
             worklog_id: val.worklog_id,
@@ -103,8 +102,8 @@ impl From<cli::Del> for operation::del::Del {
 
 #[derive(Args)]
 pub(crate) struct Status {
-    /// Issues to be reported on. If no issues are specified.
-    /// The unique Jira keys found in the local journal of entries is used.
+    /// Issues to be reported on. If no issues are supplied,
+    /// the unique Jira keys found in the local journal of entries is used.
     /// You can specify a list of issue keys: -i time-147 time-148
     #[arg(short, long, num_args(1..), required = false)]
     pub issues: Option<Vec<String>>,
@@ -128,7 +127,7 @@ pub(crate) struct Config {
 pub(crate) enum ConfigCommand {
     /// Update the configuration file
     Update(UpdateConfiguration),
-    /// write current configuration to standard output
+    /// Writes the current configuration to standard output
     List,
     /// Remove the current configuration
     Remove,
@@ -200,5 +199,32 @@ pub(crate) struct Start {
         long,
         long_help = "Starting point if different from current time"
     )]
+    #[allow(clippy::struct_field_names)]
     pub start: Option<String>,
+}
+
+#[derive(Args)]
+#[clap(group(
+    ArgGroup::new("normal_stop")
+        .args(["stop_time", "comment"])
+        .conflicts_with("discard")
+        .multiple(true)
+))]
+pub(crate) struct Stop {
+    /// The stopping time to use rather than the current time, which is the default
+    #[arg(
+        short,
+        long,
+        long_help = "Stop timer at this time rather than current time"
+    )]
+    pub stopped_at: Option<String>,
+    /// Comment to add to the work log entry, will overwrite the comment given on start
+    #[arg(
+        short,
+        long,
+        long_help = "Comment to add to work log (overwrites comment given on start"
+    )]
+    pub comment: Option<String>,
+    #[arg(short, long, long_help = "Discard the active work log entry")]
+    pub discard: bool,
 }

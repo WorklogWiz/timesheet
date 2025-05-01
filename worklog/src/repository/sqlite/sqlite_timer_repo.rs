@@ -110,7 +110,11 @@ impl TimerRepository for SqliteTimerRepository {
     }
 
     /// Stops the currently active timer
-    fn stop_active_timer(&self, stop_time: DateTime<Local>) -> Result<Timer, WorklogError> {
+    fn stop_active_timer(
+        &self,
+        stop_time: DateTime<Local>,
+        comment: Option<String>,
+    ) -> Result<Timer, WorklogError> {
         // Find the active timer
         let Some(mut active_timer) = self.find_active_timer()? else {
             return Err(WorklogError::NoActiveTimer);
@@ -121,13 +125,13 @@ impl TimerRepository for SqliteTimerRepository {
             .lock()
             .map_err(|_| WorklogError::DatabaseLockError)?;
 
-        // Set the stop time to supplied value or nLocal::now());
+        // Set the stop time to the supplied value
         active_timer.stopped_at = Some(stop_time);
         debug!("Stopping timer {:?}", &active_timer);
         // Update the timer in the database
         conn.execute(
-            "UPDATE timer SET end = ? WHERE id = ?",
-            params![active_timer.stopped_at, active_timer.id],
+            "UPDATE timer SET end = ?, comment = COALESCE(?, comment) WHERE id = ?",
+            params![active_timer.stopped_at, comment.as_deref(), active_timer.id,],
         )?;
 
         debug!("Stopped timer for issue {}", active_timer.issue_key);

@@ -127,8 +127,11 @@ impl TimerServiceTestContext {
     }
 
     fn stop_timer(&self, end_time: Option<DateTime<Local>>) -> Result<Timer, WorklogError> {
-        self.runtime.timer_service.stop_active_timer(end_time)
+        self.runtime
+            .timer_service
+            .stop_active_timer(end_time.unwrap_or_else(Local::now), None)
     }
+
     // Add a new error to the collection
     fn record_error<E>(&mut self, category: impl Into<String>, error: E)
     where
@@ -296,9 +299,9 @@ async fn test_sync_timers_to_jira() {
         .expect("Failed to start test timer ");
 
     assert_eq!(result.issue_key, test_timer.issue_key);
-    let stop_time = Utc::now().with_timezone(&Local) + Duration::hours(3);
+    let stop_time = Local::now() + Duration::hours(3);
     let timer = timer_service
-        .stop_active_timer(Some(stop_time))
+        .stop_active_timer(stop_time, Some("Test comment at stop".to_string()))
         .expect("Failed to stop test timer");
 
     assert_eq!(result.issue_key, timer.issue_key);

@@ -204,7 +204,8 @@ impl TimerService {
     /// This method will panic if the timer duration in seconds cannot be converted to i32
     pub fn stop_active_timer(
         &self,
-        stop_time: Option<DateTime<Local>>,
+        stop_time: DateTime<Local>,
+        comment: Option<String>,
     ) -> Result<Timer, WorklogError> {
         // Retrieves the current timer
         let timer = self
@@ -213,7 +214,6 @@ impl TimerService {
 
         // Calculates the duration of the timer using either a supplied
         // stop time or the current time
-        let stop_time = stop_time.unwrap_or_else(Local::now);
         let duration = stop_time - timer.started_at;
 
         if duration < Duration::seconds(60) {
@@ -222,7 +222,7 @@ impl TimerService {
             ));
         }
 
-        self.timer_repository.stop_active_timer(stop_time)
+        self.timer_repository.stop_active_timer(stop_time, comment)
     }
 
     /// Gets the currently active timer, if any
@@ -395,15 +395,15 @@ impl TimerService {
     /// - The active timer has no ID
     /// - There's an error accessing the timer repository
     /// - Database operations fail
-    pub fn discard_active_timer(&self) -> Result<(), WorklogError> {
+    pub fn discard_active_timer(&self) -> Result<Timer, WorklogError> {
         let active_timer = self.get_active_timer()?;
         if let Some(timer) = active_timer {
             if let Some(id) = timer.id {
                 self.timer_repository.delete(id)?;
-                Ok(())
+                Ok(timer)
             } else {
                 Err(WorklogError::InvalidTimerData(
-                    "Timer has no ID".to_string(),
+                    "Internal error: Timer has no ID".to_string(),
                 ))
             }
         } else {
