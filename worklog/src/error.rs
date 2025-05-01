@@ -15,7 +15,7 @@ pub enum WorklogError {
     #[error("Unable to parse contents of {path}")]
     TomlParse {
         path: PathBuf,
-        source: toml::de::Error,
+        source: Box<toml::de::Error>,
     },
     #[error("Unable to create configuration file {path}")]
     ConfigFileCreation { path: PathBuf },

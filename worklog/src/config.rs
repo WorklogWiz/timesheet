@@ -221,7 +221,7 @@ pub fn read_data(path: &Path) -> Result<AppConfiguration, WorklogError> {
         })?;
     toml::from_str::<AppConfiguration>(&contents).map_err(|source| WorklogError::TomlParse {
         path: path.into(),
-        source,
+        source: Box::new(source),
     })
 }
 

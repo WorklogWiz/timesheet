@@ -1,7 +1,7 @@
 
 # Time Sheet
 
-Rust project to extract and update hours logged in Jira.
+Rust project to manage Jira Work Logs from the command line.
 
 Jira instance for testing: https://norns.atlassian.net
 
@@ -25,9 +25,10 @@ The project consists of the following modules:
 
 ### Binaries:
 
-* `cli` - command line utility [`timesheet`](./cli/README.md) to register logged hours into Jira.
-* `tui` - text user interface as an alternative to the cli
-* `server` - attempt to create a server for REST/gRPC
+* `cli/` - command line utility [`timesheet`](./cli/README.md) to register logged hours into Jira. There is a separate
+           `README.md` file in the `cli/` directory, which explains how to use the command line utility.
+* `tui/` - draft text user interface as an alternative to the cli
+* `server` - draft attempt to create a server for REST/gRPC
 
 ### Libraries:
 
@@ -37,8 +38,8 @@ The project consists of the following modules:
 
 ### Other stuff
 
- - `docs` - documentation and documentation assets
- - 
+ - `docs/` - documentation and documentation assets
+
 ## Dependency graph
 
 Here is an overview of the dependencies, extracted from `Cargo.toml` 
