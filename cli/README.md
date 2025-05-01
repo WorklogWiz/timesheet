@@ -277,6 +277,52 @@ Synchronising 1 entries for time code time-155
 Synchronising 3 entries for time code time-166
 ````
 
+### Using timers to log work
+
+As of version 0.12 you can start a timer, which will log elapsed time until you stop it.
+When you stop the timer, the elapsed time will be logged and uploaded to Jira automatically.
+
+#### Start a timer
+The following will start a timer for the issue EMG-2 with the comment "I am going to refactor some code"
+
+```shell
+timesheet start -i EMG-2 -c "I am going to refactor some code"
+```
+
+If you forgot to start the timer when you started working on a new issue, you can specify the
+time explicitly using the `-s` option. 
+
+I started working at 08:00 this morning, and sometime before lunch I realised I forgot to 
+start the timer. Here is how to start a timer going back in time: 
+```shell
+timesheet start -i EMG-2 -c "Some optional comment" -s 08:00
+```
+
+#### Stopping a timer
+
+To stop the current active timer, use the `stop` sub-command:
+```shell
+timesheet stop
+```
+
+To replace the comment before uploading to Jira:
+
+```shell
+timesheet stop -c "Reworked the module Foo Bar"
+```
+
+So you forgot to stop the timer and it is still running? 
+Here is how you can override the stop time:
+
+```shell
+timesheet stop -s 14:00
+```
+
+Feel free to combine the `-c` and `-s` options:
+```shell
+timesheet stop -s 14:00 -c "Fixed all the bugs"
+```
+
 ### Listing all available time codes
 
 If you want a complete list of all the available time codes:
