@@ -5,7 +5,7 @@ use jira::models::core::IssueKey;
 use log::debug;
 use worklog::date;
 use worklog::error::WorklogError;
-use worklog::types::LocalWorklog;
+use worklog::types::{LocalWorklog, Timer};
 use worklog::ApplicationRuntime;
 
 use crate::{cli::Status, get_runtime, table_report_weekly::table_report_weekly};
@@ -63,7 +63,28 @@ pub async fn execute(status: Status) -> Result<(), WorklogError> {
     // Prints the report
     table_report_weekly(&worklogs);
 
-    // print_info_about_time_codes(worklog_service, jira_keys_to_report);
+    match get_runtime().timer_service.get_active_timer() {
+        Ok(Some(timer)) => {
+            let elapsed_seconds = Local::now()
+                .signed_duration_since(timer.started_at)
+                .num_seconds();
+            let hours = elapsed_seconds / 3600;
+            let minutes = (elapsed_seconds % 3600) / 60;
+            println!(
+                "Active timer for {}, started at {} and current elapsed time is {:02}h {:02}m",
+                timer.issue_key,
+                timer.started_at.format("%Y-%m-%d %H:%M"),
+                hours,
+                minutes
+            );
+        }
+        Ok(None) => {
+            println!("No active timer");
+        }
+        Err(error) => {
+            eprintln!("Error when trying to find active timer: {error}");
+        }
+    }
     Ok(())
 }
 

@@ -128,6 +128,7 @@ impl TimerService {
     pub async fn start_timer(
         &self,
         issue_key: &str,
+        started_at: DateTime<Local>,
         comment: Option<String>,
     ) -> Result<Timer, WorklogError> {
         let issue_key = IssueKey::new(issue_key);
@@ -158,13 +159,12 @@ impl TimerService {
             return Err(WorklogError::ActiveTimerExists);
         }
 
-        // Create a new timer with the current time
-        let now = Utc::now();
+        // Create a new timer with the current time as the creation
         let timer = Timer {
             id: None,
             issue_key: issue_key.to_string(),
-            created_at: now.with_timezone(&Local),
-            started_at: now.with_timezone(&Local),
+            created_at: Local::now(),
+            started_at,
             stopped_at: None,
             synced: false,
             comment,
@@ -173,8 +173,8 @@ impl TimerService {
         // Start the timer and get its ID
         let timer_id = self.timer_repository.start_timer(&timer)?;
         debug!(
-            "Started timer with ID: {} for issue {}",
-            timer_id, issue_key
+            "Started timer with ID: {} for issue {}, starting time: {} ",
+            timer_id, issue_key, started_at
         );
 
         // Return the timer with its ID

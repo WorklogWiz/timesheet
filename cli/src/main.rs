@@ -67,7 +67,9 @@ use std::env;
 use std::fs::File;
 use std::process::exit;
 
-use worklog::{error::WorklogError, operation, ApplicationRuntime, Operation, OperationResult};
+use worklog::{
+    date, error::WorklogError, operation, ApplicationRuntime, Operation, OperationResult,
+};
 
 mod cli;
 mod commands;
@@ -147,9 +149,19 @@ async fn main() -> Result<(), WorklogError> {
             }
         }
         Command::Start(start_opts) => {
+            // Determine the start time
+            let start = match start_opts.start {
+                None => Local::now(),
+                Some(supplied_dt_string) => date::str_to_date_time(&supplied_dt_string)
+                    .unwrap_or_else(|err| {
+                        eprintln!("Unable to parse date/time: {}", err);
+                        exit(1);
+                    }),
+            };
+
             match &get_runtime()
                 .timer_service
-                .start_timer(&start_opts.issue, start_opts.comment)
+                .start_timer(&start_opts.issue, start, start_opts.comment)
                 .await
             {
                 Ok(timer) => {
@@ -157,7 +169,7 @@ async fn main() -> Result<(), WorklogError> {
                         "Started timer for issue {} with id {:?} at {}",
                         &start_opts.issue,
                         timer.id.as_ref().unwrap(),
-                        Local::now().format("%Y-%m-%d %H:%M")
+                        timer.started_at.format("%Y-%m-%d %H:%M")
                     );
                 }
                 Err(e) => {

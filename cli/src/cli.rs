@@ -195,4 +195,10 @@ pub(crate) struct Start {
     pub issue: String,
     #[arg(short, long, long_help = "Comment to add to work log")]
     pub comment: Option<String>,
+    #[arg(
+        short,
+        long,
+        long_help = "Starting point if different from current time"
+    )]
+    pub start: Option<String>,
 }
