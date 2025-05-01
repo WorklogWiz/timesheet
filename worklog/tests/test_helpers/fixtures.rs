@@ -29,6 +29,8 @@ pub fn create_test_timer(issue_key: &str, active: bool) -> Timer {
     }
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 pub fn create_worklog_entry(issue_key: IssueKey) -> LocalWorklog {
     LocalWorklog {
         id: "123456789".to_string(),
@@ -57,6 +59,9 @@ pub fn create_test_issue_info() -> IssueSummary {
 }
 
 /// Creates a set of test issues for the database
+
+#[cfg(test)]
+#[allow(dead_code)]
 pub fn create_test_issues() -> Vec<IssueSummary> {
     vec![
         create_test_issue_info(),

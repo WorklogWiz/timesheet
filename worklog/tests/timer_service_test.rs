@@ -4,7 +4,7 @@ mod test_helpers;
 use crate::test_helpers::common::TEST_PROJECT_KEY;
 use crate::test_helpers::fixtures::create_test_timer;
 use crate::test_helpers::issue_tracker::IssueTracker;
-use chrono::{DateTime, Duration, Local, Utc};
+use chrono::{DateTime, Duration, Local};
 use jira::models::core::{Fields, IssueKey};
 use jira::models::issue::{IssueSummary, NewIssueResponse};
 use jira::models::project::JiraProjectKey;
@@ -26,6 +26,8 @@ struct TimerServiceTestContext {
 
 const NON_EXISTENT_KEY: &str = "XXXX-1";
 
+#[cfg(test)]
+#[allow(dead_code)]
 impl TimerServiceTestContext {
     fn new() -> Self {
         // Initialize logger only once
@@ -207,7 +209,7 @@ async fn test_add_worklog_for_existing_issue_in_jira_but_not_in_local_database()
     }
 
     assert!(
-        matches!(active_timer.as_ref(), Ok(Some(t))),
+        matches!(active_timer.as_ref(), Ok(Some(_))),
         "Expected active timer to be Ok(Some(Timer)), but got {:?}",
         active_timer
     );

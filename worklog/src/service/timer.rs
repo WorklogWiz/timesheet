@@ -1,6 +1,6 @@
 //! Timer service module provides functionality for managing work time tracking.
 //!
-//! This module contains the `TimerService` which handles:
+//! This module contains the `TimerService`, which handles:
 //! - Starting and stopping work timers
 //! - Synchronizing completed timers with Jira as worklogs
 //! - Managing timer states and persistence
@@ -9,6 +9,7 @@
 //!
 //! # Basic Usage Example
 //! ```no_run
+//! use chrono::Local;
 //! use worklog::ApplicationRuntimeBuilder;
 //!
 //! # async fn run() -> Result<(), Box<dyn std::error::Error>> {
@@ -18,14 +19,14 @@
 //!
 //! // Start a timer for an issue
 //! let timer = runtime.timer_service().start_timer(
-//!     "PROJECT-123",
+//!     "PROJECT-123", Local::now(),
 //!     Some("Working on feature".to_string())
 //! ).await?;
 //!
 //! // Do some work...
 //!
 //! // Stop the timer when done
-//! let stopped_timer = runtime.timer_service().stop_active_timer(None)?;
+//! let stopped_timer = runtime.timer_service().stop_active_timer(Local::now(),None)?;
 //!
 //! // Sync completed timers with Jira
 //! runtime.timer_service().sync_timers_to_jira().await?;
@@ -74,16 +75,17 @@ use std::sync::Arc;
 ///
 /// # Example
 /// ```no_run
+/// use chrono::Local;
 /// use worklog::TimerService;
 ///
 /// # async fn example(timer_service: TimerService) -> Result<(), Box<dyn std::error::Error>> {
 /// // Start a timer for an issue
-/// let timer = timer_service.start_timer("PROJECT-123", Some("Implementing feature".into())).await?;
+/// let timer = timer_service.start_timer("PROJECT-123", Local::now(),Some("Implementing feature".into())).await?;
 ///
 /// // Work on the issue...
 ///
 /// // Stop the timer
-/// let completed_timer = timer_service.stop_active_timer(None)?;
+/// let completed_timer = timer_service.stop_active_timer(Local::now(),None)?;
 ///
 /// // Sync completed timer to Jira
 /// timer_service.sync_timers_to_jira().await?;
@@ -119,12 +121,12 @@ impl TimerService {
     /// Validates that the issue exists before starting the timer
     ///
     /// # Errors
-    /// Returns a `WorklogError` if:
+    /// Return a `WorklogError` if:
     /// - The issue does not exist in the database
     /// - There is already an active timer running
     /// - There's an error accessing the timer repository
     /// - Database operations fail
-    /// - Issue key format is invalid
+    /// - an Issue key format is invalid
     pub async fn start_timer(
         &self,
         issue_key: &str,
@@ -348,7 +350,7 @@ impl TimerService {
 
         let all_timers = self
             .timer_repository
-            .find_after_date(Utc::now() - chrono::Duration::days(30))?;
+            .find_after_date(Utc::now() - Duration::days(30))?;
 
         let unsynced_completed = all_timers
             .into_iter()
@@ -441,7 +443,7 @@ impl TimerService {
         // Placeholder implementation
         let timers = self
             .timer_repository
-            .find_after_date(Utc::now() - chrono::Duration::days(365))?;
+            .find_after_date(Utc::now() - Duration::days(365))?;
 
         timers
             .into_iter()
@@ -460,7 +462,7 @@ impl TimerService {
         issue_id: &str,
         days: i64,
     ) -> Result<Vec<Timer>, WorklogError> {
-        let since = Utc::now() - chrono::Duration::days(days);
+        let since = Utc::now() - Duration::days(days);
         let all_timers = self.timer_repository.find_after_date(since)?;
 
         Ok(all_timers
