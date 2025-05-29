@@ -470,3 +470,170 @@ impl TimerService {
             .collect())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::Timer;
+    use chrono::Local;
+
+    #[test]
+    fn test_timer_struct_creation() {
+        let timer = Timer {
+            id: Some(1),
+            issue_key: "TEST-123".to_string(),
+            created_at: Local::now(),
+            started_at: Local::now(),
+            stopped_at: None,
+            synced: false,
+            comment: Some("Test comment".to_string()),
+        };
+
+        assert_eq!(timer.id, Some(1));
+        assert_eq!(timer.issue_key, "TEST-123");
+        assert!(!timer.synced);
+        assert_eq!(timer.comment, Some("Test comment".to_string()));
+        assert!(timer.stopped_at.is_none());
+    }
+
+    #[test]
+    fn test_timer_duration_calculation() {
+        let start_time = Local::now();
+        let stop_time = start_time + Duration::minutes(30);
+
+        let timer = Timer {
+            id: Some(1),
+            issue_key: "TEST-123".to_string(),
+            created_at: start_time,
+            started_at: start_time,
+            stopped_at: Some(stop_time),
+            synced: false,
+            comment: None,
+        };
+
+        if let Some(duration) = timer.duration() {
+            assert_eq!(duration.num_minutes(), 30);
+        } else {
+            panic!("Timer should have a duration");
+        }
+    }
+
+    #[test]
+    fn test_timer_active_duration() {
+        let start_time = Local::now() - Duration::minutes(15);
+
+        let timer = Timer {
+            id: Some(1),
+            issue_key: "TEST-123".to_string(),
+            created_at: start_time,
+            started_at: start_time,
+            stopped_at: None,
+            synced: false,
+            comment: None,
+        };
+
+        // Active timer should have no duration until stopped
+        assert!(timer.duration().is_none());
+    }
+
+    #[test]
+    fn test_duration_calculation() {
+        let start_time = Local::now();
+        let end_time = start_time + Duration::hours(2);
+        let duration = end_time - start_time;
+
+        assert_eq!(duration.num_hours(), 2);
+        assert_eq!(duration.num_seconds(), 7200);
+    }
+
+    #[test]
+    fn test_timer_with_different_issue_keys() {
+        let test_cases = vec!["PROJ-123", "ABC-1", "LONGPROJECT-9999", "X-1"];
+
+        for issue_key in test_cases {
+            let timer = Timer {
+                id: Some(1),
+                issue_key: issue_key.to_string(),
+                created_at: Local::now(),
+                started_at: Local::now(),
+                stopped_at: None,
+                synced: false,
+                comment: None,
+            };
+            assert_eq!(timer.issue_key, issue_key);
+        }
+    }
+
+    #[test]
+    fn test_timer_sync_states() {
+        let mut timer = Timer {
+            id: Some(1),
+            issue_key: "TEST-123".to_string(),
+            created_at: Local::now(),
+            started_at: Local::now(),
+            stopped_at: None,
+            synced: false,
+            comment: None,
+        };
+
+        // Initially not synced
+        assert!(!timer.synced);
+
+        // Mark as synced
+        timer.synced = true;
+        assert!(timer.synced);
+    }
+
+    #[test]
+    fn test_timer_comment_handling() {
+        let timer_with_comment = Timer {
+            id: Some(1),
+            issue_key: "TEST-123".to_string(),
+            created_at: Local::now(),
+            started_at: Local::now(),
+            stopped_at: None,
+            synced: false,
+            comment: Some("Working on feature".to_string()),
+        };
+
+        let timer_without_comment = Timer {
+            id: Some(2),
+            issue_key: "TEST-456".to_string(),
+            created_at: Local::now(),
+            started_at: Local::now(),
+            stopped_at: None,
+            synced: false,
+            comment: None,
+        };
+
+        assert_eq!(
+            timer_with_comment.comment,
+            Some("Working on feature".to_string())
+        );
+        assert!(timer_without_comment.comment.is_none());
+    }
+
+    #[test]
+    fn test_timer_time_calculations() {
+        let base_time = Local::now();
+        let start_time = base_time;
+        let stop_time = base_time + Duration::hours(1) + Duration::minutes(30);
+
+        let timer = Timer {
+            id: Some(1),
+            issue_key: "TEST-123".to_string(),
+            created_at: base_time,
+            started_at: start_time,
+            stopped_at: Some(stop_time),
+            synced: false,
+            comment: None,
+        };
+
+        if let Some(duration) = timer.duration() {
+            assert_eq!(duration.num_hours(), 1);
+            assert_eq!(duration.num_minutes(), 90); // 1 hour 30 minutes = 90 minutes
+        } else {
+            panic!("Timer should have a duration");
+        }
+    }
+}

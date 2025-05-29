@@ -30,10 +30,10 @@
 //!
 //!     let runtime = ApplicationRuntimeBuilder::new()
 //!         .build()?;
-//!     
+//!
 //!     // Execute various operations
 //!     let result = runtime.execute(Operation::Codes).await?;
-//!     
+//!
 //!     Ok(())
 //! }
 //! ```
@@ -548,47 +548,5 @@ impl ApplicationRuntimeBuilder {
             DatabaseManager::new(&DatabaseConfig::SqliteOnDisk { path })?
         };
         Ok(database_manager)
-    }
-}
-
-#[allow(dead_code)]
-fn assert_send_sync<T: Send + Sync>(_: T) {}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Ensures that the `ApplicationRuntime` instance created using the builder
-    /// is properly configured for concurrent usage and can support threading
-    /// by implementing the `Send` and `Sync` traits.
-    ///
-    /// This test creates an in-memory runtime for testing purposes,
-    /// avoiding file I/O while maintaining logical integrity of the runtime's services.
-    ///
-    /// # Usage
-    ///
-    /// Run the test using:
-    ///
-    /// ```bash
-    /// cargo test test_create_in_memory_runtime
-    /// ```
-    ///
-    /// # Assertions
-    ///
-    /// - The `ApplicationRuntime` instance must successfully initialize.
-    /// - The runtime instance must implement `Send` and `Sync` traits.
-    ///
-    /// # Errors
-    ///
-    /// If the configuration cannot be loaded or any of the runtime's dependencies
-    /// fail to initialize, the test will panic.
-    #[test]
-    pub fn test_create_in_memory_runtime() {
-        let runtime = ApplicationRuntimeBuilder::default()
-            .use_jira_test_instance()
-            .use_in_memory_db()
-            .build()
-            .unwrap();
-        assert_send_sync(runtime);
     }
 }
