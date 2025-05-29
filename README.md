@@ -1,5 +1,7 @@
-
 # Time Sheet
+
+[![Rust](https://github.com/oyvindh/timesheet/actions/workflows/rust.yml/badge.svg)](https://github.com/oyvindh/timesheet/actions/workflows/rust.yml)
+[![codecov](https://codecov.io/gh/oyvindh/timesheet/branch/main/graph/badge.svg)](https://codecov.io/gh/oyvindh/timesheet)
 
 Rust project to manage Jira Work Logs from the command line.
 

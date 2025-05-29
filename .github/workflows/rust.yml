@@ -47,13 +47,16 @@ jobs:
         shell: bash
 
       - name: Set up Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          override: true
+          components: llvm-tools-preview
 
       - name: Add target
         run: rustup target add ${{ matrix.target }}
+
+      - name: Install cargo-llvm-cov (for coverage on macOS)
+        if: matrix.target == 'aarch64-apple-darwin'
+        uses: taiki-e/install-action@cargo-llvm-cov
 
       - name: Configure sccache environment
         run: |
@@ -62,7 +65,7 @@ jobs:
         shell: bash
 
       - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.8
+        uses: mozilla-actions/sccache-action@v0.0.9
 
       - name: Format check
         run: cargo fmt -- --check
@@ -83,19 +86,36 @@ jobs:
         shell: bash
 
       - name: Test (native)
-        if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'x86_64-pc-windows-msvc' || matrix.target == 'aarch64-apple-darwin'
+        if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'x86_64-pc-windows-msvc'
         env:
           JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
           JIRA_HOST: ${{ vars.JIRA_HOST }}
           JIRA_USER: ${{ vars.JIRA_USER }}
         run: cargo test --target ${{ matrix.target }} --release
 
+      - name: Test with coverage (macOS only)
+        if: matrix.target == 'aarch64-apple-darwin'
+        env:
+          JIRA_TOKEN: ${{ secrets.JIRA_TOKEN }}
+          JIRA_HOST: ${{ vars.JIRA_HOST }}
+          JIRA_USER: ${{ vars.JIRA_USER }}
+        run: |
+          cargo llvm-cov --lcov --output-path lcov.info
+
+      - name: Upload coverage to Codecov
+        if: matrix.target == 'aarch64-apple-darwin'
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info
+          fail_ci_if_error: false
+          verbose: true
+
       - name: Pedantic check
         if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'x86_64-pc-windows-msvc' || matrix.target == 'aarch64-apple-darwin'
         run: cargo clippy --target ${{ matrix.target }} --release -- -D clippy::pedantic
 
       - name: Upload artifact
-
         uses: actions/upload-artifact@v4.1.0
         with:
           name: ${{ matrix.target }}-binaries
