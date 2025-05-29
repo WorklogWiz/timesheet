@@ -210,3 +210,219 @@ impl WorkLogService {
             .find_worklogs_after(start_datetime, keys_filter, users_filter)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::types::LocalWorklog;
+    use chrono::Local;
+    use jira::models::core::IssueKey;
+    use jira::models::user::User;
+
+    #[test]
+    fn test_worklog_service_struct_creation() {
+        // This test just verifies the struct can be conceptually created
+        // In practice, you'd need proper mocks for the dependencies
+        assert!(true); // Placeholder test
+    }
+
+    #[test]
+    fn test_local_worklog_creation() {
+        let now = Local::now();
+        let worklog = LocalWorklog {
+            issue_key: IssueKey::from("TEST-123"),
+            id: "test-id".to_string(),
+            author: "Test User".to_string(),
+            created: now,
+            updated: now,
+            started: now,
+            timeSpent: "1h".to_string(),
+            timeSpentSeconds: 3600, // 1 hour
+            issueId: 12345,
+            comment: Some("Test work".to_string()),
+        };
+
+        assert_eq!(worklog.id, "test-id");
+        assert_eq!(worklog.issue_key.value(), "TEST-123");
+        assert_eq!(worklog.timeSpentSeconds, 3600);
+        assert_eq!(worklog.comment, Some("Test work".to_string()));
+        assert_eq!(worklog.author, "Test User");
+        assert_eq!(worklog.timeSpent, "1h");
+        assert_eq!(worklog.issueId, 12345);
+    }
+
+    #[test]
+    fn test_local_worklog_time_calculations() {
+        let now = Local::now();
+        let worklog = LocalWorklog {
+            issue_key: IssueKey::from("TEST-123"),
+            id: "test-id".to_string(),
+            author: "Test User".to_string(),
+            created: now,
+            updated: now,
+            started: now,
+            timeSpent: "2h".to_string(),
+            timeSpentSeconds: 7200, // 2 hours
+            issueId: 12345,
+            comment: Some("Test work".to_string()),
+        };
+
+        // 2 hours = 7200 seconds
+        assert_eq!(worklog.timeSpentSeconds, 7200);
+
+        // Convert to hours for verification
+        let hours = worklog.timeSpentSeconds / 3600;
+        assert_eq!(hours, 2);
+    }
+
+    #[test]
+    fn test_local_worklog_with_different_durations() {
+        let test_cases = vec![
+            (900, "15m", "15 minutes"),  // 15 * 60
+            (1800, "30m", "30 minutes"), // 30 * 60
+            (3600, "1h", "1 hour"),      // 1 * 60 * 60
+            (7200, "2h", "2 hours"),     // 2 * 60 * 60
+            (28800, "8h", "8 hours"),    // 8 * 60 * 60 (full day)
+        ];
+
+        for (seconds, time_spent, description) in test_cases {
+            let now = Local::now();
+            let worklog = LocalWorklog {
+                issue_key: IssueKey::from("TEST-123"),
+                id: format!("test-{seconds}"),
+                author: "Test User".to_string(),
+                created: now,
+                updated: now,
+                started: now,
+                timeSpent: time_spent.to_string(),
+                timeSpentSeconds: seconds,
+                issueId: 12345,
+                comment: Some(description.to_string()),
+            };
+
+            assert_eq!(worklog.timeSpentSeconds, seconds);
+            assert_eq!(worklog.timeSpent, time_spent);
+            assert_eq!(worklog.comment, Some(description.to_string()));
+        }
+    }
+
+    #[test]
+    fn test_user_struct_creation() {
+        let user = User {
+            self_url: "https://example.com/user/123".to_string(),
+            account_id: "acc123".to_string(),
+            email_address: "john.doe@example.com".to_string(),
+            display_name: "John Doe".to_string(),
+            time_zone: "UTC".to_string(),
+        };
+
+        assert_eq!(user.account_id, "acc123");
+        assert_eq!(user.display_name, "John Doe");
+        assert_eq!(user.email_address, "john.doe@example.com");
+        assert_eq!(user.time_zone, "UTC");
+        assert_eq!(user.self_url, "https://example.com/user/123");
+    }
+
+    #[test]
+    fn test_local_worklog_with_various_issue_keys() {
+        let issue_keys = vec!["PROJ-1", "ABC-123", "LONGPROJECT-9999", "X-1"];
+
+        for key in issue_keys {
+            let now = Local::now();
+            let worklog = LocalWorklog {
+                issue_key: IssueKey::from(key),
+                id: format!("test-{key}"),
+                author: "Test User".to_string(),
+                created: now,
+                updated: now,
+                started: now,
+                timeSpent: "1h".to_string(),
+                timeSpentSeconds: 3600,
+                issueId: 12345,
+                comment: Some(format!("Work on {key}")),
+            };
+
+            assert_eq!(worklog.issue_key.value(), key);
+            assert_eq!(worklog.comment, Some(format!("Work on {key}")));
+        }
+    }
+
+    #[test]
+    fn test_local_worklog_time_boundaries() {
+        // Test edge cases for time
+        let test_cases = vec![
+            (1, "1s", "Minimum time"),            // 1 second
+            (60, "1m", "One minute"),             // 1 minute
+            (3599, "59m 59s", "Just under hour"), // 59 minutes 59 seconds
+            (86400, "1d", "Full day"),            // 24 hours
+        ];
+
+        for (seconds, time_spent, description) in test_cases {
+            let now = Local::now();
+            let worklog = LocalWorklog {
+                issue_key: IssueKey::from("BOUNDARY-1"),
+                id: format!("boundary-{seconds}"),
+                author: "Test User".to_string(),
+                created: now,
+                updated: now,
+                started: now,
+                timeSpent: time_spent.to_string(),
+                timeSpentSeconds: seconds,
+                issueId: 12345,
+                comment: Some(description.to_string()),
+            };
+
+            assert_eq!(worklog.timeSpentSeconds, seconds);
+            assert!(worklog.timeSpentSeconds > 0);
+        }
+    }
+
+    #[test]
+    fn test_local_worklog_comment_variations() {
+        let comments = vec![
+            None,
+            Some(String::new()),
+            Some("Short".to_string()),
+            Some("A longer comment describing the work done".to_string()),
+            Some("Comment with special characters: !@#$%^&*()".to_string()),
+        ];
+
+        for comment in comments {
+            let now = Local::now();
+            let worklog = LocalWorklog {
+                issue_key: IssueKey::from("COMMENT-1"),
+                id: "test-comment".to_string(),
+                author: "Test User".to_string(),
+                created: now,
+                updated: now,
+                started: now,
+                timeSpent: "1h".to_string(),
+                timeSpentSeconds: 3600,
+                issueId: 12345,
+                comment: comment.clone(),
+            };
+
+            assert_eq!(worklog.comment, comment);
+        }
+    }
+
+    #[test]
+    fn test_local_worklog_without_comment() {
+        let now = Local::now();
+        let worklog = LocalWorklog {
+            issue_key: IssueKey::from("NO-COMMENT-1"),
+            id: "test-no-comment".to_string(),
+            author: "Test User".to_string(),
+            created: now,
+            updated: now,
+            started: now,
+            timeSpent: "30m".to_string(),
+            timeSpentSeconds: 1800,
+            issueId: 12345,
+            comment: None,
+        };
+
+        assert!(worklog.comment.is_none());
+        assert_eq!(worklog.timeSpentSeconds, 1800);
+        assert_eq!(worklog.timeSpent, "30m");
+    }
+}

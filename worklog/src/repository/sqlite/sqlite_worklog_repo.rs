@@ -96,12 +96,12 @@ impl WorkLogRepository for SqliteWorklogRepository {
                 Ok(_) => {}
                 Err(rusqlite::Error::SqliteFailure(error, t)) => {
                     if error.code == rusqlite::ErrorCode::ConstraintViolation {
-                        debug!("Constraint violation: {:?}", t);
+                        debug!("Constraint violation: {t:?}");
                         return Err(WorklogError::MissingWorklogParentIssue(
                             worklog.issue_key.clone(),
                         ));
                     }
-                    debug!("Error inserting worklog: {:?}", error);
+                    debug!("Error inserting worklog: {error:?}");
                     return Err(WorklogError::Sql(format!(
                         "Unable to insert into worklog: {error:?}"
                     )));

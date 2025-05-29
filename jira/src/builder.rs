@@ -208,7 +208,7 @@ impl JiraBuilder {
             credentials,
             client,
         };
-        debug!("Created Jira client: {:#?}", jira);
+        debug!("Created Jira client: {jira:#?}");
 
         Ok(jira)
     }

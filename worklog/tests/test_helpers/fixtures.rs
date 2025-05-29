@@ -41,12 +41,12 @@ pub fn create_worklog_entry(issue_key: IssueKey) -> LocalWorklog {
         timeSpent: "3600".to_string(),
         timeSpentSeconds: 3600,
         issueId: 0,
-        author: "".to_string(),
+        author: String::new(),
         comment: None,
     }
 }
 
-/// Creates a sample IssueSummary for testing
+/// Creates a sample `IssueSummary` for testing
 pub fn create_test_issue_info() -> IssueSummary {
     IssueSummary {
         id: "123".into(),
@@ -59,7 +59,6 @@ pub fn create_test_issue_info() -> IssueSummary {
 }
 
 /// Creates a set of test issues for the database
-
 #[cfg(test)]
 #[allow(dead_code)]
 pub fn create_test_issues() -> Vec<IssueSummary> {

@@ -1,14 +1,9 @@
 use env_logger::Env;
 use futures::{stream, StreamExt};
 use jira::{models::issue::IssuesPage, Credentials, Jira};
-use lazy_static::lazy_static;
 use reqwest::Client;
 use std::{env, time::Duration};
 use tokio::time::Instant;
-
-lazy_static! {
-    static ref START_TIME: Instant = Instant::now();
-}
 
 #[tokio::main]
 #[allow(clippy::too_many_lines)]

@@ -8,8 +8,9 @@ use crate::test_helpers::test_cleanup::TestCleanup;
 use jira::models::core::IssueKey;
 use jira::models::project::JiraProjectKey;
 use std::sync::Arc;
+use worklog::error::WorklogError;
 use worklog::operation::add;
-use worklog::ApplicationRuntime;
+use worklog::{ApplicationRuntime, ApplicationRuntimeBuilder};
 
 struct WorkLogServiceTestContext {
     runtime: Arc<ApplicationRuntime>,
@@ -111,4 +112,41 @@ async fn test_add_to_empty_issue_not_synchronized() {
         "Failed to add worklog: {}",
         add_result.unwrap_err()
     );
+}
+
+#[allow(dead_code)]
+fn assert_send_sync<T: Send + Sync>(_: T) {}
+
+/// Ensures that the `ApplicationRuntime` instance created using the builder
+/// is properly configured for concurrent usage and can support threading
+/// by implementing the `Send` and `Sync` traits.
+///
+/// This test creates an in-memory runtime for testing purposes,
+/// avoiding file I/O while maintaining logical integrity of the runtime's services.
+///
+/// # Usage
+///
+/// Run the test using:
+///
+/// ```bash
+/// cargo test test_create_in_memory_runtime
+/// ```
+///
+/// # Assertions
+///
+/// - The `ApplicationRuntime` instance must successfully initialize.
+/// - The runtime instance must implement `Send` and `Sync` traits.
+///
+/// # Errors
+///
+/// If the configuration cannot be loaded or any of the runtime's dependencies
+/// fail to initialize, the test will panic.
+#[test]
+pub fn test_create_in_memory_runtime() -> Result<(), WorklogError> {
+    let runtime = ApplicationRuntimeBuilder::default()
+        .use_jira_test_instance()
+        .use_in_memory_db()
+        .build()?;
+    assert_send_sync(runtime);
+    Ok(())
 }

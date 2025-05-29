@@ -66,8 +66,7 @@ impl TimerServiceTestContext {
             jira_result
                 .as_ref()
                 .is_err_and(|e| matches!(e, JiraError::NotFound(_))),
-            "Expected Jira API to return NotFound, but got {:?}",
-            jira_result
+            "Expected Jira API to return NotFound, but got {jira_result:?}",
         );
         self
     }
@@ -99,7 +98,7 @@ impl TimerServiceTestContext {
             // Save the issue key for later deletion
             self.issue_tracker.track(issue.key.clone());
         }
-        debug!("Created issue: {:#?}", result);
+        debug!("Created issue: {result:#?}");
         result
     }
 
@@ -122,8 +121,7 @@ impl TimerServiceTestContext {
         let result = self.runtime.issue_service.add_jira_issues(&[issue_summary]);
         assert!(
             result.is_ok(),
-            "Unable to add issue to local database: {:?}",
-            result
+            "Unable to add issue to local database: {result:?}",
         );
         new_issue.key
     }
@@ -158,10 +156,10 @@ impl TimerServiceTestContext {
 
 impl Drop for TimerServiceTestContext {
     fn drop(&mut self) {
-        if !self.issue_tracker.is_clean() {
-            eprintln!("ERROR: TimerServiceTestContext was not closed properly");
-        } else {
+        if self.issue_tracker.is_clean() {
             println!("Dropping TimerServiceTestContext ...");
+        } else {
+            eprintln!("ERROR: TimerServiceTestContext was not closed properly");
         }
     }
 }
@@ -180,8 +178,7 @@ async fn test_add_worklog_for_non_existing_issue() {
         result
             .as_ref()
             .is_err_and(|e| matches!(e, WorklogError::IssueNotFound(_))),
-        "Expected WorklogError::IssueNotFound, but got {:?}",
-        result
+        "Expected WorklogError::IssueNotFound, but got {result:?}",
     );
 
     ctx.close().await;
@@ -203,15 +200,14 @@ async fn test_add_worklog_for_existing_issue_in_jira_but_not_in_local_database()
     match &new_timer_result {
         Ok(_) => assert!(true),
         Err(WorklogError::IssueNotFoundInLocalDBMS(k)) => {
-            panic!("Issue not found in local DBMS: {}", k)
+            panic!("Issue not found in local DBMS: {k}",)
         }
-        Err(err) => panic!("Failed to start timer: {:?}", err),
+        Err(err) => panic!("Failed to start timer: {err:?}",),
     }
 
     assert!(
         matches!(active_timer.as_ref(), Ok(Some(_))),
-        "Expected active timer to be Ok(Some(Timer)), but got {:?}",
-        active_timer
+        "Expected active timer to be Ok(Some(Timer)), but got {active_timer:?}",
     );
 }
 
@@ -224,7 +220,7 @@ async fn test_add_worklog_for_existing_issue_in_jira_and_local_database() {
     ctx.close().await;
     match &result {
         Ok(_) => assert!(true),
-        Err(err) => panic!("Failed to start timer: {:?}", err),
+        Err(err) => panic!("Failed to start timer: {err:?}",),
     }
 }
 
@@ -242,7 +238,7 @@ async fn test_start_and_stop_timer_immediately() {
     match &result {
         Ok(_) => assert!(false, "Stopping timer immediately should fail"),
         Err(WorklogError::TimerDurationTooSmall(_d)) => {} // What we expected
-        _ => panic!("Failed to stop timer: {:?}", result),
+        _ => panic!("Failed to stop timer: {result:?}",),
     }
 }
 
