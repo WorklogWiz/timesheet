@@ -168,7 +168,7 @@ async fn run(mut terminal: DefaultTerminal) -> Result<(), Box<dyn Error>> {
                     start_of_week.date_naive(),
                     end_of_week.date_naive()
                 )))
-                .highlight_style(Style::new().reversed())
+                .row_highlight_style(Style::new().reversed())
                 .highlight_symbol(">>");
             frame.render_widget(table, frame.area());
         })?;

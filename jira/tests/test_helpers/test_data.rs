@@ -9,7 +9,7 @@ use jira::models::project::JiraProjectKey;
 use jira::models::worklog::Worklog;
 use jira::Jira;
 use log::debug;
-use rand::{thread_rng, Rng};
+use rand::Rng;
 use std::ops::Range;
 
 /// The constant `TEST_PROJECT_KEY` represents the key of the test project
@@ -187,7 +187,7 @@ pub fn random_datetime() -> DateTime<Local> {
     let total_seconds = (now - thirty_days_ago).num_seconds();
 
     // Generate a random number of seconds to subtract
-    let random_seconds = thread_rng().gen_range(0..=total_seconds);
+    let random_seconds = rand::rng().random_range(0..=total_seconds);
 
     // Subtract random seconds from now to generate a random datetime
     now - Duration::seconds(random_seconds)
@@ -202,7 +202,7 @@ pub fn random_number_seconds_in_steps_of_900() -> i32 {
     let step_count = (max - min) / step + 1;
 
     // Generate a random step index
-    let random_step = thread_rng().gen_range(0..step_count);
+    let random_step = rand::rng().random_range(0..step_count);
 
     // Map the step index to the actual number
     min + random_step * step
