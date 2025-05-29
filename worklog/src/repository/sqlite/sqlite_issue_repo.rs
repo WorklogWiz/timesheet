@@ -91,7 +91,7 @@ impl IssueRepository for SqliteIssueRepository {
         debug!("add_jira_issues() :- statement prepared");
 
         for issue in jira_issues {
-            debug!("add_jira_issues() :- inserting issue: {:?}", issue);
+            debug!("add_jira_issues() :- inserting issue: {issue:?}");
             if !issue.id.to_string().chars().all(char::is_numeric) {
                 return Err(WorklogError::InvalidInput(format!(
                     "Issue ID must contain only digits, got: {}",
@@ -136,7 +136,7 @@ impl IssueRepository for SqliteIssueRepository {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore  
+    /// ```rust,ignore
     /// let issue_keys = vec![IssueKey::new("ISSUE-1"), IssueKey::new("ISSUE-2")];
     /// let issues = worklog_storage.get_issues_filtered_by_keys(&issue_keys)?;
     ///
@@ -154,7 +154,7 @@ impl IssueRepository for SqliteIssueRepository {
             return Ok(Vec::new());
         }
 
-        debug!("selecting issue from database for keys {:?}", keys);
+        debug!("selecting issue from database for keys {keys:?}");
 
         // Build the `IN` clause dynamically
         let placeholders = keys.iter().map(|_| "?").collect::<Vec<_>>().join(", ");

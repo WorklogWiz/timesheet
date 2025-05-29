@@ -252,13 +252,13 @@ impl Jira {
         if let Some(body) = body {
             request = request.body(body);
         }
-        debug!("request '{:?}'", request);
+        debug!("request '{request:?}'");
 
         let response = request.send().await?;
 
         let status = response.status();
         let body = &response.text().await?;
-        debug!("status {:?} body '{:?}'", status, body);
+        debug!("status {status:?} body '{body:?}'");
         match status {
             StatusCode::UNAUTHORIZED => Err(JiraError::Unauthorized),
             StatusCode::METHOD_NOT_ALLOWED => Err(JiraError::MethodNotAllowed),
@@ -369,7 +369,7 @@ impl Jira {
                     MAX_RESULTS
                 )
             };
-            debug!("http get '{:?}'", resource);
+            debug!("http get '{resource:?}'");
             let response: IssuesResponse<T> = self.get(&resource).await?;
             results.extend(response.issues);
 
@@ -663,7 +663,7 @@ impl Jira {
             Self::compose_work_logs_url(issue_key.as_str(), 0, 5000, started_after);
         let mut worklogs: Vec<Worklog> = Vec::<Worklog>::new();
 
-        debug!("Retrieving work logs for {}", issue_key);
+        debug!("Retrieving work logs for {issue_key}");
         // Loops through the result pages until last page received
         loop {
             let mut worklog_page = self.get::<WorklogsPage>(&resource_name).await?;
@@ -904,7 +904,7 @@ impl Jira {
         let result = self
             .post::<NewIssueResponse, NewIssue>(url, new_issue)
             .await?;
-        debug!("Created issue {:?}", result);
+        debug!("Created issue {result:?}");
         Ok(result)
     }
 
@@ -1065,7 +1065,7 @@ mod tests {
         let _m = server
             .mock(
                 "GET",
-                format!("/rest/api/{}/myself", DEFAULT_API_VERSION).as_str(),
+                format!("/rest/api/{DEFAULT_API_VERSION}/myself").as_str(),
             )
             .with_status(200)
             .with_body(
@@ -1097,7 +1097,7 @@ mod tests {
         let _m = server
             .mock(
                 "GET",
-                format!("/rest/api/{}/myself", DEFAULT_API_VERSION).as_str(),
+                format!("/rest/api/{DEFAULT_API_VERSION}/myself").as_str(),
             )
             .with_status(403)
             .with_body(
@@ -1124,7 +1124,7 @@ mod tests {
             }
         } else {
             panic!("Expected an error")
-        };
+        }
 
         Ok(())
     }

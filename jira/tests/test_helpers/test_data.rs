@@ -108,7 +108,7 @@ pub async fn delete_batch_of_issues_by_key(issue_keys: &Vec<IssueKey>) {
     for jira_key in issue_keys {
         let jira_client = jira_client::create();
 
-        debug!("Preparing to delete issue {}", jira_key);
+        debug!("Preparing to delete issue {jira_key}");
 
         delete_futures.push(async move {
             jira_client.delete_issue(jira_key).await.map(|()| {
@@ -124,7 +124,7 @@ pub async fn delete_batch_of_issues_by_key(issue_keys: &Vec<IssueKey>) {
         }
     }
     let elapsed = start_time.elapsed();
-    debug!("Elapsed time: {:?}", elapsed);
+    debug!("Elapsed time: {elapsed:?}");
 }
 
 #[allow(dead_code)] // This is a bug in the Rust linter, this function is called
@@ -139,7 +139,7 @@ pub async fn add_random_work_logs_to_issues(
     for jira_key in issues {
         let jira_client = jira_client::create();
 
-        debug!("Adding worklogs to issue {}", jira_key);
+        debug!("Adding worklogs to issue {jira_key}");
 
         work_log_futures.push(async move {
             let mut worklogs = Vec::new();

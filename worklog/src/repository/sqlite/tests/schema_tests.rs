@@ -18,7 +18,7 @@ fn test_foreign_keys_enabled() {
     assert!(foreign_keys_enabled, "Foreign keys should be enabled");
 }
 
-/// Helper function to check if foreign keys are enabled in an SQLite connection
+/// Helper function to check if foreign keys are enabled in an `SQLite` connection
 fn is_foreign_keys_enabled(conn: &SharedSqliteConnection) -> Result<bool, WorklogError> {
     let conn = conn.lock().map_err(|_| WorklogError::LockPoisoned)?;
     let mut stmt = conn
@@ -29,11 +29,12 @@ fn is_foreign_keys_enabled(conn: &SharedSqliteConnection) -> Result<bool, Worklo
         .query_map([], |row| row.get::<_, i32>(0))
         .map_err(|e| WorklogError::Sql(e.to_string()))?;
 
-    // There should be exactly one row with value 1 if foreign keys are enabled
-    for row in rows {
-        return Ok(row.map_err(|e| WorklogError::Sql(e.to_string()))? == 1);
+    // Get the first (and only) row - foreign keys pragma returns exactly one row
+    let mut rows_iter = rows;
+    if let Some(row) = rows_iter.next() {
+        Ok(row.map_err(|e| WorklogError::Sql(e.to_string()))? == 1)
+    } else {
+        // If no rows returned (shouldn't happen, but just in case)
+        Ok(false)
     }
-
-    // If no rows returned (shouldn't happen, but just in case)
-    Ok(false)
 }

@@ -5,13 +5,11 @@ use jira::{
     models::project::{JiraProjectsPage, Project},
     Credentials, Jira,
 };
-use lazy_static::lazy_static;
 use reqwest::Client;
+use std::sync::LazyLock;
 use tokio::time::Instant;
 
-lazy_static! {
-    static ref START_TIME: Instant = Instant::now();
-}
+static START_TIME: LazyLock<Instant> = LazyLock::new(Instant::now);
 
 #[tokio::main]
 async fn main() {

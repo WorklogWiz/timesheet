@@ -135,7 +135,7 @@ impl TimerService {
     ) -> Result<Timer, WorklogError> {
         let issue_key = IssueKey::new(issue_key);
 
-        debug!("Starting timer for issue: {}", issue_key);
+        debug!("Starting timer for issue: {issue_key}");
 
         // Check if the issue exists in Jira, if not, return an error
         match self.jira_client.get_issue_summary(&issue_key).await {
@@ -175,8 +175,7 @@ impl TimerService {
         // Start the timer and get its ID
         let timer_id = self.timer_repository.start_timer(&timer)?;
         debug!(
-            "Started timer with ID: {} for issue {}, starting time: {} ",
-            timer_id, issue_key, started_at
+            "Started timer with ID: {timer_id} for issue {issue_key}, starting time: {started_at}"
         );
 
         // Return the timer with its ID
@@ -274,7 +273,7 @@ impl TimerService {
         let mut synced_timers = Vec::new();
 
         for mut timer in timers {
-            debug!("Syncing timer: {:?}", timer);
+            debug!("Syncing timer: {timer:?}");
             if let Some(stopped_at) = timer.stopped_at {
                 // Calculate duration in seconds
                 let duration_seconds = (stopped_at - timer.started_at).num_seconds();
@@ -322,7 +321,7 @@ impl TimerService {
                     }
                 };
 
-                debug!("Worklog created in Jira: {:?}", work_log);
+                debug!("Worklog created in Jira: {work_log:?}");
 
                 // Write to local worklog database table too
                 self.worklog_service

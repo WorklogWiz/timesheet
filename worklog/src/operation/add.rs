@@ -219,7 +219,7 @@ async fn add_single_entry(
             ));
         }
     };
-    debug!("time spent in seconds: {}", time_spent_seconds);
+    debug!("time spent in seconds: {time_spent_seconds}");
 
     // If a starting point was given, transform it from string to a full DateTime<Local>
     let starting_point = started

@@ -21,9 +21,9 @@ impl IssueTracker {
     pub async fn cleanup(&mut self, jira_client: &Jira) {
         for key in &self.issue_keys {
             if let Err(e) = jira_client.delete_issue(key).await {
-                eprintln!("Error deleting issue during cleanup() {}: {}", key, e);
+                eprintln!("Error deleting issue during cleanup() {key}: {e}",);
             } else {
-                println!("cleanup() :- Deleted jira issue {}", key);
+                println!("cleanup() :- Deleted jira issue {key}",);
             };
         }
         self.issue_keys.clear();
