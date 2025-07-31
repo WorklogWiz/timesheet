@@ -10,15 +10,16 @@ Jira instance for testing: <https://norns.atlassian.net>
 <!-- TOC -->
 * [Time Sheet](#time-sheet)
   * [Directory structure](#directory-structure)
-    * [Binaries:](#binaries)
-    * [Libraries:](#libraries)
+    * [Binaries](#binaries)
+    * [Libraries](#libraries)
     * [Other stuff](#other-stuff)
   * [Dependency graph](#dependency-graph)
   * [Maintainer notes](#maintainer-notes)
     * [Generate `pdf` from markdown files](#generate-pdf-from-markdown-files)
     * [Separating unit tests and integration tests](#separating-unit-tests-and-integration-tests)
       * [Integration tests execution](#integration-tests-execution)
-  * [Cross compiling to Windows on MacOS](#cross-compiling-to-windows-on-macos)
+  * [Installing the command line utility in your local environment](#installing-the-command-line-utility-in-your-local-environment)
+  * [Cross-compiling to Windows on macOS](#cross-compiling-to-windows-on-macos)
   * [Commit messages and semantic versioning](#commit-messages-and-semantic-versioning)
 <!-- TOC -->
 
@@ -56,11 +57,11 @@ using: `cargo depgraph --workspace-only | dot -Tsvg -o docs/assets/deps.svg`
 
 `pandoc README.md -o README.pdf`
 
-> To get `pandoc` on MacOS use `brew install pandoc basictex`
+> To get `pandoc` on macOS use `brew install pandoc basictex`
 
 ### Separating unit tests and integration tests
 
-Keeping unit tests separated from integration tests, the latter which require access to external services, is
+Keeping unit tests separated from integration tests, the latter of which requires access to external services, is
 crucial to maintain the code base.
 
 Integration tests for any crate are located in the `tests/` directory.
@@ -78,10 +79,10 @@ export JIRA_TOKEN="ATATT3xFfGF0vIWdxrk1yqkbq5D4Q8EHp49NyxrWF-f6c89spnt..... . .-
 To run only integration tests:
 
 ```sh
-# Executes all tests embeddd in the code structure of the library crates
+# Executes all tests embedded in the code structure of the library crates
 cargo test --workspace --lib
 
-# Executes all tests embeddd in the code structure of the binary crates
+# Executes all tests embedded in the code structure of the binary crates
 # like for instance the cli and tui clients.
 cargo test --workspace --bins
 
@@ -100,9 +101,9 @@ To install the command line utility in your local environment, run:
 cargo install --path cli
 ```
 
-## Cross compiling to Windows on MacOS
+## Cross-compiling to Windows on macOS
 
-How to cross compile from Mac to Windows:
+How to perform cross-compilation from Mac to Windows:
 
 ```shell
 brew install mingw-w64
@@ -113,7 +114,7 @@ cargo build --target x86_64-pc-windows-gnu
 This will install the `timesheet` executable in `$HOME/.cargo/bin`
 
 **Note** This was the first entry I found on Google in June 2023. The Windows executable
-is rather large, so perhaps there is better way to do this.
+is rather large, so perhaps there is a better way to do this.
 
 ## Commit messages and semantic versioning
 

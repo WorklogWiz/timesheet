@@ -55,7 +55,7 @@ pub fn table_report_weekly(worklog_entries: &[LocalWorklog]) {
                     continue;
                 }
 
-                // Prints a row for current key in current week and returns the daily total
+                // Prints a row for the current key in the current week and returns the daily total
                 // for this key in the current week
                 print!("{:15}", key.to_string());
                 let daily_totals_for_this_key = print_and_accumulate_daily_totals(
@@ -64,7 +64,7 @@ pub fn table_report_weekly(worklog_entries: &[LocalWorklog]) {
                     current_sunday.date_naive(), // End of current week
                 );
 
-                // Add the daily totals for current key into current week
+                // Add the daily totals for the current key into the current week
                 for (date, total) in daily_totals_for_this_key {
                     daily_total_per_week
                         .entry(date)
@@ -73,7 +73,7 @@ pub fn table_report_weekly(worklog_entries: &[LocalWorklog]) {
                 }
             }
 
-            // All keys for this week has been printed, now show the weekly total
+            // All keys for this week have been printed, now show the weekly total
             print_single_dashed_line();
             print_week_total(&current_monday, current_sunday, &mut daily_total_per_week);
             current_monday += Duration::weeks(1);
@@ -121,7 +121,7 @@ fn print_and_accumulate_daily_totals(
 
         daily_total_current_week.insert(date, spent_seconds);
 
-        let hh_mm = date::seconds_to_hour_and_min(spent_seconds);
+        let hh_mm = seconds_to_hour_and_min(spent_seconds);
         write!(
             &mut outputs,
             " {:^5}",
@@ -165,7 +165,7 @@ fn print_week_total(
             "-".to_string()
         };
         print!(" {output:^5}");
-        current_date += Duration::days(1); // Move to next day
+        current_date += Duration::days(1); // Move to the next day
     }
     print!(" {:^5}", seconds_to_hour_and_min(week_total));
     println!();
