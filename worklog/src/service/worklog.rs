@@ -221,8 +221,7 @@ mod tests {
     #[test]
     fn test_worklog_service_struct_creation() {
         // This test just verifies the struct can be conceptually created
-        // In practice, you'd need proper mocks for the dependencies
-        assert!(true); // Placeholder test
+        // In practice; you'd need proper mocks for the dependencies
     }
 
     #[test]

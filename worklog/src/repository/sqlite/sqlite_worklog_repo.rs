@@ -271,7 +271,7 @@ mod tests {
         let db_manager = test_database_manager()?;
         let issue_repo_for_test = db_manager.create_issue_repository();
 
-        issue_repo_for_test.add_jira_issues(&vec![IssueSummary {
+        issue_repo_for_test.add_jira_issues(&[IssueSummary {
             id: 123.to_string(),
             key: IssueKey::from("ABC-123"),
             fields: Fields {
@@ -307,7 +307,7 @@ mod tests {
         };
         let db_manager = test_database_manager()?;
         let issue_repo = db_manager.create_issue_repository();
-        issue_repo.add_jira_issues(&vec![IssueSummary {
+        issue_repo.add_jira_issues(&[IssueSummary {
             id: ISSUE_ID.to_string(),
             key: IssueKey::from("ABC-789"),
             fields: Fields {
@@ -343,7 +343,7 @@ mod tests {
             comment: Some("Worked on the issue".to_string()),
         };
         let test_issue_repo = db_manager.create_issue_repository();
-        test_issue_repo.add_jira_issues(&vec![IssueSummary {
+        test_issue_repo.add_jira_issues(&[IssueSummary {
             id: 123.to_string(),
             key: IssueKey::from("ABC-456"),
             fields: Fields {

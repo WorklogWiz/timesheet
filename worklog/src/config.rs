@@ -343,7 +343,7 @@ mod tests {
         );
     }
 
-    #[ignore] // Cannot access the keychain from a non-interactive test
+    #[ignore = "Cannot access the keychain from a non-interactive test"]
     #[test]
     fn test_write_and_read_toml_file() -> Result<()> {
         let tmp_config_file = std::env::temp_dir().join("test-config.toml");

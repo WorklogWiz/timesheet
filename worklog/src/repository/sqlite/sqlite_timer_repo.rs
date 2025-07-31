@@ -272,7 +272,7 @@ mod tests {
         let db_manager = test_database_manager()?;
         let issue_repo_for_test = db_manager.create_issue_repository();
 
-        issue_repo_for_test.add_jira_issues(&vec![IssueSummary {
+        issue_repo_for_test.add_jira_issues(&[IssueSummary {
             id: "123".to_string(),
             key: IssueKey::from("ABC-123"),
             fields: Fields {
