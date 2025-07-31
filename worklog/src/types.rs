@@ -1,6 +1,5 @@
 use chrono::Utc;
 use chrono::{DateTime, Local};
-use jira::models::core::Author;
 use jira::models::core::IssueKey;
 use jira::models::worklog::Worklog;
 use serde::{Deserialize, Serialize};

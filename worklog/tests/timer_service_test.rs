@@ -198,7 +198,7 @@ async fn test_add_worklog_for_existing_issue_in_jira_but_not_in_local_database()
     ctx.close().await;
 
     match &new_timer_result {
-        Ok(_) => assert!(true),
+        Ok(_) => {}
         Err(WorklogError::IssueNotFoundInLocalDBMS(k)) => {
             panic!("Issue not found in local DBMS: {k}",)
         }
@@ -219,7 +219,7 @@ async fn test_add_worklog_for_existing_issue_in_jira_and_local_database() {
     let result = ctx.start_a_timer(result.as_str()).await;
     ctx.close().await;
     match &result {
-        Ok(_) => assert!(true),
+        Ok(_) => {}
         Err(err) => panic!("Failed to start timer: {err:?}",),
     }
 }
@@ -236,7 +236,7 @@ async fn test_start_and_stop_timer_immediately() {
 
     ctx.close().await;
     match &result {
-        Ok(_) => assert!(false, "Stopping timer immediately should fail"),
+        Ok(_) => panic!("Stopping timer immediately should fail"),
         Err(WorklogError::TimerDurationTooSmall(_d)) => {} // What we expected
         _ => panic!("Failed to stop timer: {result:?}",),
     }

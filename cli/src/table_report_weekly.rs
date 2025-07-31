@@ -32,6 +32,7 @@ pub fn table_report_weekly(worklog_entries: &[LocalWorklog]) {
         let mut current_monday = date::first_date_in_week_for(min_date);
         let last_date = date::last_date_in_week_for(max_date);
 
+        let mut grand_total = 0;
         while current_monday <= last_date {
             let current_sunday = current_monday + Days::new(6);
             let week_label = format!(
@@ -75,9 +76,17 @@ pub fn table_report_weekly(worklog_entries: &[LocalWorklog]) {
 
             // All keys for this week have been printed, now show the weekly total
             print_single_dashed_line();
-            print_week_total(&current_monday, current_sunday, &mut daily_total_per_week);
+            let week_total =
+                print_week_total(&current_monday, current_sunday, &mut daily_total_per_week);
+            grand_total += week_total;
             current_monday += Duration::weeks(1);
         }
+        println!(
+            "Grand total for period from {} to {}: {} ",
+            min_date.format("%Y-%m-%d"),
+            max_date.format("%Y-%m-%d"),
+            seconds_to_hour_and_min(grand_total)
+        );
     }
     debug!("Table report done");
 }
@@ -149,7 +158,7 @@ fn print_week_total(
     current_monday: &DateTime<Local>,
     sunday: DateTime<Local>,
     total_per_week_day: &mut BTreeMap<NaiveDate, i32>,
-) {
+) -> i32 {
     print!("{:15}", "Week total");
     let mut current_date = *current_monday;
     let mut week_total = 0;
@@ -173,6 +182,8 @@ fn print_week_total(
     print_double_dashed_line();
 
     println!();
+
+    week_total
 }
 
 /// Find the earliest and latest date in the list of [`LocalWorklog`] entries.

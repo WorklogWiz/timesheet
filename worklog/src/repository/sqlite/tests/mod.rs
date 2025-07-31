@@ -5,5 +5,5 @@ use crate::repository::database_manager::{DatabaseConfig, DatabaseManager};
 
 /// Creates a `DatabaseManager` with an in-memory database suitable for testing.
 pub fn test_database_manager() -> Result<DatabaseManager, WorklogError> {
-    Ok(DatabaseManager::new(&DatabaseConfig::SqliteInMemory)?)
+    DatabaseManager::new(&DatabaseConfig::SqliteInMemory)
 }

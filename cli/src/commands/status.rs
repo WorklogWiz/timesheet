@@ -63,6 +63,7 @@ pub async fn execute(status: Status) -> Result<(), WorklogError> {
     // Prints the report
     table_report_weekly(&worklogs);
 
+    // Prints the status of the active timer
     match get_runtime().timer_service.get_active_timer() {
         Ok(Some(timer)) => {
             let elapsed_seconds = Local::now()
