@@ -9,7 +9,7 @@ use jira::models::project::JiraProjectKey;
 use jira::models::worklog::Worklog;
 use jira::Jira;
 use log::debug;
-use rand::{thread_rng, Rng};
+use rand::Rng;
 use std::ops::Range;
 
 /// The constant `TEST_PROJECT_KEY` represents the key of the test project
@@ -108,7 +108,7 @@ pub async fn delete_batch_of_issues_by_key(issue_keys: &Vec<IssueKey>) {
     for jira_key in issue_keys {
         let jira_client = jira_client::create();
 
-        debug!("Preparing to delete issue {}", jira_key);
+        debug!("Preparing to delete issue {jira_key}");
 
         delete_futures.push(async move {
             jira_client.delete_issue(jira_key).await.map(|()| {
@@ -124,7 +124,7 @@ pub async fn delete_batch_of_issues_by_key(issue_keys: &Vec<IssueKey>) {
         }
     }
     let elapsed = start_time.elapsed();
-    debug!("Elapsed time: {:?}", elapsed);
+    debug!("Elapsed time: {elapsed:?}");
 }
 
 #[allow(dead_code)] // This is a bug in the Rust linter, this function is called
@@ -139,7 +139,7 @@ pub async fn add_random_work_logs_to_issues(
     for jira_key in issues {
         let jira_client = jira_client::create();
 
-        debug!("Adding worklogs to issue {}", jira_key);
+        debug!("Adding worklogs to issue {jira_key}");
 
         work_log_futures.push(async move {
             let mut worklogs = Vec::new();
@@ -187,7 +187,7 @@ pub fn random_datetime() -> DateTime<Local> {
     let total_seconds = (now - thirty_days_ago).num_seconds();
 
     // Generate a random number of seconds to subtract
-    let random_seconds = thread_rng().gen_range(0..=total_seconds);
+    let random_seconds = rand::rng().random_range(0..=total_seconds);
 
     // Subtract random seconds from now to generate a random datetime
     now - Duration::seconds(random_seconds)
@@ -202,7 +202,7 @@ pub fn random_number_seconds_in_steps_of_900() -> i32 {
     let step_count = (max - min) / step + 1;
 
     // Generate a random step index
-    let random_step = thread_rng().gen_range(0..step_count);
+    let random_step = rand::rng().random_range(0..step_count);
 
     // Map the step index to the actual number
     min + random_step * step

@@ -1,9 +1,11 @@
-
 # Time Sheet
+
+[![Rust](https://github.com/oyvindh/timesheet/actions/workflows/rust.yml/badge.svg)](https://github.com/oyvindh/timesheet/actions/workflows/rust.yml)
+[![codecov](https://codecov.io/gh/oyvindh/timesheet/branch/main/graph/badge.svg)](https://codecov.io/gh/oyvindh/timesheet)
 
 Rust project to manage Jira Work Logs from the command line.
 
-Jira instance for testing: https://norns.atlassian.net
+Jira instance for testing: <https://norns.atlassian.net>
 
 <!-- TOC -->
 * [Time Sheet](#time-sheet)
@@ -21,16 +23,17 @@ Jira instance for testing: https://norns.atlassian.net
 <!-- TOC -->
 
 ## Directory structure
+
 The project consists of the following modules:
 
-### Binaries:
+### Binaries
 
 * `cli/` - command line utility [`timesheet`](./cli/README.md) to register logged hours into Jira. There is a separate
            `README.md` file in the `cli/` directory, which explains how to use the command line utility.
 * `tui/` - draft text user interface as an alternative to the cli
 * `server` - draft attempt to create a server for REST/gRPC
 
-### Libraries:
+### Libraries
 
 * `jira` - library with various functions to retrieve data from Jira
 * `worklog` - common functionality to be shared between the various clients
@@ -38,11 +41,11 @@ The project consists of the following modules:
 
 ### Other stuff
 
- - `docs/` - documentation and documentation assets
+* `docs/` - documentation and documentation assets
 
 ## Dependency graph
 
-Here is an overview of the dependencies, extracted from `Cargo.toml` 
+Here is an overview of the dependencies, extracted from `Cargo.toml`
 using: `cargo depgraph --workspace-only | dot -Tsvg -o docs/assets/deps.svg`
 
 ![Dependency graph](docs/assets/deps.svg)
@@ -57,7 +60,7 @@ using: `cargo depgraph --workspace-only | dot -Tsvg -o docs/assets/deps.svg`
 
 ### Separating unit tests and integration tests
 
-Keeping unit tests separated from integration tests, the latter which require access to external services, is 
+Keeping unit tests separated from integration tests, the latter which require access to external services, is
 crucial to maintain the code base.
 
 Integration tests for any crate are located in the `tests/` directory.
@@ -65,19 +68,21 @@ Integration tests for any crate are located in the `tests/` directory.
 #### Integration tests execution
 
 *NOTE!* The following environment variables are required to execute the integration tests:
+
 ```shell
 export JIRA_HOST=https://norns.atlassian.net
 export JIRA_USER=your_jira_user@domain.name
-export JIRA_TOKEN="ATATT3xFfGF0vIWdxrk1yqkbq5D4Q8EHp49NyxrWF-f6c89spnt..... . .-RIxM=9262A4F7" 
+export JIRA_TOKEN="ATATT3xFfGF0vIWdxrk1yqkbq5D4Q8EHp49NyxrWF-f6c89spnt..... . .-RIxM=9262A4F7"
 ```
 
 To run only integration tests:
-```
+
+```sh
 # Executes all tests embeddd in the code structure of the library crates
 cargo test --workspace --lib
 
 # Executes all tests embeddd in the code structure of the binary crates
-# like for instance the cli and tui clients. 
+# like for instance the cli and tui clients.
 cargo test --workspace --bins
 
 # Runs the integration tests in tests/ directory
@@ -88,7 +93,9 @@ cargo test --workspace --all-targets
 ```
 
 ## Installing the command line utility in your local environment
+
 To install the command line utility in your local environment, run:
+
 ```shell
 cargo install --path cli
 ```
@@ -102,6 +109,7 @@ brew install mingw-w64
 rustup target add x86_64-pc-windows-gnu
 cargo build --target x86_64-pc-windows-gnu
 ```
+
 This will install the `timesheet` executable in `$HOME/.cargo/bin`
 
 **Note** This was the first entry I found on Google in June 2023. The Windows executable
@@ -109,4 +117,4 @@ is rather large, so perhaps there is better way to do this.
 
 ## Commit messages and semantic versioning
 
-We follow these guidelines https://www.conventionalcommits.org/en/v1.0.0/#summary
+We follow these guidelines <https://www.conventionalcommits.org/en/v1.0.0/#summary>

@@ -34,10 +34,11 @@
 //! * `WorklogError::TimeError` - When there are problems with time calculations or parsing
 //!
 use anyhow::Result;
+use async_trait::async_trait;
 use chrono::{Datelike, Local, TimeZone, Weekday};
 use jira::{
     models::{core::IssueKey, setting::TimeTrackingConfiguration},
-    Jira,
+    Jira, JiraError,
 };
 use log::{debug, info};
 
@@ -48,6 +49,38 @@ pub struct Add {
     pub issue_key: String,
     pub started: Option<String>,
     pub comment: Option<String>,
+}
+
+// Trait for Jira client operations needed by this module
+#[async_trait]
+pub trait JiraClient {
+    async fn get_time_tracking_options(&self) -> Result<TimeTrackingConfiguration, JiraError>;
+    async fn insert_worklog(
+        &self,
+        issue_id: &str,
+        started: chrono::DateTime<Local>,
+        time_spent_seconds: i32,
+        comment: &str,
+    ) -> Result<jira::models::worklog::Worklog, JiraError>;
+}
+
+// Implement the trait for the concrete Jira client
+#[async_trait]
+impl JiraClient for Jira {
+    async fn get_time_tracking_options(&self) -> Result<TimeTrackingConfiguration, JiraError> {
+        self.get_time_tracking_options().await
+    }
+
+    async fn insert_worklog(
+        &self,
+        issue_id: &str,
+        started: chrono::DateTime<Local>,
+        time_spent_seconds: i32,
+        comment: &str,
+    ) -> Result<jira::models::worklog::Worklog, JiraError> {
+        self.insert_worklog(issue_id, started, time_spent_seconds, comment)
+            .await
+    }
 }
 
 /// Executes worklog addition operation based on provided instructions.
@@ -151,7 +184,7 @@ pub async fn execute(
 /// Note the decimal separator may be presented as either european format with comma (",") or US format
 /// with full stop (".")
 async fn add_multiple_entries(
-    client: &Jira,
+    client: &dyn JiraClient,
     time_tracking_options: TimeTrackingConfiguration,
     issue: String,
     durations: Vec<String>,
@@ -193,7 +226,7 @@ async fn add_multiple_entries(
 }
 
 async fn add_single_entry(
-    client: &Jira,
+    client: &dyn JiraClient,
     time_tracking_options: &TimeTrackingConfiguration,
     issue_key: String,
     duration: &str,
@@ -219,7 +252,7 @@ async fn add_single_entry(
             ));
         }
     };
-    debug!("time spent in seconds: {}", time_spent_seconds);
+    debug!("time spent in seconds: {time_spent_seconds}");
 
     // If a starting point was given, transform it from string to a full DateTime<Local>
     let starting_point = started
@@ -241,4 +274,241 @@ async fn add_single_entry(
         &result,
         &IssueKey::from(issue_key),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Local;
+    use jira::models::core::Author;
+    use jira::models::setting::TimeTrackingConfiguration;
+    use jira::models::worklog::Worklog;
+    use mockall::{mock, predicate::*};
+
+    // Mock implementation of JiraClient trait
+    mock! {
+        pub JiraClientImpl {}
+
+        #[async_trait]
+        impl JiraClient for JiraClientImpl {
+            async fn get_time_tracking_options(&self) -> Result<TimeTrackingConfiguration, jira::JiraError>;
+            async fn insert_worklog(
+                &self,
+                issue_id: &str,
+                started: chrono::DateTime<Local>,
+                time_spent_seconds: i32,
+                comment: &str,
+            ) -> Result<Worklog, jira::JiraError>;
+        }
+    }
+
+    fn create_test_time_tracking_config() -> TimeTrackingConfiguration {
+        TimeTrackingConfiguration {
+            workingHoursPerDay: 8.0,
+            workingDaysPerWeek: 5.0,
+            timeFormat: "pretty".to_string(),
+            defaultUnit: "h".to_string(),
+        }
+    }
+
+    fn create_test_worklog(_issue_key: &str, time_spent_seconds: i32) -> Worklog {
+        Worklog {
+            id: "12345".to_string(),
+            author: Author {
+                accountId: "test-account".to_string(),
+                emailAddress: Some("test@example.com".to_string()),
+                displayName: "Test User".to_string(),
+            },
+            comment: Some("Test comment".to_string()),
+            created: chrono::Utc::now(),
+            updated: chrono::Utc::now(),
+            started: chrono::Utc::now(),
+            timeSpent: "1h".to_string(),
+            timeSpentSeconds: time_spent_seconds,
+            issueId: "12345".to_string(),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_add_single_entry_success() {
+        let mut mock_client = MockJiraClientImpl::new();
+        let config = create_test_time_tracking_config();
+        let expected_worklog = create_test_worklog("TEST-123", 3600);
+
+        mock_client
+            .expect_insert_worklog()
+            .with(eq("TEST-123"), always(), eq(3600), eq("Test comment"))
+            .times(1)
+            .returning(move |_, _, _, _| Ok(expected_worklog.clone()));
+
+        let result = add_single_entry(
+            &mock_client,
+            &config,
+            "TEST-123".to_string(),
+            "1h",
+            None,
+            Some("Test comment".to_string()),
+        )
+        .await;
+
+        assert!(result.is_ok());
+        let local_worklog = result.unwrap();
+        assert_eq!(local_worklog.issue_key.value(), "TEST-123");
+        assert_eq!(local_worklog.timeSpentSeconds, 3600);
+        assert_eq!(local_worklog.comment, Some("Test comment".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_add_single_entry_invalid_duration() {
+        let mock_client = MockJiraClientImpl::new();
+        let config = create_test_time_tracking_config();
+
+        let result = add_single_entry(
+            &mock_client,
+            &config,
+            "TEST-123".to_string(),
+            "invalid_duration",
+            None,
+            None,
+        )
+        .await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            WorklogError::BadInput(msg) => {
+                assert!(msg.contains("Unable to figure out the duration"));
+            }
+            _ => panic!("Expected BadInput error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_add_single_entry_with_custom_start_time() {
+        let mut mock_client = MockJiraClientImpl::new();
+        let config = create_test_time_tracking_config();
+        let expected_worklog = create_test_worklog("TEST-123", 7200);
+
+        mock_client
+            .expect_insert_worklog()
+            .with(eq("TEST-123"), always(), eq(7200), eq(""))
+            .times(1)
+            .returning(move |_, _, _, _| Ok(expected_worklog.clone()));
+
+        let result = add_single_entry(
+            &mock_client,
+            &config,
+            "TEST-123".to_string(),
+            "2h",
+            Some("2024-01-15T09:00".to_string()),
+            None,
+        )
+        .await;
+
+        assert!(result.is_ok());
+        let local_worklog = result.unwrap();
+        assert_eq!(local_worklog.timeSpentSeconds, 7200);
+    }
+
+    #[tokio::test]
+    async fn test_add_multiple_entries_success() {
+        let mut mock_client = MockJiraClientImpl::new();
+        let config = create_test_time_tracking_config();
+        let expected_worklog1 = create_test_worklog("TEST-123", 14400); // 4h
+        let expected_worklog2 = create_test_worklog("TEST-123", 10800); // 3h
+
+        mock_client
+            .expect_insert_worklog()
+            .times(2)
+            .returning(move |_, _, time_spent, _| {
+                if time_spent == 14400 {
+                    Ok(expected_worklog1.clone())
+                } else {
+                    Ok(expected_worklog2.clone())
+                }
+            });
+
+        let durations = vec!["mon:4h".to_string(), "tue:3h".to_string()];
+        let result = add_multiple_entries(
+            &mock_client,
+            config,
+            "TEST-123".to_string(),
+            durations,
+            Some("Weekly work".to_string()),
+        )
+        .await;
+
+        assert!(result.is_ok());
+        let worklogs = result.unwrap();
+        assert_eq!(worklogs.len(), 2);
+        assert_eq!(worklogs[0].timeSpentSeconds, 14400);
+        assert_eq!(worklogs[1].timeSpentSeconds, 10800);
+    }
+
+    #[tokio::test]
+    async fn test_add_single_entry_jira_error() {
+        let mut mock_client = MockJiraClientImpl::new();
+        let config = create_test_time_tracking_config();
+
+        mock_client
+            .expect_insert_worklog()
+            .times(1)
+            .returning(|_, _, _, _| Err(jira::JiraError::NotFound("Issue not found".to_string())));
+
+        let result = add_single_entry(
+            &mock_client,
+            &config,
+            "TEST-123".to_string(),
+            "1h",
+            None,
+            Some("Test comment".to_string()),
+        )
+        .await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            WorklogError::JiraError(_) => {
+                // Expected
+            }
+            _ => panic!("Expected JiraError"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_add_single_entry_different_durations() {
+        let test_cases = vec![
+            ("30m", 1800),  // 30 minutes
+            ("1h", 3600),   // 1 hour
+            ("2.5h", 9000), // 2.5 hours
+            ("1d", 28800),  // 1 day (8 hours)
+        ];
+
+        for (duration_str, expected_seconds) in test_cases {
+            let mut mock_client = MockJiraClientImpl::new();
+            let config = create_test_time_tracking_config();
+            let expected_worklog = create_test_worklog("TEST-123", expected_seconds);
+
+            mock_client
+                .expect_insert_worklog()
+                .with(eq("TEST-123"), always(), eq(expected_seconds), eq(""))
+                .times(1)
+                .returning(move |_, _, _, _| Ok(expected_worklog.clone()));
+
+            let result = add_single_entry(
+                &mock_client,
+                &config,
+                "TEST-123".to_string(),
+                duration_str,
+                None,
+                None,
+            )
+            .await;
+
+            assert!(result.is_ok(), "Failed for duration: {duration_str}");
+            let local_worklog = result.unwrap();
+            assert_eq!(
+                local_worklog.timeSpentSeconds, expected_seconds,
+                "Wrong time for duration: {duration_str}"
+            );
+        }
+    }
 }

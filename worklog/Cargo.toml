@@ -13,12 +13,15 @@ thiserror = { workspace = true }
 anyhow = {workspace = true}
 chrono = {workspace = true}
 serde = { version = "1", features = ["derive"] }
-directories = "5.0.1"
-toml = "0.8.19"
-rusqlite = { version = "0", features = ["bundled", "chrono"] }
-lazy_static = "1.4.0"
+directories = "6.0.0"
+toml = "0.8.22"
+rusqlite = { version = "0.36.0", features = ["bundled", "chrono"] }
+lazy_static = "1.5.0"
 num-traits = "0.2.19"
 regex = "1"
 url = "2.5.4"
-env_logger = "0.11.5"
+env_logger = "0.11.8"
 async-trait = "0.1.88"
+
+[dev-dependencies]
+mockall = "0.13.0"

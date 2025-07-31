@@ -1,12 +1,10 @@
 use futures::{stream, Stream, StreamExt};
-use lazy_static::lazy_static;
-use rand::distributions::{Distribution, Uniform};
+use rand::Rng;
+use std::sync::LazyLock;
 use std::time::Duration;
 use tokio::time::{sleep, Instant};
 
-lazy_static! {
-    static ref START_TIME: Instant = Instant::now();
-}
+static START_TIME: LazyLock<Instant> = LazyLock::new(Instant::now);
 
 #[tokio::main]
 async fn main() {
@@ -22,7 +20,7 @@ fn get_pages() -> impl Stream<Item = Vec<usize>> {
 }
 
 async fn get_page(i: usize) -> Vec<usize> {
-    let millis = Uniform::from(0..10).sample(&mut rand::thread_rng());
+    let millis = rand::rng().random_range(0..10);
     println!(
         "[{}] # get_page({}) will complete in {} ms",
         START_TIME.elapsed().as_millis(),

@@ -99,11 +99,8 @@ async fn main() -> Result<(), ServerError> {
     let addr = SocketAddr::from(([127, 0, 0, 1], 4000));
     println!("Server running on http://{addr}");
 
-    match axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-    {
-        Ok(()) => todo!(),
-        Err(_) => todo!(),
-    }
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    axum::serve(listener, app).await.unwrap();
+
+    Ok(())
 }
