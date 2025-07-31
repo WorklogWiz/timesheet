@@ -53,11 +53,13 @@ pub(crate) fn stop_timer(
             let hours = duration_seconds / 3600;
             let minutes = (duration_seconds % 3600) / 60;
             println!(
-                "Stopped timer for issue {} with id {:?}, duration: {:02}:{:02} ",
+                "Stopped timer for issue {} with id {:?}, duration: {:02}:{:02} stop time: {}, at {}",
                 timer.issue_key,
                 timer.id.as_ref().unwrap(),
                 hours,
-                minutes
+                minutes,
+                stop_time.format("%Y-%m-%d %H:%M"),
+                Local::now().format("%Y-%m-%d %H:%M")
             );
             Ok(())
         }
