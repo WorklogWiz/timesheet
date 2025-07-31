@@ -173,9 +173,8 @@ async fn main() -> Result<(), WorklogError> {
                         .issue_service
                         .get_issues_filtered_by_keys(&[IssueKey::new(&timer.issue_key)])
                         .ok()
-                        .and_then(|issues| issues.get(0).cloned())
+                        .and_then(|issues| issues.first().cloned())
                         .unwrap();
-
                     println!(
                         "Started timer for issue {} - '{}' with id {:?} at {}",
                         &start_opts.issue,
