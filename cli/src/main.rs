@@ -152,6 +152,7 @@ async fn main() -> Result<(), WorklogError> {
             }
         }
         Command::Start(start_opts) => {
+            // TODO: refactor this into a separate module `commands::start_timer`
             // Determine the start time
             let start = match start_opts.start {
                 None => Local::now(),

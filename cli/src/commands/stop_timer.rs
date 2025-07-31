@@ -25,6 +25,7 @@ pub(crate) fn discard_active_timer(runtime: &ApplicationRuntime) -> Result<(), W
     }
 }
 
+// TODO: make this function usable for other commands (start_timer) as well
 pub(crate) fn parse_stop_time(time_str: Option<&str>) -> DateTime<Local> {
     match time_str {
         Some(time_str) => match date::str_to_date_time(time_str) {
