@@ -25,6 +25,7 @@ pub(crate) fn discard_active_timer(runtime: &ApplicationRuntime) -> Result<(), W
     }
 }
 
+// TODO: make this function usable for other commands (start_timer) as well
 pub(crate) fn parse_stop_time(time_str: Option<&str>) -> DateTime<Local> {
     match time_str {
         Some(time_str) => match date::str_to_date_time(time_str) {
@@ -53,11 +54,13 @@ pub(crate) fn stop_timer(
             let hours = duration_seconds / 3600;
             let minutes = (duration_seconds % 3600) / 60;
             println!(
-                "Stopped timer for issue {} with id {:?}, duration: {:02}:{:02} ",
+                "Stopped timer for issue {} with id {:?}, duration: {:02}:{:02} stop time: {}, at {}",
                 timer.issue_key,
                 timer.id.as_ref().unwrap(),
                 hours,
-                minutes
+                minutes,
+                stop_time.format("%Y-%m-%d %H:%M"),
+                Local::now().format("%Y-%m-%d %H:%M")
             );
             Ok(())
         }

@@ -76,6 +76,7 @@ mod commands;
 mod table_report_weekly;
 
 use commands::stop_timer;
+use jira::models::core::IssueKey;
 
 #[tokio::main]
 #[allow(clippy::too_many_lines)] // TODO: fix this
@@ -151,6 +152,7 @@ async fn main() -> Result<(), WorklogError> {
             }
         }
         Command::Start(start_opts) => {
+            // TODO: refactor this into a separate module `commands::start_timer`
             // Determine the start time
             let start = match start_opts.start {
                 None => Local::now(),
@@ -167,9 +169,17 @@ async fn main() -> Result<(), WorklogError> {
                 .await
             {
                 Ok(timer) => {
+                    let issue_summary = &get_runtime()
+                        .issue_service
+                        .get_issues_filtered_by_keys(&[IssueKey::new(&timer.issue_key)])
+                        .ok()
+                        .and_then(|issues| issues.get(0).cloned())
+                        .unwrap();
+
                     println!(
-                        "Started timer for issue {} with id {:?} at {}",
+                        "Started timer for issue {} - '{}' with id {:?} at {}",
                         &start_opts.issue,
+                        &issue_summary.summary,
                         timer.id.as_ref().unwrap(),
                         timer.started_at.format("%Y-%m-%d %H:%M")
                     );
