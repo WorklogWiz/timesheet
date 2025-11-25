@@ -20,6 +20,7 @@ jobs:
           # Tested and works
           #- os: ubuntu-latest
           #  target: x86_64-unknown-linux-gnu
+          #  tauri_bundle: appimage
           #- os: ubuntu-latest
           #  target: aarch64-unknown-linux-gnu
           #- os: ubuntu-latest
@@ -29,10 +30,13 @@ jobs:
           # Tested and works
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+            tauri_bundle: msi
           - os: macos-latest
             target: aarch64-apple-darwin
+            tauri_bundle: dmg
           # os: macos-latest
           #  target: x86_64-apple-darwin
+          #  tauri_bundle: dmg
 
     steps:
       - name: Checkout code
@@ -69,6 +73,20 @@ jobs:
 
       - name: Format check
         run: cargo fmt -- --check
+
+      - name: Setup Node.js for Tauri frontend
+        if: matrix.tauri_bundle
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build Tauri frontend
+        if: matrix.tauri_bundle
+        run: |
+          cd tauri
+          npm install
+          npm run build
+        shell: bash
 
       - name: Build
         run: |
@@ -115,8 +133,35 @@ jobs:
         if: matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'x86_64-pc-windows-msvc' || matrix.target == 'aarch64-apple-darwin'
         run: cargo clippy --target ${{ matrix.target }} --release -- -D clippy::pedantic
 
-      - name: Upload artifact
+      - name: Upload CLI binaries
         uses: actions/upload-artifact@v4.1.0
         with:
           name: ${{ matrix.target }}-binaries
           path: target/${{ matrix.target }}/publish/
+
+      # Tauri App Build (frontend already built above)
+      - name: Build Tauri app (development)
+        if: matrix.tauri_bundle && github.ref != 'refs/heads/main'
+        run: |
+          cd tauri
+          npm run tauri:build -- --bundles ${{ matrix.tauri_bundle }} --verbose
+        shell: bash
+
+      - name: Build Tauri app (release)
+        if: matrix.tauri_bundle && github.ref == 'refs/heads/main'
+        run: |
+          cd tauri
+          npm run tauri:build -- --bundles ${{ matrix.tauri_bundle }} --verbose
+        shell: bash
+
+      - name: Upload Tauri artifacts
+        if: matrix.tauri_bundle
+        uses: actions/upload-artifact@v4.1.0
+        with:
+          name: tauri-${{ matrix.os }}-${{ matrix.target }}
+          path: |
+            target/release/bundle/macos/*.app
+            target/release/bundle/dmg/*.dmg
+            target/release/bundle/msi/*.msi
+            target/release/bundle/appimage/*.AppImage
+          if-no-files-found: ignore
