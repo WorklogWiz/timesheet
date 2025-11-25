@@ -15,7 +15,7 @@ async fn main() {
     let start_time = Instant::now();
     println!("Searching for issues, be patient this can take a while\n (minutes possibly, depending on the number of issues and the Jira instance you are using) ....");
 
-    let issue_summaries = match jira.get_issue_summaries(&["KT,PT"], &[], true).await {
+    let issue_summaries = match jira.get_issue_summaries(&["KT,PT"], &[], Some(true)).await {
         Ok(issues) => issues,
         Err(e) => {
             eprintln!("Error searching issues: {e}");

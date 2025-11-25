@@ -21,6 +21,7 @@ pub struct Author {
 #[derive(Clone, Debug, Deserialize, Serialize, Default, PartialOrd, PartialEq, Eq, Hash, Ord)]
 pub struct Fields {
     pub summary: String,
+    #[serde(default)]
     pub components: Vec<Component>,
 }
 
