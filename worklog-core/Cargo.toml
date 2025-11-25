@@ -1,0 +1,33 @@
+[package]
+name = "worklog-core"
+version = "0.1.0"
+edition = "2021"
+description = "Core domain types and traits for worklog time tracking - provider agnostic"
+
+[dependencies]
+# Date/time handling
+chrono = { workspace = true, features = ["serde"] }
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Async trait support
+async-trait = "0.1"
+
+# Logging (for services)
+log = { workspace = true }
+
+# NO dependencies on:
+# - jira (Jira-specific, belongs in adapter)
+# - rusqlite (storage-specific, belongs in storage layer)
+# - tokio runtime features (only types if needed)
+# - Any concrete implementations
+
+[dev-dependencies]
+serde_json = { workspace = true }
+mockall = "0.13"
+tokio = { workspace = true, features = ["macros", "rt"] }
+

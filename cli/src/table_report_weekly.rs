@@ -1,36 +1,36 @@
 use chrono::{DateTime, Datelike, Days, Duration, Local, NaiveDate};
 use log::debug;
 
-use jira::models::core::IssueKey;
 use std::cmp;
 use std::collections::BTreeMap;
 use std::fmt::Write;
-use worklog::{
-    date::{self, seconds_to_hour_and_min},
-    types::LocalWorklog,
-};
+use worklog_core::WorklogEntry;
 
-pub fn table_report_weekly(worklog_entries: &[LocalWorklog]) {
+use crate::date_utils::{first_date_in_week_for, last_date_in_week_for, seconds_to_hour_and_min};
+
+pub fn table_report_weekly(worklog_entries: &[WorklogEntry]) {
     if worklog_entries.is_empty() {
         eprintln!("No worklog entries to create report from!");
         return;
     }
     debug!("table_report() :- {:?}", &worklog_entries);
 
-    let mut daily_totals_by_issue: BTreeMap<&IssueKey, BTreeMap<NaiveDate, i32>> = BTreeMap::new();
+    // Group by issue key (convert to IssueKey for display)
+    let mut daily_totals_by_issue: BTreeMap<String, BTreeMap<NaiveDate, i32>> = BTreeMap::new();
 
     for entry in worklog_entries {
+        let issue_key_str = entry.issue_key.as_deref().unwrap_or("UNASSIGNED");
         daily_totals_by_issue
-            .entry(&entry.issue_key)
+            .entry(issue_key_str.to_string())
             .or_default()
-            .entry(entry.started.date_naive())
-            .and_modify(|sum| *sum += entry.timeSpentSeconds)
-            .or_insert(entry.timeSpentSeconds);
+            .entry(entry.started_at.date_naive())
+            .and_modify(|sum| *sum += entry.time_spent_seconds.unwrap_or(0))
+            .or_insert(entry.time_spent_seconds.unwrap_or(0));
     }
 
     if let Some((min_date, max_date)) = find_min_max_started(worklog_entries) {
-        let mut current_monday = date::first_date_in_week_for(min_date);
-        let last_date = date::last_date_in_week_for(max_date);
+        let mut current_monday = first_date_in_week_for(min_date);
+        let last_date = last_date_in_week_for(max_date);
 
         let mut grand_total = 0;
         while current_monday <= last_date {
@@ -58,7 +58,7 @@ pub fn table_report_weekly(worklog_entries: &[LocalWorklog]) {
 
                 // Prints a row for the current key in the current week and returns the daily total
                 // for this key in the current week
-                print!("{:15}", key.to_string());
+                print!("{key:15}");
                 let daily_totals_for_this_key = print_and_accumulate_daily_totals(
                     daily_total_per_key,
                     current_monday.date_naive(), // Start of current week
@@ -186,18 +186,18 @@ fn print_week_total(
     week_total
 }
 
-/// Find the earliest and latest date in the list of [`LocalWorklog`] entries.
-fn find_min_max_started(worklogs: &[LocalWorklog]) -> Option<(DateTime<Local>, DateTime<Local>)> {
+/// Find the earliest and latest date in the list of [`WorklogEntry`] entries.
+fn find_min_max_started(worklogs: &[WorklogEntry]) -> Option<(DateTime<Local>, DateTime<Local>)> {
     if worklogs.is_empty() {
         return None; // No worklogs, no min/max
     }
 
     let min_max = worklogs.iter().fold(
-        (worklogs[0].started, worklogs[0].started), // Initial min/max
+        (worklogs[0].started_at, worklogs[0].started_at), // Initial min/max
         |(min, max), worklog| {
             (
-                cmp::min(min, worklog.started),
-                cmp::max(max, worklog.started),
+                cmp::min(min, worklog.started_at),
+                cmp::max(max, worklog.started_at),
             )
         },
     );
@@ -230,54 +230,68 @@ fn print_double_dashed_line() {
 #[cfg(test)]
 mod tests {
     use crate::table_report_weekly::{find_min_max_started, table_report_weekly};
-    use chrono::{Days, Local};
-    use jira::models::core::IssueKey;
+    use chrono::Local;
     use std::ops::Sub;
-    use worklog::types::LocalWorklog;
+    use worklog_core::WorklogEntry;
 
     #[test]
     fn test_find_min_max_started() {
         let now = Local::now();
         let worklogs = vec![
-            LocalWorklog {
-                issue_key: IssueKey::from("ISSUE-1"),
-                id: "1".to_string(),
-                author: "user1".to_string(),
-                created: now,
-                updated: now,
-                started: now - chrono::Duration::days(2),
-                timeSpent: "1h".to_string(),
-                timeSpentSeconds: 3600,
-                issueId: 101,
+            WorklogEntry {
+                id: Some("1".to_string()),
+                issue_key: Some("ISSUE-1".to_string()),
+                started_at: now - chrono::Duration::days(2),
+                stopped_at: Some(now - chrono::Duration::days(2) + chrono::Duration::hours(1)),
                 comment: Some("Worklog 1".to_string()),
+                tags: Vec::new(),
+                time_spent_seconds: Some(3600),
+                synced_to_provider: false,
+                provider_worklog_id: None,
+                created_at: now,
+                updated_at: now,
+                deleted_at: None,
+                last_synced_at: None,
+                version: 1,
+                has_conflict: false,
             },
-            LocalWorklog {
-                issue_key: IssueKey::from("ISSUE-2"),
-                id: "2".to_string(),
-                author: "user2".to_string(),
-                created: now,
-                updated: now,
-                started: now - chrono::Duration::days(1),
-                timeSpent: "2h".to_string(),
-                timeSpentSeconds: 7200,
-                issueId: 102,
+            WorklogEntry {
+                id: Some("2".to_string()),
+                issue_key: Some("ISSUE-2".to_string()),
+                started_at: now - chrono::Duration::days(1),
+                stopped_at: Some(now - chrono::Duration::days(1) + chrono::Duration::hours(2)),
                 comment: Some("Worklog 2".to_string()),
+                tags: Vec::new(),
+                time_spent_seconds: Some(7200),
+                synced_to_provider: false,
+                provider_worklog_id: None,
+                created_at: now,
+                updated_at: now,
+                deleted_at: None,
+                last_synced_at: None,
+                version: 1,
+                has_conflict: false,
             },
-            LocalWorklog {
-                issue_key: IssueKey::from("ISSUE-3"),
-                id: "3".to_string(),
-                author: "user3".to_string(),
-                created: now,
-                updated: now,
-                started: now,
-                timeSpent: "30m".to_string(),
-                timeSpentSeconds: 1800,
-                issueId: 103,
+            WorklogEntry {
+                id: Some("3".to_string()),
+                issue_key: Some("ISSUE-3".to_string()),
+                started_at: now,
+                stopped_at: Some(now + chrono::Duration::minutes(30)),
                 comment: None,
+                tags: Vec::new(),
+                time_spent_seconds: Some(1800),
+                synced_to_provider: false,
+                provider_worklog_id: None,
+                created_at: now,
+                updated_at: now,
+                deleted_at: None,
+                last_synced_at: None,
+                version: 1,
+                has_conflict: false,
             },
         ];
 
-        let early = now.sub(Days::new(2));
+        let early = now.sub(chrono::Duration::days(2));
 
         if let Some((min_started, max_started)) = find_min_max_started(&worklogs) {
             assert_eq!(early.date_naive(), min_started.date_naive());

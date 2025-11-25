@@ -11,11 +11,15 @@ name = "timesheet"
 path = "src/main.rs"
 
 [dependencies]
-jira = { path = "../jira" }
-worklog = { path = "../worklog" }
+worklog-config = { path = "../worklog-config" }
+worklog-core = { path = "../worklog-core" }
+worklog-jira-adapter = { path = "../worklog-jira-adapter" }
+worklog-sqlite-storage = { path = "../worklog-sqlite-storage" }
+
 clap = { version = "4.5.39", features = ["derive"] }
 
 chrono = { workspace = true, features = ["serde"] }
+regex = "1"
 
 log = {workspace = true}
 env_logger = {  workspace = true }
