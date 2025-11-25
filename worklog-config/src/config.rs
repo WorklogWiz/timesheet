@@ -145,6 +145,7 @@ pub fn worklog_file() -> PathBuf {
 #[allow(unused_mut)]
 pub fn load_with_keychain_lookup() -> Result<AppConfiguration, WorklogError> {
     // Loads the plain configuration file without a keychain lookup
+    #[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
     let (config_path, mut app_config) = load_no_keychain_lookup()?;
 
     // Migrate legacy configuration to new structure if needed
