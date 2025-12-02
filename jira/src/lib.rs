@@ -382,12 +382,12 @@ impl Jira {
         Ok(results)
     }
 
-    /// Searches for Jira issues where `worklogAuthor` IS NOT EMPTY
-    /// based on provided projects and/or issue keys.
+    /// Searches for Jira issues based on provided projects and/or issue keys.
     ///
     /// # Parameters
     /// * `projects`: A vector of project keys (e.g., `["TEST", "PROJ"]`). Can be empty.
     /// * `issue_keys`: A slice of issue keys to search for (e.g., `["TEST-1", "PROJ-2"]`). Can be empty.
+    /// * `all_users`: If `Some(true)`, filters by `worklogAuthor IS NOT EMPTY`. If `Some(false)`, filters by `worklogAuthor=currentUser()`. If `None`, no worklog filter is applied.
     ///
     /// # Returns
     /// A `Result` containing a vector of `Issue` if successful, or a `JiraError` if an error occurs.
@@ -404,7 +404,7 @@ impl Jira {
         &self,
         project_filter: &[&str],
         issue_key_filter: &[IssueKey],
-        all_users: bool,
+        all_users: Option<bool>,
     ) -> Result<Vec<IssueSummary>> {
         if project_filter.is_empty() && issue_key_filter.is_empty() {
             warn!("No projects or issue keys provided");
@@ -433,10 +433,10 @@ impl Jira {
                 jql = s;
             }
         }
-        if all_users {
-            jql.push_str(" AND worklogAuthor is not EMPTY ");
-        } else {
-            jql.push_str(" AND worklogAuthor=currentUser() ");
+        match all_users {
+            Some(true) => jql.push_str(" AND worklogAuthor is not EMPTY "),
+            Some(false) => jql.push_str(" AND worklogAuthor=currentUser() "),
+            None => {} // No worklog filter
         }
         debug!("search_issues() :- Composed this JQL: {jql}");
 

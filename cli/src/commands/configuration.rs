@@ -1,7 +1,8 @@
 use std::process::exit;
 
-use worklog::config::JiraClientConfiguration;
-use worklog::config::{self, AppConfiguration, ApplicationData};
+use worklog_config::config::{
+    self, AppConfiguration, IssueTrackerConfiguration, StorageConfiguration,
+};
 
 use crate::cli::{ConfigCommand, UpdateConfiguration};
 
@@ -33,8 +34,10 @@ pub fn execute(config: ConfigCommand) {
         // Add new values to the configuration
         Update(settings) => {
             let app_config = AppConfiguration {
-                jira: settings.clone().into(),
-                application_data: ApplicationData::default(),
+                storage: StorageConfiguration::default(),
+                issue_tracker: settings.clone().into(),
+                jira: None,
+                application_data: None,
             };
 
             config::save(&app_config).expect("Unable to save the application config");
@@ -61,12 +64,20 @@ pub fn execute(config: ConfigCommand) {
     }
 }
 
-impl From<UpdateConfiguration> for JiraClientConfiguration {
+impl From<UpdateConfiguration> for IssueTrackerConfiguration {
     fn from(val: UpdateConfiguration) -> Self {
-        JiraClientConfiguration {
-            user: val.user,
-            token: val.token,
-            url: val.url,
+        let url = val
+            .url
+            .trim_start_matches("https://")
+            .trim_start_matches("http://");
+
+        let mut config = std::collections::HashMap::new();
+        config.insert("username".to_string(), val.user);
+        config.insert("token".to_string(), val.token);
+
+        IssueTrackerConfiguration {
+            url: format!("jira://{url}"),
+            config,
         }
     }
 }

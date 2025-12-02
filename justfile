@@ -89,3 +89,15 @@ sync args="":
 # Dumps the location and contents of the configuration file
 config args="":
     cargo run --bin timesheet -- config list {{args}}
+
+# Run the Tauri app in development mode
+tauri-dev:
+    cd tauri && npm run tauri:dev
+
+# Build the Tauri app for production
+tauri-build:
+    cd tauri && npm run tauri:build
+
+# Run the Tauri app (release mode)
+tauri-run:
+    cargo run --release -p timesheet-tauri

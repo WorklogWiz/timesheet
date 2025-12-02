@@ -1,55 +1,155 @@
-SELECT component.name                              AS component_name,
-       sum(worklog.time_spent_seconds) / 3600      as hours,
-       SUM(worklog.time_spent_seconds) % 3600 / 60 AS minutes
-FROM issue
-    JOIN
-    worklog ON issue.ISSUE_KEY = worklog.ISSUE_KEY
-    left outer join
-    issue_component ON issue.ISSUE_KEY = issue_component.ISSUE_KEY
-    left outer JOIN
-    component ON issue_component.component_id = component.id
-group by component.name
-order by hours desc, minutes desc;
+-- Statistics queries for v2 schema (post-migration)
+-- Note: Components have been replaced with tags (JSON arrays)
 
-/* Total number of hours spent */
-select sum(worklog.time_spent_seconds) as seconds,
-       sum(worklog.time_spent_seconds) / 3600 as hours,
-       sum(worklog.time_spent_seconds) % 3600 / 60 as minutes
-    from worklog;
+-- =============================================================================
+-- Hours per issue tag (replaces component statistics)
+-- =============================================================================
+-- This query extracts tags from the JSON array and aggregates time by tag
+SELECT
+    tags_json.value AS tag,
+    SUM(worklogs.time_spent_seconds) / 3600 as hours,
+    SUM(worklogs.time_spent_seconds) % 3600 / 60 AS minutes
+FROM issues
+JOIN worklogs ON issues.issue_key = worklogs.issue_key
+CROSS JOIN json_each(issues.tags) AS tags_json
+WHERE worklogs.stopped_at IS NOT NULL  -- Only count completed worklogs
+GROUP BY tags_json.value
+ORDER BY hours DESC, minutes DESC;
 
-select *
-from worklog
-where ISSUE_KEY in ('KT-1892', 'KT-2759')
-  and date(worklog.started) = date('now');
+-- =============================================================================
+-- Total hours spent (all worklogs)
+-- =============================================================================
+SELECT
+    SUM(time_spent_seconds) AS seconds,
+    SUM(time_spent_seconds) / 3600 AS hours,
+    SUM(time_spent_seconds) % 3600 / 60 AS minutes
+FROM worklogs
+WHERE stopped_at IS NOT NULL;  -- Only count completed worklogs
 
-SELECT  c.name,
-        sum(time_spent_seconds),
-        sum(time_spent_seconds) / 3600 as hours,
-        sum(time_spent_seconds / 60) % 60 as minutes
+-- =============================================================================
+-- Worklogs for specific issues today
+-- =============================================================================
+SELECT *
+FROM worklogs
+WHERE issue_key IN ('KT-1892', 'KT-2759')
+  AND DATE(started_at) = DATE('now');
 
-FROM main.issue
-    join worklog ON issue.ISSUE_KEY = worklog.ISSUE_KEY
-    JOIN issue_component on issue.ISSUE_KEY = issue_component.ISSUE_KEY
-    join main.component c on c.id = issue_component.component_id
-where date(worklog.started) = DATE('now')
---and c.name = 'Booking-general'
-group by c.name
-ORDER BY c.name
-;
-select issue.ISSUE_KEY from issue left outer join main.issue_component ic on issue.ISSUE_KEY = ic.ISSUE_KEY
-where ic.id is null;
-;
+-- =============================================================================
+-- Hours per tag for today
+-- =============================================================================
+SELECT
+    tags_json.value AS tag,
+    SUM(time_spent_seconds) / 3600 AS hours,
+    SUM(time_spent_seconds) % 3600 / 60 AS minutes
+FROM issues
+JOIN worklogs ON issues.issue_key = worklogs.issue_key
+CROSS JOIN json_each(issues.tags) AS tags_json
+WHERE DATE(worklogs.started_at) = DATE('now')
+  AND worklogs.stopped_at IS NOT NULL
+-- Uncomment to filter by specific tag:
+-- AND tags_json.value = 'Booking-general'
+GROUP BY tag
+ORDER BY tag;
 
-select *
-from (select sum(worklog.time_spent_seconds),
-             sum(worklog.time_spent_seconds) / 3600      as hours,
-             sum(worklog.time_spent_seconds) % 3600 / 60 as minute
-      from worklog
-      where date(started) = date('now')) shm;
+-- =============================================================================
+-- Issues without tags (replaces "issues without components")
+-- =============================================================================
+SELECT issue_key, summary
+FROM issues
+WHERE json_array_length(tags) = 0
+   OR tags IS NULL
+   OR tags = '[]';
 
-select * from component;
-select * from issue_component where ISSUE_KEY='KT-1774';
+-- =============================================================================
+-- Total hours for today
+-- =============================================================================
+SELECT
+    SUM(time_spent_seconds) AS seconds,
+    SUM(time_spent_seconds) / 3600 AS hours,
+    SUM(time_spent_seconds) % 3600 / 60 AS minutes
+FROM worklogs
+WHERE DATE(started_at) = DATE('now')
+  AND stopped_at IS NOT NULL;
 
-select worklog.author, sum(worklog.time_spent_seconds)
-from worklog
-group by 1;
+-- =============================================================================
+-- List all unique tags
+-- =============================================================================
+SELECT DISTINCT tags_json.value AS tag
+FROM issues
+CROSS JOIN json_each(issues.tags) AS tags_json
+ORDER BY tag;
+
+-- =============================================================================
+-- Hours per issue (with issue summary)
+-- =============================================================================
+SELECT
+    i.issue_key,
+    i.summary,
+    SUM(w.time_spent_seconds) / 3600 AS hours,
+    SUM(w.time_spent_seconds) % 3600 / 60 AS minutes
+FROM issues i
+JOIN worklogs w ON i.issue_key = w.issue_key
+WHERE w.stopped_at IS NOT NULL
+GROUP BY i.issue_key, i.summary
+ORDER BY hours DESC, minutes DESC;
+
+-- =============================================================================
+-- Active timer (if any)
+-- =============================================================================
+SELECT
+    w.id,
+    w.issue_key,
+    i.summary,
+    w.started_at,
+    w.comment,
+    ROUND((JULIANDAY('now') - JULIANDAY(w.started_at)) * 24, 2) AS hours_elapsed
+FROM worklogs w
+LEFT JOIN issues i ON w.issue_key = i.issue_key
+WHERE w.stopped_at IS NULL
+ORDER BY w.started_at DESC;
+
+-- =============================================================================
+-- Recent activity (last 7 days)
+-- =============================================================================
+SELECT
+    DATE(started_at) AS date,
+    COUNT(*) AS entries,
+    SUM(time_spent_seconds) / 3600 AS hours,
+    SUM(time_spent_seconds) % 3600 / 60 AS minutes
+FROM worklogs
+WHERE started_at >= DATE('now', '-7 days')
+  AND stopped_at IS NOT NULL
+GROUP BY DATE(started_at)
+ORDER BY date DESC;
+
+-- =============================================================================
+-- Sync status summary
+-- =============================================================================
+SELECT
+    synced_to_provider,
+    COUNT(*) AS count,
+    SUM(time_spent_seconds) / 3600 AS hours
+FROM worklogs
+WHERE stopped_at IS NOT NULL
+GROUP BY synced_to_provider;
+
+-- =============================================================================
+-- Work patterns by day of week
+-- =============================================================================
+SELECT
+    CASE CAST(STRFTIME('%w', started_at) AS INTEGER)
+        WHEN 0 THEN 'Sunday'
+        WHEN 1 THEN 'Monday'
+        WHEN 2 THEN 'Tuesday'
+        WHEN 3 THEN 'Wednesday'
+        WHEN 4 THEN 'Thursday'
+        WHEN 5 THEN 'Friday'
+        WHEN 6 THEN 'Saturday'
+    END AS day_of_week,
+    COUNT(*) AS entries,
+    SUM(time_spent_seconds) / 3600 AS hours
+FROM worklogs
+WHERE stopped_at IS NOT NULL
+  AND started_at >= DATE('now', '-30 days')
+GROUP BY STRFTIME('%w', started_at)
+ORDER BY CAST(STRFTIME('%w', started_at) AS INTEGER);

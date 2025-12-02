@@ -1,0 +1,40 @@
+/* Tailwind directives */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom theme colors */
+@layer base {
+
+    /* Use native system fonts */
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+
+    :root {
+        /* macOS-like colors */
+        --color-surface-50: 250 250 250;
+        --color-surface-100: 245 245 245;
+        --color-surface-200: 240 240 240;
+        --color-surface-300: 230 230 230;
+        --color-surface-400: 220 220 220;
+        --color-surface-500: 210 210 210;
+        --color-surface-600: 180 180 180;
+        --color-surface-700: 150 150 150;
+        --color-surface-800: 120 120 120;
+        --color-surface-900: 90 90 90;
+
+        /* macOS Blue accent */
+        --color-primary-50: 239 246 255;
+        --color-primary-100: 219 234 254;
+        --color-primary-200: 191 219 254;
+        --color-primary-300: 147 197 253;
+        --color-primary-400: 96 165 250;
+        --color-primary-500: 59 130 246;
+        /* macOS blue */
+        --color-primary-600: 37 99 235;
+        --color-primary-700: 29 78 216;
+        --color-primary-800: 30 64 175;
+        --color-primary-900: 30 58 138;
+    }
+}

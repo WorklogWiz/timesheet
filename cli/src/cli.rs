@@ -1,7 +1,7 @@
 use std::fmt::{self, Formatter};
 
+use chrono::{DateTime, Local};
 use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
-use worklog::operation;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Debug)]
 pub(crate) enum LogLevel {
@@ -23,7 +23,7 @@ impl fmt::Display for LogLevel {
 }
 
 #[derive(Parser)]
-/// Jira worklog utility - add, delete, and list jira worklog entries
+/// Worklog utility - add, delete, and list worklog entries
 ///
 /// Dates should be specified in the ISO8601 format without a time zone. Local timezone is
 /// always assumed. I.e. `2023-06-01`.
@@ -56,7 +56,7 @@ pub(crate) enum Command {
     /// Subcommands for configuration
     Config(Config),
     /// Lists all time codes
-    Codes,
+    Codes(Codes),
     /// Start a timer
     Start(Start),
     /// Stops current timer
@@ -71,14 +71,14 @@ pub(crate) struct Add {
     /// If more than a single entry separate with spaces and three letter abbreviations of
     /// weekday name:
     ///     --durations Mon:1,5h Tue:1d Wed:3,5h Fri:1d
-    #[arg(short, long, num_args(1..))]
-    pub durations: Vec<String>,
+    #[arg(short, long, num_args(1..), value_parser = crate::date_utils::DurationParser)]
+    pub durations: Vec<crate::date_utils::DurationEntry>,
     /// Jira issues to register work on
     #[arg(short, long, required = true)]
     pub issue: String,
     /// work started
-    #[arg(name = "started", short, long, requires = "durations")]
-    pub started: Option<String>,
+    #[arg(name = "started", short, long, requires = "durations", value_parser = crate::date_utils::DateTimeParser)]
+    pub started: Option<DateTime<Local>>,
     #[arg(name = "comment", short, long)]
     pub comment: Option<String>,
 }
@@ -91,15 +91,6 @@ pub(crate) struct Del {
     pub worklog_id: String,
 }
 
-impl From<Del> for operation::del::Del {
-    fn from(val: Del) -> Self {
-        operation::del::Del {
-            issue_id: val.issue_id,
-            worklog_id: val.worklog_id,
-        }
-    }
-}
-
 #[derive(Args)]
 pub(crate) struct Status {
     /// Issues to be reported on. If no issues are supplied,
@@ -108,8 +99,8 @@ pub(crate) struct Status {
     #[arg(short, long, num_args(1..), required = false)]
     pub issues: Option<Vec<String>>,
     /// Retrieves all entries after the given date
-    #[arg(short, long)]
-    pub start_after: Option<String>,
+    #[arg(short, long, value_parser = crate::date_utils::DateTimeParser)]
+    pub start_after: Option<DateTime<Local>>,
     /// Reports on all registered Jira users, not just you
     #[arg(short, long)]
     pub all_users: bool,
@@ -150,11 +141,28 @@ pub(crate) struct UpdateConfiguration {
 }
 
 #[derive(Args)]
+#[clap(group(
+    ArgGroup::new("user_filter")
+        .args(["all_users", "all"])
+))]
+pub(crate) struct Codes {
+    /// Project(s) to filter by. If not specified, defaults to "TIME"
+    #[arg(short, long)]
+    pub projects: Vec<String>,
+    /// Show issues where any user has logged time (not just you)
+    #[arg(long)]
+    pub all_users: bool,
+    /// Show ALL issues in the project(s), regardless of whether anyone has logged time
+    #[arg(short, long)]
+    pub all: bool,
+}
+
+#[derive(Args)]
 pub(crate) struct Synchronisation {
-    #[arg(name = "started", short, long)]
+    #[arg(name = "started", short, long, value_parser = crate::date_utils::DateTimeParser)]
     /// The default is to sync for the current month, but you may specify an ISO8601 date from which
     /// data should be synchronised
-    pub started: Option<String>,
+    pub started: Option<DateTime<Local>>,
     #[arg(
         name = "issues",
         short,
@@ -177,17 +185,6 @@ pub(crate) struct Synchronisation {
     pub all_users: bool,
 }
 
-impl From<Synchronisation> for operation::sync::Sync {
-    fn from(value: Synchronisation) -> Self {
-        operation::sync::Sync {
-            started: value.started,
-            issues: value.issues,
-            projects: value.projects,
-            all_users: value.all_users,
-        }
-    }
-}
-
 #[derive(Args)]
 pub(crate) struct Start {
     #[arg(short, long, long_help = "Issue to start timer on")]
@@ -197,16 +194,17 @@ pub(crate) struct Start {
     #[arg(
         short,
         long,
-        long_help = "Starting point if different from current time"
+        long_help = "Starting point if different from current time",
+        value_parser = crate::date_utils::DateTimeParser
     )]
     #[allow(clippy::struct_field_names)]
-    pub start: Option<String>,
+    pub start: Option<DateTime<Local>>,
 }
 
 #[derive(Args)]
 #[clap(group(
     ArgGroup::new("normal_stop")
-        .args(["stop_time", "comment"])
+        .args(["stopped_at", "comment"])
         .conflicts_with("discard")
         .multiple(true)
 ))]
@@ -215,9 +213,10 @@ pub(crate) struct Stop {
     #[arg(
         short,
         long,
-        long_help = "Stop timer at this time rather than current time"
+        long_help = "Stop timer at this time rather than current time",
+        value_parser = crate::date_utils::DateTimeParser
     )]
-    pub stopped_at: Option<String>,
+    pub stopped_at: Option<DateTime<Local>>,
     /// Comment to add to the work log entry, will overwrite the comment given on start
     #[arg(
         short,

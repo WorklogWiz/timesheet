@@ -1,0 +1,25 @@
+[package]
+name = "worklog-jira-adapter"
+version = "0.1.0"
+edition = "2021"
+description = "Jira adapter for worklog time tracking"
+
+[dependencies]
+# Core domain
+worklog-core = { path = "../worklog-core" }
+
+# Jira client
+jira = { path = "../jira" }
+
+# Async trait support
+async-trait = "0.1"
+
+# Date/time
+chrono = { workspace = true }
+
+# Logging
+log = { workspace = true }
+
+
+
+

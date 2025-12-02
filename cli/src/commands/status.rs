@@ -1,49 +1,48 @@
+use chrono::{Days, Local};
 use std::process::exit;
+use worklog_core::{WorklogEntry, WorklogError};
 
-use chrono::{Datelike, Days, Local};
-use jira::models::core::IssueKey;
-use log::debug;
-use worklog::date;
-use worklog::error::WorklogError;
-use worklog::types::LocalWorklog;
-use worklog::ApplicationRuntime;
+use crate::{cli::Status, services::get_services};
 
-use crate::{cli::Status, get_runtime, table_report_weekly::table_report_weekly};
-
-#[allow(clippy::unused_async)]
+/// Execute the status command using new service composition
 pub async fn execute(status: Status) -> Result<(), WorklogError> {
-    let runtime = get_runtime();
-    let worklog_service = runtime.worklog_service();
+    let services = get_services()?;
 
-    let start_after = match status
+    // Get start_after date, default to 30 days ago
+    let start_after = status
         .start_after
-        .map(|s| date::str_to_date_time(&s).unwrap())
-    {
-        None => Local::now().checked_sub_days(Days::new(30)),
-        Some(date) => Some(date),
-    };
-
-    let mut jira_keys_to_report = Vec::<IssueKey>::new();
-    if let Some(keys) = status.issues {
-        jira_keys_to_report.extend(keys.into_iter().map(IssueKey::from));
-    }
+        .or_else(|| Local::now().checked_sub_days(Days::new(30)));
 
     eprintln!(
         "Locating local work log entries after {}",
         start_after.expect("Must specify --after ")
     );
 
-    // Retrieves the data from the DBMS, which we will use to create the reports
-    let worklogs = if status.all_users {
-        worklog_service.find_worklogs_after(start_after.unwrap(), &jira_keys_to_report, &[])?
+    // Get worklogs using new unified service
+    let worklogs = services
+        .worklog
+        .find_after(start_after.unwrap().into())
+        .await?;
+
+    // Filter by issues if specified
+    let worklogs: Vec<WorklogEntry> = if let Some(keys) = status.issues {
+        let key_set: std::collections::HashSet<String> = keys.into_iter().collect();
+        worklogs
+            .into_iter()
+            .filter(|entry| {
+                entry
+                    .issue_key
+                    .as_ref()
+                    .is_some_and(|k| key_set.contains(k))
+            })
+            .collect()
     } else {
-        let user = runtime.user_service().find_current_user()?;
-        worklog_service.find_worklogs_after(start_after.unwrap(), &jira_keys_to_report, &[user])?
+        worklogs
     };
 
     eprintln!("Found {} local worklog entries", worklogs.len());
-    let count_before = worklogs.iter().len();
-    if count_before == 0 {
+
+    if worklogs.is_empty() {
         eprintln!(
             r"ERROR: No data available in your local database for report generation.
 
@@ -56,95 +55,71 @@ pub async fn execute(status: Status) -> Result<(), WorklogError> {
         );
         exit(2);
     }
+
+    // Print report
     issue_and_entry_report(&worklogs);
     println!();
-    assert_eq!(worklogs.len(), count_before);
 
-    // Prints the report
-    table_report_weekly(&worklogs);
+    // Print weekly table report - now uses WorklogEntry directly!
+    // Filter out active timers
+    let completed_worklogs: Vec<WorklogEntry> = worklogs
+        .into_iter()
+        .filter(|entry| !entry.is_active())
+        .collect();
 
-    // Prints the status of the active timer
-    match get_runtime().timer_service.get_active_timer() {
-        Ok(Some(timer)) => {
+    crate::table_report_weekly::table_report_weekly(&completed_worklogs);
+
+    // Print active timer status using new service
+    match services.worklog.get_active_timer().await? {
+        Some(entry) => {
             let elapsed_seconds = Local::now()
-                .signed_duration_since(timer.started_at)
+                .signed_duration_since(entry.started_at)
                 .num_seconds();
             let hours = elapsed_seconds / 3600;
             let minutes = (elapsed_seconds % 3600) / 60;
             println!(
                 "Active timer for {}, started at {} and current elapsed time is {:02}h {:02}m",
-                timer.issue_key,
-                timer.started_at.format("%Y-%m-%d %H:%M"),
+                entry.issue_key.as_deref().unwrap_or("(local)"),
+                entry.started_at.format("%Y-%m-%d %H:%M"),
                 hours,
                 minutes
             );
-            if let Some(comment) = timer.comment {
+            if let Some(comment) = entry.comment {
                 println!("Timer comment: {comment}");
             } else {
                 println!("No comment associated with this timer");
             }
         }
-        Ok(None) => {
+        None => {
             println!("No active timer");
         }
-        Err(error) => {
-            eprintln!("Error when trying to find active timer: {error}");
-        }
     }
+
     Ok(())
 }
 
-#[allow(dead_code)]
-fn print_info_about_time_codes(
-    runtime: &ApplicationRuntime,
-    mut jira_keys_to_report: Vec<IssueKey>,
-) {
-    if jira_keys_to_report.is_empty() {
-        jira_keys_to_report = runtime.issue_service().find_unique_keys().unwrap();
-    }
+fn issue_and_entry_report(entries: &[WorklogEntry]) {
+    println!("{:8} {:22} {:10} Comment", "Issue", "Started", "Time spent",);
 
-    debug!(
-        "Getting jira issue information for {:?}",
-        &jira_keys_to_report
-    );
-
-    let result = runtime
-        .issue_service()
-        .get_issues_filtered_by_keys(&jira_keys_to_report)
-        .expect("Unable to retrieve Jira Issue information");
-    debug!("Retrieved {} entries from jira_issue table", result.len());
-
-    println!();
-    for issue in result {
-        println!("{} {}", issue.issue_key, issue.summary);
-    }
-}
-
-fn issue_and_entry_report(entries: &[LocalWorklog]) {
-    println!(
-        "{:8} {:7} {:7} {:<7} {:22} {:10} Comment",
-        "Issue", "IssueId", "Id", "Weekday", "Started", "Time spent",
-    );
-    let mut status_entries: Vec<LocalWorklog> = entries.to_vec();
-    status_entries.sort_by(|e, other| {
-        e.issueId
-            .cmp(&other.issueId)
-            .then_with(|| e.started.cmp(&other.started))
+    let mut sorted_entries: Vec<&WorklogEntry> = entries.iter().collect();
+    sorted_entries.sort_by(|a, b| {
+        a.issue_key
+            .cmp(&b.issue_key)
+            .then_with(|| a.started_at.cmp(&b.started_at))
     });
 
-    for e in &status_entries {
+    for entry in &sorted_entries {
+        // Skip active timers (no time_spent yet)
+        if entry.is_active() {
+            continue;
+        }
+
         println!(
-            "{:8} {:7} {:7} {:<7} {:22} {:10} {}",
-            e.issue_key,
-            e.issueId,
-            e.id,
-            format!("{}", e.started.weekday()),
-            format!(
-                "{}",
-                e.started.with_timezone(&Local).format("%Y-%m-%d %H:%M %z")
-            ),
-            date::seconds_to_hour_and_min(e.timeSpentSeconds),
-            e.comment.as_deref().unwrap_or("")
+            "{:8} {:22} {:10} {}",
+            entry.issue_key.as_deref().unwrap_or("local"),
+            entry.started_at.format("%Y-%m-%d %H:%M %z"),
+            crate::date_utils::seconds_to_hour_and_min(entry.time_spent_seconds.unwrap_or(0)),
+            entry.comment.as_deref().unwrap_or("")
         );
     }
 }

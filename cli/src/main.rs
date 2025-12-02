@@ -28,55 +28,51 @@
 //! ```
 //!
 //! ### Viewing Status
-//! View work logs for specific issues:
 //! ```bash
-//! timesheet status -i PROJ-123 PROJ-124 --start-after 2024-01-01
+//! timesheet status
+//! ```
+//!
+//! ### Timer Operations
+//! Start a timer for an issue:
+//! ```bash
+//! timesheet start -i PROJ-123 -c "Working on feature"
+//! ```
+//!
+//! Stop the active timer:
+//! ```bash
+//! timesheet stop
+//! ```
+//!
+//! Discard the active timer without saving:
+//! ```bash
+//! timesheet stop --discard
 //! ```
 //!
 //! ### Synchronizing with Jira
-//! Sync current month's work logs:
 //! ```bash
 //! timesheet sync
 //! ```
 //!
-//! Sync specific projects:
-//! ```bash
-//! timesheet sync -p PROJ TIME --all-users
-//! ```
-//!
-//! ### Listing Time Codes from Jira project TIME
-//! List all time codes from Jira project named `TIME`:
-//!
+//! ### Listing Issue Codes
 //! ```bash
 //! timesheet codes
 //! ```
-//!
-//! ## Time Format
-//! - Hours: 4h, 1.5h, 1,5h
-//! - Days: 1d
-//! - Combined: 7h30m
-//! - Time format: 7:30 (7 hours 30 minutes)
-//!
-use chrono::Local;
+
 use clap::Parser;
 use cli::{Command, LogLevel, Opts};
-use commands::{configuration, status};
+use commands::{add, codes, configuration, del, start_timer, status, stop_timer, sync};
 use env_logger::Env;
 use log::debug;
 use std::env;
 use std::fs::File;
-use std::process::exit;
 
-use worklog::{
-    date, error::WorklogError, operation, ApplicationRuntime, Operation, OperationResult,
-};
+use worklog_core::WorklogError;
 
 mod cli;
 mod commands;
+mod date_utils;
+mod services;
 mod table_report_weekly;
-
-use commands::stop_timer;
-use jira::models::core::IssueKey;
 
 #[tokio::main]
 #[allow(clippy::too_many_lines)] // TODO: fix this
@@ -88,37 +84,23 @@ async fn main() -> Result<(), WorklogError> {
     #[allow(clippy::match_wildcard_for_single_variants)]
     match opts.cmd {
         Command::Add(add_cmd) => {
-            let or: &worklog::OperationResult = &get_runtime()
-                .execute(Operation::Add(add_cmd.into()))
-                .await?;
-            match or {
-                worklog::OperationResult::Added(items) => {
-                    for item in items {
-                        println!(
-                            "Added work log entry Id: {} Time spent: {} Time spent in seconds: {} Comment: {}",
-                            &item.id,
-                            &item.timeSpent,
-                            &item.timeSpentSeconds,
-                            &item.comment.as_deref().unwrap_or("")
-                        );
-                        println!(
-                            "To delete entry: timesheet del -i {} -w {}",
-                            &item.issue_key, &item.id
-                        );
-                    }
-                }
-                _ => panic!("This should never happen!"),
-            }
+            let services = services::get_services()?;
+            let options = add::AddOptions {
+                durations: add_cmd.durations,
+                issue_key: add_cmd.issue,
+                started: add_cmd.started,
+                comment: add_cmd.comment,
+            };
+            add::execute(&services, options).await?;
         }
 
         Command::Del(del) => {
-            let operation_result = &get_runtime().execute(Operation::Del(del.into())).await?;
-            match operation_result {
-                worklog::OperationResult::Deleted(id) => {
-                    println!("Jira work log id {id} deleted from Jira");
-                }
-                _ => todo!(),
-            }
+            let services = services::get_services()?;
+            let options = del::DeleteOptions {
+                issue_key: del.issue_id,
+                worklog_id: del.worklog_id,
+            };
+            del::execute(&services, options).await?;
         }
 
         Command::Status(status) => {
@@ -128,102 +110,53 @@ async fn main() -> Result<(), WorklogError> {
         Command::Config(config) => {
             configuration::execute(config.cmd);
         } // end Config
-        Command::Codes => {
-            let operation_result: &worklog::OperationResult =
-                &get_runtime().execute(Operation::Codes).await?;
-            match operation_result {
-                worklog::OperationResult::IssueSummaries(issues) => {
-                    for issue in issues {
-                        println!("{} {}", issue.key, issue.fields.summary);
-                    }
-                }
-                _ => todo!(),
-            }
-        }
-        Command::Sync(sync_cmd) => {
-            let operation_result: &worklog::OperationResult = &get_runtime()
-                .execute(Operation::Sync(sync_cmd.into()))
-                .await?;
-            match operation_result {
-                OperationResult::Synchronised => {}
-                _ => {
-                    unimplemented!()
-                }
-            }
-        }
-        Command::Start(start_opts) => {
-            // TODO: refactor this into a separate module `commands::start_timer`
-            // Determine the start time
-            let start = match start_opts.start {
-                None => Local::now(),
-                Some(supplied_dt_string) => date::str_to_date_time(&supplied_dt_string)
-                    .unwrap_or_else(|err| {
-                        eprintln!("Unable to parse date/time: {err}");
-                        exit(1);
-                    }),
+
+        Command::Codes(codes_cmd) => {
+            let services = services::get_services()?;
+            let options = codes::CodesOptions {
+                projects: codes_cmd.projects,
+                all_users: codes_cmd.all_users,
+                all: codes_cmd.all,
             };
-
-            match &get_runtime()
-                .timer_service
-                .start_timer(&start_opts.issue, start, start_opts.comment)
-                .await
-            {
-                Ok(timer) => {
-                    let issue_summary = &get_runtime()
-                        .issue_service
-                        .get_issues_filtered_by_keys(&[IssueKey::new(&timer.issue_key)])
-                        .ok()
-                        .and_then(|issues| issues.first().cloned())
-                        .unwrap();
-                    println!(
-                        "Started timer for issue {} - '{}' with id {:?} at {}",
-                        &start_opts.issue,
-                        &issue_summary.summary,
-                        timer.id.as_ref().unwrap(),
-                        timer.started_at.format("%Y-%m-%d %H:%M")
-                    );
-                }
-                Err(e) => {
-                    println!(
-                        "Unable to start timer for issue {}. Cause: {e}",
-                        start_opts.issue
-                    );
-                }
+            let issues = codes::execute(&services, options).await?;
+            for issue in issues {
+                println!("{}: {}", issue.key, issue.summary);
             }
         }
+
+        Command::Sync(sync_cmd) => {
+            let services = services::get_services()?;
+            let options = sync::SyncOptions {
+                started: sync_cmd.started,
+                all_users: sync_cmd.all_users,
+                projects: sync_cmd.projects,
+                issues: sync_cmd.issues,
+            };
+            sync::execute(&services, options).await?;
+        }
+
+        Command::Start(start_opts) => {
+            let services = services::get_services()?;
+            let options = start_timer::StartTimerOptions {
+                issue: start_opts.issue,
+                comment: start_opts.comment,
+                start_time: start_opts.start,
+            };
+            start_timer::start_timer(&services, options).await?;
+        }
+
         Command::Stop(stop_opts) => {
+            let services = services::get_services()?;
+
             if stop_opts.discard {
-                return stop_timer::discard_active_timer(&get_runtime());
+                return stop_timer::discard_active_timer(&services).await;
             }
 
-            let stop_time = stop_timer::parse_stop_time(stop_opts.stopped_at.as_deref());
-            let _ = stop_timer::stop_timer(&get_runtime(), stop_time, stop_opts.comment.clone());
-
-            stop_timer::sync_timers_to_jira(&get_runtime()).await?;
+            let stop_time = stop_opts.stopped_at.unwrap_or_else(chrono::Local::now);
+            stop_timer::stop_timer(&services, stop_time, stop_opts.comment.clone()).await?;
         } // Stop
     }
     Ok(())
-}
-
-/// Retrieves the application configuration file
-fn get_runtime() -> ApplicationRuntime {
-    match ApplicationRuntime::new() {
-        Ok(runtime) => runtime,
-        Err(err) => {
-            match err {
-                WorklogError::ApplicationConfig { .. } => {
-                    eprintln!(
-                        "Configuration file not found. Use 'timesheet config update' to create it"
-                    );
-                }
-                _ => {
-                    eprintln!("Failed to create runtime: '{err}'");
-                }
-            }
-
-            exit(1);
-        }
-    }
 }
 
 fn configure_logging(opts: &Opts) {
@@ -234,30 +167,24 @@ fn configure_logging(opts: &Opts) {
         println!("Logging to {}", &tmp_dir.to_string_lossy());
     }
 
-    let target = Box::new(File::create(tmp_dir).expect("Can't create file"));
+    let mut env_builder = Env::default();
 
-    // If nothing else was specified in RUST_LOG, use 'warn'
-    env_logger::Builder::from_env(Env::default().default_filter_or(opts.verbosity.map_or(
-        "warn",
-        |lvl| match lvl {
+    if let Some(log_level) = opts.verbosity {
+        let level = match log_level {
             LogLevel::Debug => "debug",
             LogLevel::Info => "info",
             LogLevel::Warn => "warn",
             LogLevel::Error => "error",
-        },
-    )))
-    .target(env_logger::Target::Pipe(target))
-    .init();
-    debug!("Logging started");
-}
-
-impl From<cli::Add> for operation::add::Add {
-    fn from(val: cli::Add) -> Self {
-        operation::add::Add {
-            durations: val.durations,
-            issue_key: val.issue,
-            started: val.started,
-            comment: val.comment,
-        }
+        };
+        env_builder = env_builder.default_filter_or(level);
+    } else {
+        env_builder = env_builder.default_filter_or("error");
     }
+
+    env_logger::Builder::from_env(env_builder)
+        .target(env_logger::Target::Pipe(Box::new(
+            File::create(tmp_dir).expect("Failed to create log file"),
+        )))
+        .init();
+    debug!("Log level set");
 }
